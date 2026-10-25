@@ -1,0 +1,19 @@
+# Primeira execucao de um usuario novo (core vazio): a tela avisa que falta
+# a chave e o /login grava; depois o agente responde com a chave salva.
+size 108 30
+dump inicio
+
+echo SEM CHAVE: A TELA AVISA
+type /status
+key enter
+dump status
+
+echo /LOGIN -> ESCOLHE O PROVEDOR -> COLA A CHAVE
+type /login
+key enter
+type openai
+key enter
+dump pede_chave
+type sk-teste
+key enter
+dump salvou

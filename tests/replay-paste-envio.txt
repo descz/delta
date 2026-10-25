@@ -1,0 +1,5 @@
+# cola 250+ caracteres e envia: o modelo tem que receber o texto real
+paste linha colada de teste linha colada de teste linha colada de teste linha colada de teste linha colada de teste linha colada de teste linha colada de teste linha colada de teste linha colada de teste linha colada de teste MARCADOR-FINAL-DA-COLAGEM
+dump antes_de_enviar
+key enter
+dump depois_de_enviar

@@ -1,0 +1,7 @@
+# Colagem: qualquer texto vira {paste N caracteres}
+echo COLAGEM LONGA (250)
+paste texto colado na tela texto colado na tela texto colado na tela texto colado na tela texto colado na tela texto colado na tela texto colado na tela texto colado na tela texto colado na tela texto colado na tela texto colado na tela texto colado na tel
+dump longa
+echo COLAGEM CURTA (18)
+paste texto colado aqui!
+dump curta

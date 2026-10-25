@@ -1,0 +1,48 @@
+{
+  "name": "memory_link",
+  "description": "Link two durable memory notes in the workspace knowledge graph (from/to are note ids returned by memory_remember or memory_list).",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "from": {
+        "type": "string"
+      },
+      "to": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "from",
+      "to"
+    ]
+  },
+  "effect": "WRITE_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_WRITE_LOCAL",
+  "requires_approval": false,
+  "handler": "bridge_memory_link_tool",
+  "profiles": [
+    "bridge"
+  ],
+  "category": "memory",
+  "file": "original/tools/memory_link.c",
+  "source": {
+    "file": "zeno-bridge.c",
+    "line": 493,
+    "symbol": "bridge_memory_link_tool",
+    "origin": "zeno-bridge"
+  },
+  "notes": [
+    "Registrada pelo bridge do servidor (nao faz parte de zeno_tools.c)."
+  ],
+  "family": "memory",
+  "unified": {
+    "tool": "memory",
+    "op": "link"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

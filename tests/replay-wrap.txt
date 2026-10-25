@@ -1,0 +1,8 @@
+# texto longo digitado deve continuar embaixo, nao cortar
+type esta linha e bem longa e precisa continuar na linha de baixo em vez de ser cortada na borda direita da caixa
+dump quebrado
+key left
+key left
+key home
+dump cursor_no_inicio
+key esc

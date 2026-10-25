@@ -1,0 +1,39 @@
+{
+  "name": "create_directory",
+  "description": "Create a folder inside the workspace.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "relative_path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "relative_path"
+    ]
+  },
+  "effect": "WRITE_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_WRITE_LOCAL",
+  "requires_approval": false,
+  "handler": "tool_mkdir",
+  "profiles": [
+    "full"
+  ],
+  "category": "files",
+  "file": "original/tools/create_directory.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1321,
+    "symbol": "tool_mkdir",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "fs",
+  "unified": {
+    "tool": "fs",
+    "op": "mkdir"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

@@ -1,0 +1,39 @@
+{
+  "name": "cancel_background_job",
+  "description": "Cancel a background job.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "job_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "job_id"
+    ]
+  },
+  "effect": "PROCESS",
+  "effect_zeno": "ZENO_EFFECT_PROCESS",
+  "requires_approval": true,
+  "handler": "tool_cancel_job",
+  "profiles": [
+    "full"
+  ],
+  "category": "shell",
+  "file": "original/tools/cancel_background_job.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1329,
+    "symbol": "tool_cancel_job",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "shell",
+  "unified": {
+    "tool": "shell",
+    "op": "cancel"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

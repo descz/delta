@@ -1,0 +1,21 @@
+# Fila de mensagens enquanto o agente trabalha:
+#  1. o texto digitado sai do editor e aparece NO CHAT, apagado, com "na fila"
+#  2. o contador fica na borda do editor
+#  3. no proximo passo o agente recebe a mensagem e o bloco vira mensagem normal
+size 80 24
+type /clear
+key enter
+working 1
+type leia src/util.c e resuma
+key enter
+type tambem procure por TODOs
+key enter
+dump na_fila
+
+echo O AGENTE LE A FILA NO INTERVALO (entre tools/thinking)
+drain
+dump depois_do_drain
+
+echo FILA VAZIA: SEM CONTADOR
+working 0
+dump fim

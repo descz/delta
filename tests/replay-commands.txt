@@ -1,0 +1,42 @@
+# Roteiro de teste da TUI (usado por: bin\delta.exe --replay tests\replay-commands.txt)
+# Cada linha e um comando: type, key, dump, status-off, input, echo
+
+echo TELA INICIAL (vazia, sem chave de API)
+dump inicial
+
+echo DIGITANDO /help
+type /help
+input
+dump antes_do_enter
+
+echo EXECUTANDO /help
+key enter
+input
+dump depois_do_help
+
+echo DIGITANDO /status
+type /status
+key enter
+dump depois_do_status
+
+echo LISTA DE FERRAMENTAS
+type /tools
+key enter
+dump depois_do_tools
+
+echo COMANDO INVALIDO
+type /naoexiste
+key enter
+dump comando_invalido
+
+echo TEMA LIGHT
+type /theme light
+key enter
+dump tema_light
+
+echo LIMPANDO
+key ctrl-c
+type /clear
+key enter
+status-off
+dump depois_do_clear

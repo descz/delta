@@ -1,0 +1,15 @@
+# /projects: define a pasta onde o Delta trabalha (e lembra dela)
+size 100 24
+type /projects
+key enter
+dump sem_argumento
+
+echo DEFININDO O PROJETO (caminho relativo ao cwd atual)
+type /projects build/proj-teste
+key enter
+dump definido
+
+echo CONSULTANDO DE NOVO
+type /projects
+key enter
+dump atual

@@ -1,0 +1,11 @@
+# Steer headless: digitar uma mensagem NO MEIO do stream corta a resposta
+# corrente e entrega a mensagem antes da resposta final do agente.
+# Roda contra o servidor falso (tests/mock_openai.py) com stream lento:
+#   bin\delta.exe --replay tests/replay-steer.txt 110 36 --provider openai \
+#       --model gpt-4o --baseurl http://127.0.0.1:PORT/v1 --api-key sk-teste
+# Nada de janela/SendKeys: o "usuario" e' injetado no callback do stream.
+size 110 36
+steer-at 3 mude o foco para o resumo
+type leia tests/mock-target.txt
+key enter
+dump depois_do_steer

@@ -1,0 +1,17 @@
+# Ctrl+V no campo da chave do /login: a colagem vai para o campo do seletor
+# (antes ia para o editor de prompt e a chave nunca entrava).
+# O clipboard e' preparado pelo run_all.sh (Set-Clipboard).
+size 108 30
+type /login
+key enter
+type deepseek
+key enter
+dump pede_chave
+
+echo RAJADA DE TEXTO (o terminal colando sozinho) VAI PARA O CAMPO
+paste sk-colado-em-rajada-77
+dump rajada_no_campo
+
+echo CTRL+V LE O CLIPBOARD E INSERE NO CAMPO
+key ctrl-v
+dump ctrl_v_no_campo

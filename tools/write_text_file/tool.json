@@ -1,0 +1,44 @@
+{
+  "name": "write_text_file",
+  "description": "Create or overwrite a text file in the workspace.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "relative_path": {
+        "type": "string"
+      },
+      "content": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "relative_path",
+      "content"
+    ]
+  },
+  "effect": "WRITE_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_WRITE_LOCAL",
+  "requires_approval": false,
+  "handler": "tool_write",
+  "profiles": [
+    "full",
+    "minimal"
+  ],
+  "category": "files",
+  "file": "original/tools/write_text_file.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1318,
+    "symbol": "tool_write",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "fs",
+  "unified": {
+    "tool": "fs",
+    "op": "write"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

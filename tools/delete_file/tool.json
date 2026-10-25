@@ -1,0 +1,40 @@
+{
+  "name": "delete_file",
+  "description": "Delete a workspace file you created and no longer need. The previous version is backed up to .Zeno_trash automatically, but verify nothing still references the file before deleting it.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "relative_path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "relative_path"
+    ]
+  },
+  "effect": "WRITE_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_WRITE_LOCAL",
+  "requires_approval": false,
+  "handler": "tool_delete",
+  "profiles": [
+    "full",
+    "minimal"
+  ],
+  "category": "files",
+  "file": "original/tools/delete_file.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1322,
+    "symbol": "tool_delete",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "fs",
+  "unified": {
+    "tool": "fs",
+    "op": "delete"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

@@ -1,0 +1,42 @@
+{
+  "name": "start_background_job",
+  "description": "Start a tracked shell command.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "command"
+    ]
+  },
+  "effect": "PROCESS",
+  "effect_zeno": "ZENO_EFFECT_PROCESS",
+  "requires_approval": true,
+  "handler": "tool_start_job",
+  "profiles": [
+    "full"
+  ],
+  "category": "shell",
+  "file": "original/tools/start_background_job.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1326,
+    "symbol": "tool_start_job",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "shell",
+  "unified": {
+    "tool": "shell",
+    "op": "start"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

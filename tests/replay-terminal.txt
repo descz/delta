@@ -1,0 +1,10 @@
+# /terminal <comando>: executa no shell e mostra a saída dentro do Delta
+size 100 24
+type /terminal echo ola do delta
+key enter
+dump com_saida
+
+echo COMANDO QUE FALHA (codigo != 0)
+type /terminal echo linha1 & echo linha2
+key enter
+dump duas_linhas

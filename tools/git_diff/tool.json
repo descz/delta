@@ -1,0 +1,31 @@
+{
+  "name": "git_diff",
+  "description": "Show the current Git diff.",
+  "parameters": {
+    "type": "object"
+  },
+  "effect": "READ_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_READ_LOCAL",
+  "requires_approval": false,
+  "handler": "tool_git_diff",
+  "profiles": [
+    "full"
+  ],
+  "category": "git",
+  "file": "original/tools/git_diff.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1423,
+    "symbol": "tool_git_diff",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "git",
+  "unified": {
+    "tool": "git",
+    "op": "diff"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

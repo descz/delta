@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delta Agent — agente de código no terminal</title>
+<link rel="icon" href="logo.png">
+<style>
+  @font-face{font-family:Orbitron;font-weight:700 900;font-display:swap;src:url(fonts/orbitron.woff2) format('woff2')}
+  @font-face{font-family:'Space Mono';font-weight:400 700;font-display:swap;src:url(fonts/spacemono.woff2) format('woff2')}
+  :root{--bg:#050505;--panel:#0b0b0d;--ink:#fafafa;--dim:#a1a1aa;--faint:#71717a;--line:#1f1f23;
+        --display:Orbitron,"Eurostile",ui-sans-serif;--mono:"Space Mono",ui-monospace,Consolas,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.75 var(--mono);-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  header{position:sticky;top:0;z-index:9;background:rgba(5,5,5,.86);backdrop-filter:blur(14px)}
+  .bar{display:flex;align-items:center;justify-content:space-between;height:68px;gap:16px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand .d{font:900 26px/1 var(--display)}
+  .brand b{font:700 11px/1 var(--display);letter-spacing:.34em}
+  .brand span{display:block;font:10px/1.6 var(--mono);color:var(--faint);letter-spacing:.14em}
+  nav{display:flex;gap:18px;font-size:12px;color:var(--dim)}
+  nav a:hover{color:#fff}
+  .btn{display:inline-block;background:#fff;color:#000;font:600 12px var(--mono);padding:11px 18px;border-radius:10px;letter-spacing:.04em}
+  .btn.ghost{background:#101012;color:#fff}
+  .hero{padding:78px 0 54px;position:relative;overflow:hidden}
+  .grid{position:absolute;inset:0;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:40px 40px}
+  .hero h1{position:relative;font:900 clamp(34px,6.4vw,76px)/1.02 var(--display);letter-spacing:.01em;margin:14px 0 18px}
+  .hero h1 span{color:#3f3f46}
+  .lede{position:relative;max-width:620px;color:var(--dim);font-size:14px}
+  .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px;position:relative}
+  .shot{margin:44px 0 0;border-radius:14px;overflow:hidden}
+  .shot img{display:block;width:100%}
+  section{padding:64px 0;border-top:1px solid var(--line)}
+  h2{font:900 clamp(20px,3vw,32px)/1.15 var(--display);letter-spacing:.03em;margin:0 0 8px;text-transform:uppercase}
+  .k{font:10px var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--faint);margin-bottom:10px}
+  p{color:var(--dim)}
+  .grid3{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:26px}
+  .card{background:var(--panel);border-radius:14px;padding:20px}
+  .card h3{font:700 11px var(--display);letter-spacing:.22em;text-transform:uppercase;margin:0 0 10px}
+  .card p{margin:0;font-size:12.5px}
+  table{width:100%;border-collapse:collapse;margin-top:20px;font-size:12.5px}
+  td,th{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font:700 10px var(--display);letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+  td code{background:#000;padding:1px 6px;border-radius:6px;color:#fff}
+  pre{background:#000;border-radius:12px;padding:16px 18px;overflow:auto;font-size:12.5px;color:#d4d4d8}
+  footer{border-top:1px solid var(--line);padding:26px 0;color:var(--faint);font-size:11.5px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <div class="brand"><div class="d">Δ</div>
+    <div><b>DELTA AGENT</b><span>v1.0.0 · C11</span></div></div>
+  <nav><a href="#o-que-e">o que é</a><a href="#como">como usar</a><a href="#download">download</a></nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="grid"></div>
+    <div class="k">terminal · um arquivo · zero dependências</div>
+    <h1>UM AGENTE DE CÓDIGO<br><span>QUE VIVE NO SEU TERMINAL.</span></h1>
+    <p class="lede">Lê e edita arquivos, roda comandos, usa git, consulta a web e guarda memória —
+      com o modelo que você escolher. Um executável, sem Node, sem Python, sem instalador de framework.</p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/descz/delta/releases/latest">baixar</a>
+      <a class="btn ghost" href="https://github.com/descz/delta">código no github</a>
+    </div>
+    <div class="shot"><img src="tui.svg" alt="Delta Agent no terminal"></div>
+  </div>
+
+  <section id="o-que-e">
+    <div class="k">01 — o que é</div>
+    <h2>Um binário, um agente</h2>
+    <p>O Delta conversa com o modelo que você escolher e executa o trabalho de verdade: lê código,
+       escreve, roda testes, resolve git, baixa documentação. Tudo no terminal, com o mesmo
+       modelo mental de um editor: nada de nuvem no meio.</p>
+    <div class="grid3">
+      <div class="card"><h3>Arquivos</h3><p>ler, criar, editar com precisão, buscar no projeto e ver diff.</p></div>
+      <div class="card"><h3>Shell</h3><p>comandos, jobs em background, /terminal com a saída na tela.</p></div>
+      <div class="card"><h3>Git</h3><p>status, diff, log, commit e checkpoint antes de mexer.</p></div>
+      <div class="card"><h3>Web</h3><p>páginas, dados, documentação — e MCP para servidores.</p></div>
+      <div class="card"><h3>Skills</h3><p>fluxos salvos em SKILL.md que ele reaproveita sozinho.</p></div>
+      <div class="card"><h3>Memória</h3><p>fatos duráveis entre sessões e retomada por pasta.</p></div>
+    </div>
+  </section>
+
+  <section id="como">
+    <div class="k">02 — como usar</div>
+    <h2>Três comandos e você está dentro</h2>
+<pre>delta          <span style="color:#71717a"># abre o CLI (retoma o último chat desta pasta)</span>
+/login         <span style="color:#71717a"># escolhe o provedor e cola a chave (uma vez)</span>
+/projects D:\dev\app   <span style="color:#71717a"># onde ele trabalha (fica salvo)</span></pre>
+    <table>
+      <tr><th>comando</th><th>o que faz</th></tr>
+      <tr><td><code>/terminal</code></td><td>roda um comando no shell e mostra a saída no chat</td></tr>
+      <tr><td><code>/models</code></td><td>modelos dos provedores conectados (models.dev)</td></tr>
+      <tr><td><code>/thinking</code></td><td>esforço de raciocínio do modelo</td></tr>
+      <tr><td><code>/copy</code></td><td>copia a última resposta (ou arraste o mouse)</td></tr>
+      <tr><td><code>delta wiki</code></td><td>abre a documentação no navegador</td></tr>
+      <tr><td><code>delta --new</code></td><td>começa uma sessão nova</td></tr>
+    </table>
+  </section>
+
+  <section id="download">
+    <div class="k">03 — download</div>
+    <h2>Escolha o sistema</h2>
+    <p>Os arquivos ficam na página de releases do GitHub.</p>
+    <div class="grid3">
+      <div class="card"><h3>Windows 10/11</h3><p>Delta.exe — programa + instalador num arquivo. Duplo clique abre a tela.</p>
+        <p style="margin-top:10px"><a class="btn" href="https://github.com/descz/delta/releases/latest">baixar</a></p></div>
+      <div class="card"><h3>Linux x86_64</h3><p>delta-linux-x86_64.run — auto-extraível, instala e deixa <code>delta</code> no PATH.</p>
+        <p style="margin-top:10px"><a class="btn" href="https://github.com/descz/delta/releases/latest">baixar</a></p></div>
+      <div class="card"><h3>macOS 11+</h3><p>pacote com o código + INSTALAR-MAC.command (compila e instala na máquina).</p>
+        <p style="margin-top:10px"><a class="btn" href="https://github.com/descz/delta/releases/latest">baixar</a></p></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Delta Agent · C11 · MIT</span>
+    <span>windows · linux · macos</span>
+  </footer>
+</div>
+</body>
+</html>

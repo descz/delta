@@ -1,0 +1,12 @@
+# Selecao por arrasto no transcript + copiar ao soltar
+size 80 24
+type /help
+key enter
+dump ajuda_completa
+
+echo SELECIONANDO AS DUAS PRIMEIRAS LINHAS COM O MOUSE
+mouse 2 0 click
+mouse 30 0 drag
+mouse 30 1 drag
+mouse 30 1 release
+dump apos_selecao

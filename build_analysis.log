@@ -1,0 +1,16 @@
+[info] compilando com "C:\mingw64\bin\gcc.exe"
+  cc src\util.c
+  cc src\json.c
+  cc src\okcolor.c
+  cc src\theme.c
+  cc src\ui.c
+  cc src\term.c
+  cc src\clipboard.c
+  cc src\tools.c
+  cc src\provider.c
+  cc src\modelsdev.c
+  cc src\agent.c
+  cc src\main.c
+  ld bin\delta.exe
+C:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/16.1.0/../../../../x86_64-w64-mingw32/bin/ld.exe: cannot open output file bin\delta.exe: Permission denied
+collect2.exe: error: ld returned 1 exit status

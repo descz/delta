@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delta Agent</title>
+<link rel="icon" href="/logo.png">
+<style>
+  :root{
+    --bg:#050505; --panel:#0c0c0e; --panel2:#0a0a0b; --ink:#fafafa; --dim:#a1a1aa;
+    --faint:#71717a; --line:#27272a; --line2:#3f3f46;
+    --display:Orbitron,"Eurostile","Agency FB",ui-sans-serif,sans-serif;
+    --mono:"Space Mono","JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  ::selection{background:#fff;color:#000}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:var(--bg)}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:9999px}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font:13px/1.7 var(--mono);
+       -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;min-height:100vh}
+  .serif{font-family:var(--display);letter-spacing:.04em}
+  .mono{font-family:var(--mono)}
+  .k{font:10.5px var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
+  a{color:inherit;text-decoration:none}
+
+  /* ---------- header (sem linhas) ---------- */
+  header{position:sticky;top:0;z-index:20;background:rgba(5,5,5,.82);backdrop-filter:blur(14px)}
+  .bar{max-width:1120px;margin:0 auto;padding:0 24px;height:70px;
+       display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .mark{font:24px/1 var(--display);font-weight:900;color:#fff;letter-spacing:.02em}
+  .brand .name{font:700 12px/1 var(--display);letter-spacing:.34em;text-transform:uppercase}
+  .brand .ver{font:11px var(--mono);color:var(--faint);letter-spacing:.06em;margin-top:4px}
+  nav{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim)}
+  nav a{padding:7px 12px;border-radius:8px;transition:.15s}
+  nav a:hover{color:#fff;background:var(--panel)}
+  nav a.on{color:#000;background:#fff}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:9999px;
+        background:var(--panel);font:11px var(--mono);color:var(--dim)}
+
+  /* ---------- layout ---------- */
+  main{max-width:1120px;margin:0 auto;padding:56px 24px 24px;width:100%;flex:1}
+  .view{display:none}
+  .view.on{display:block}
+  .hero{max-width:730px;margin:0 auto 38px;text-align:center}
+  h1{font:900 clamp(26px,4vw,46px)/1.14 var(--display);letter-spacing:.02em;margin:18px 0 16px;text-transform:uppercase}
+  h1 em{font-style:normal;color:var(--faint);font-weight:700}
+  .lede{color:var(--dim);font-size:15px;max-width:580px;margin:0 auto}
+  .trust{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;margin-top:18px;
+         font:11px var(--mono);color:var(--faint)}
+  .trust i{font-style:normal;color:var(--dim)}
+
+  /* ---------- cartões (fundo, sem borda) ---------- */
+  .card{background:var(--panel);border-radius:16px;padding:24px}
+  .install{max-width:820px;margin:0 auto}
+  label{display:block;font:10.5px var(--mono);letter-spacing:.2em;text-transform:uppercase;
+        color:var(--faint);margin-bottom:10px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  input[type=text]{flex:1;min-width:240px;background:#000;border:1px solid transparent;
+      color:#fff;border-radius:10px;padding:12px 14px;font:12.5px var(--mono)}
+  input[type=text]:focus{outline:none;border-color:var(--line2)}
+  button{font:500 12px var(--mono);border-radius:10px;padding:11px 18px;cursor:pointer;
+         background:#17171a;border:1px solid transparent;color:#fff;transition:.15s}
+  button:hover:not(:disabled){background:#222226}
+  button.primary{background:#fff;color:#000;font-weight:600}
+  button.primary:hover:not(:disabled){background:#e4e4e7}
+  button:disabled{opacity:.45;cursor:default}
+  .hint{color:var(--faint);font-size:12px;margin-top:12px}
+  .msg{margin-top:14px;font:12px var(--mono);color:var(--dim);min-height:16px}
+  .msg b{color:#fff;font-weight:500}
+
+  /* ---------- log ---------- */
+  .steps{list-style:none;padding:0;margin:0;font:12.5px/1.95 var(--mono)}
+  .steps li{color:var(--dim)}
+  .steps li b{color:#fff;font-weight:400}
+  .steps li.ok::before{content:"✓ ";color:#fff}
+  .steps li.err::before{content:"✗ ";color:#fff}
+  .steps li.run::before{content:"→ ";color:var(--dim)}
+
+  /* ---------- instalado ---------- */
+  .okhead{display:flex;align-items:center;gap:12px}
+  .okhead .tick{width:34px;height:34px;border-radius:50%;background:#fff;color:#000;
+       display:grid;place-items:center;font:700 15px var(--display)}
+  .okhead h2{font:900 22px/1.15 var(--display);letter-spacing:.04em;text-transform:uppercase;margin:0}
+  .paths{font:12px/2 var(--mono);color:var(--faint);margin-top:14px}
+  .paths b{color:var(--ink);font-weight:400}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:16px}
+  .tile{background:var(--panel);border-radius:14px;padding:18px}
+  .tile h3{font:700 12px var(--display);letter-spacing:.22em;text-transform:uppercase;margin:0 0 10px;color:#fff}
+  .tile p{margin:0;color:var(--dim);font-size:12.5px}
+  .tile ul{margin:8px 0 0;padding-left:16px;color:var(--dim);font-size:12.5px}
+  .tile li{margin:2px 0}
+
+  kbd,.cmd{font:11.5px var(--mono);background:#000;border-radius:6px;
+           padding:1.5px 7px;color:#fff;white-space:nowrap}
+  .cmdblock{margin-top:16px;background:#000;border-radius:14px;padding:16px 18px;
+            font:12.5px/2.05 var(--mono);color:var(--dim)}
+  .cmdblock b{color:#fff;font-weight:400}
+  .cmdblock .c{color:var(--faint)}
+
+  /* ---------- docs ---------- */
+  .doc{max-width:800px;margin:0 auto}
+  .doc .kicker{font:11px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+  .doc h2{font:900 clamp(24px,3.2vw,38px)/1.15 var(--display);letter-spacing:.03em;text-transform:uppercase;margin:10px 0 14px}
+  .doc h3{font:700 12px/1.3 var(--display);letter-spacing:.22em;text-transform:uppercase;margin:34px 0 10px}
+  .doc p{color:var(--dim);font-size:14px;margin:0 0 12px}
+  .doc ul{color:var(--dim);font-size:14px;margin:6px 0 12px;padding-left:20px}
+  .doc li{margin:3px 0}
+  .doc .kv{display:grid;grid-template-columns:170px 1fr;gap:8px 16px;font-size:13.5px;
+           color:var(--dim);margin:10px 0 16px}
+  .doc .kv b{color:var(--ink);font-weight:400;font-family:var(--mono);font-size:12.5px}
+  .doc .note{background:var(--panel);border-radius:12px;padding:14px 16px;font-size:13px;
+             color:var(--dim);margin:14px 0}
+  .doc code{font:12.5px var(--mono);background:#000;padding:1.5px 6px;border-radius:6px;color:#fff}
+
+  footer{margin-top:56px;background:#000}
+  .foot{max-width:1120px;margin:0 auto;padding:18px 24px;display:flex;justify-content:space-between;
+        gap:16px;flex-wrap:wrap;font:11px var(--mono);color:var(--faint);word-break:break-all}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="brand">
+      <div class="mark">Δ</div>
+      <div>
+        <div class="name">Delta Agent</div>
+        <div class="ver">instalação · <span id="osName">detectando…</span></div>
+      </div>
+    </div>
+    <nav id="nav">
+      <a href="#/instalar" data-go="instalar">Instalar</a>
+      <a href="#/o-que-e" data-go="o-que-e">O que é</a>
+      <a href="#/como-usar" data-go="como-usar">Como usar</a>
+      <span class="pill"><span id="verBadge">v—</span></span>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============================ INSTALAR ============================ -->
+  <section class="view on" data-view="instalar">
+    <div class="hero">
+      <span class="pill">Terminal · um único executável · sem dependências</span>
+      <h1>Um agente de código<br><em>que vive no seu terminal.</em></h1>
+      <p class="lede">
+        O Delta lê e edita arquivos, roda comandos, usa git, consulta a web e guarda memória —
+        com o modelo que você escolher. Instala em uma pasta e vira o comando
+        <span class="cmd">delta</span>.
+      </p>
+      <div class="trust">
+        <span><i>✓</i> Windows 10/11 x64</span>
+        <span><i>✓</i> sem Node, Python ou admin</span>
+        <span><i>✓</i> seus dados em uma pasta só</span>
+      </div>
+    </div>
+
+    <section class="card install" id="card">
+      <div id="form">
+        <label for="dir">Pasta de dados (skills, mcps, memória, extensões, sistema)</label>
+        <div class="row">
+          <input id="dir" type="text" spellcheck="false" placeholder="C:\Users\você\.deltaCore">
+          <button id="pick" type="button">Escolher pasta…</button>
+        </div>
+        <div class="hint">Config, chaves de API, sessões e skills ficam aí. Nada é espalhado pelo sistema.</div>
+        <div class="row" style="margin-top:18px">
+          <button id="go" class="primary" type="button">Instalar</button>
+          <span class="hint" style="margin:0">leva menos de 5 segundos</span>
+        </div>
+        <div class="msg" id="msg"></div>
+      </div>
+
+      <ul class="steps" id="log" style="display:none"></ul>
+
+      <div id="okpanel" style="display:none">
+        <div class="okhead">
+          <div class="tick">✓</div>
+          <div>
+            <h2>Instalado com sucesso.</h2>
+            <div class="hint" style="margin-top:4px">O comando <b style="color:#fff">delta</b> já está no PATH.
+              Abra um terminal <b style="color:#fff">novo</b> e digite <span class="cmd">delta</span>.</div>
+          </div>
+        </div>
+        <div class="paths" id="paths"></div>
+        <div class="row" style="margin-top:18px">
+          <button id="again" type="button">Instalar em outra pasta</button>
+          <button id="close" class="primary" type="button">Fechar instalador</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="guide" style="display:none">
+      <div class="grid">
+        <div class="tile">
+          <h3>O que é</h3>
+          <p>Um agente de codificação de terminal em C11. Um arquivo, sem runtime: nada de npm,
+             pip ou instalador de framework.</p>
+        </div>
+        <div class="tile">
+          <h3>O que faz</h3>
+          <ul>
+            <li>lê, cria e edita arquivos com precisão</li>
+            <li>roda comandos e jobs em background</li>
+            <li>git, web, skills, MCP e memória durável</li>
+            <li>escolhe entre centenas de modelos (models.dev)</li>
+          </ul>
+        </div>
+        <div class="tile">
+          <h3>Como usar</h3>
+          <ul>
+            <li><span class="cmd">delta</span> retoma o último chat da pasta</li>
+            <li><span class="cmd">/login</span> cola a chave do provedor</li>
+            <li><span class="cmd">/projects &lt;pasta&gt;</span> define onde trabalhar</li>
+            <li><span class="cmd">/help</span> mostra tudo</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="cmdblock">
+        <div><b>delta</b> <span class="c"># abre o CLI (retoma o último chat desta pasta)</span></div>
+        <div><b>delta --new</b> <span class="c"># começa uma sessão nova</span></div>
+        <div><b>delta wiki</b> <span class="c"># abre esta documentação no navegador</span></div>
+        <div><b>/login</b> <span class="c"># escolhe o provedor e cola a chave (uma vez)</span></div>
+        <div><b>/projects</b> D:\dev\app <span class="c"># onde ele trabalha (fica salvo)</span></div>
+        <div><b>/terminal</b> git status <span class="c"># roda um comando e mostra a saída</span></div>
+      </div>
+    </section>
+  </section>
+
+  <!-- ============================ O QUE É ============================ -->
+  <section class="view" data-view="o-que-e">
+    <div class="doc">
+      <div class="kicker">documentação</div>
+      <h2>O que é o Delta</h2>
+      <p>O Delta Agent é um agente de codificação que roda no terminal. Você conversa em linguagem
+         natural e ele executa o trabalho: lê arquivos, escreve código, roda comandos, resolve git,
+         consulta a web e explica o que encontrou.</p>
+      <p>É um único executável escrito em C11, sem runtime: não precisa de Node, Python, npm, nem de
+         privilégio de administrador. Ele conversa com o provedor de modelo que você escolher e
+         guarda tudo o que é seu numa pasta só.</p>
+
+      <h3>O que ele faz</h3>
+      <div class="kv">
+        <b>arquivos</b><span>ler, criar, editar com precisão e procurar no projeto</span>
+        <b>shell</b><span>rodar comandos, jobs em background e ver a saída</span>
+        <b>git</b><span>status, diff, log, commit e checkpoint antes de mexer</span>
+        <b>web</b><span>baixar páginas, extrair dados e ler documentação</span>
+        <b>skills</b><span>fluxos salvos em <code>SKILL.md</code> que ele reaproveita</span>
+        <b>mcp</b><span>falar com servidores MCP (JSON-RPC)</span>
+        <b>memória</b><span>guardar fatos duráveis entre sessões</span>
+        <b>modelos</b><span>centenas de modelos e provedores do catálogo models.dev</span>
+      </div>
+
+      <h3>Como funciona</h3>
+      <p>Cada pedido seu vira um turno: o modelo responde em streaming, pede ferramentas, o Delta
+         executa e devolve o resultado, até terminar. Você pode <b>digitar durante o trabalho</b> —
+         a mensagem entra na conversa no meio do turno e ele muda de rumo na hora.</p>
+      <div class="note">
+        O modelo não é fixo: <code>/models</code> lista o que os seus provedores oferecem e
+        <code>/thinking</code> ajusta o esforço de raciocínio.
+      </div>
+
+      <h3>Onde ficam os dados</h3>
+      <p>Tudo numa pasta (a que você escolheu ao instalar, por padrão
+         <code>C:\Users\você\.deltaCore</code>):</p>
+      <div class="kv">
+        <b>config.json</b><span>provedor, modelo, idioma, pasta do projeto</span>
+        <b>auth.json</b><span>uma chave de API por provedor</span>
+        <b>sessions/</b><span>o histórico de cada pasta, em JSONL</span>
+        <b>skills/</b><span>suas skills (<code>&lt;nome&gt;/SKILL.md</code>)</span>
+        <b>mcps/</b><span>um <code>.json</code> por servidor MCP</span>
+        <b>extensions/</b><span>extensões plugáveis</span>
+        <b>system/prompt.md</b><span>o que ele deve obedecer sempre</span>
+      </div>
+
+      <h3>Requisitos</h3>
+      <ul>
+        <li>Windows 10/11 x64 (o binário é autossuficiente)</li>
+        <li>internet para falar com o provedor do modelo</li>
+        <li>uma chave de API do provedor que você usar</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============================ COMO USAR ============================ -->
+  <section class="view" data-view="como-usar">
+    <div class="doc">
+      <div class="kicker">documentação</div>
+      <h2>Como usar</h2>
+
+      <h3>Primeiro uso</h3>
+      <p>Abra um terminal novo e digite <code>delta</code>. Na primeira vez, conecte um provedor:</p>
+      <div class="cmdblock">
+        <div><b>/login</b> <span class="c"># lista os provedores, pede a chave e escolhe um modelo</span></div>
+        <div><b>/projects</b> D:\dev\meu-app <span class="c"># passa a trabalhar nessa pasta (fica salvo)</span></div>
+        <div><span class="c"># agora é só escrever o que você quer</span></div>
+        <div><b>leia src/main.c e explique o fluxo</b></div>
+      </div>
+
+      <h3>Retomar o trabalho</h3>
+      <p>O <code>delta</code> <b>abre no último chat daquela pasta</b>: você continua de onde parou,
+         com o histórico e o contexto. <code>delta --new</code> começa do zero e <code>/new</code>
+         faz o mesmo de dentro da sessão.</p>
+
+      <h3>Comandos</h3>
+      <div class="kv">
+        <b>/login</b><span>escolhe provedor e cola a chave</span>
+        <b>/models</b><span>modelos dos provedores conectados</span>
+        <b>/thinking</b><span>esforço de raciocínio</span>
+        <b>/projects</b><span>pasta onde ele trabalha</span>
+        <b>/terminal</b><span>roda um comando no shell e mostra a saída</span>
+        <b>/copy</b><span>copia a última resposta</span>
+        <b>/status</b><span>configuração e uso</span>
+        <b>/help</b><span>todos os comandos e atalhos</span>
+      </div>
+
+      <h3>Atalhos</h3>
+      <div class="kv">
+        <b>Enter</b><span>envia (durante o trabalho: entra na fila e ele lê no meio do turno)</span>
+        <b>Shift+Enter</b><span>quebra a linha</span>
+        <b>Ctrl+C</b><span>interrompe a geração (não fecha o app)</span>
+        <b>Ctrl+X</b><span>copia a última resposta</span>
+        <b>Ctrl+Q</b><span>devolve a última mensagem da fila ao editor</span>
+        <b>mouse</b><span>arrastar seleciona e copia; roda rola a conversa</span>
+        <b>Esc</b><span>limpa a seleção e volta ao fim</span>
+      </div>
+
+      <h3>Seu sistema</h3>
+      <p>Escreva em <code>system/prompt.md</code> (dentro da pasta de dados) o que o Delta deve
+         obedecer em toda conversa: tom, formato, regras do time. Ele relê o arquivo a cada turno.</p>
+
+      <h3>Problemas comuns</h3>
+      <ul>
+        <li><b>“sem chave de API”</b> — rode <code>/login</code> ou defina
+            <code>OPENAI_API_KEY</code> / <code>ANTHROPIC_API_KEY</code>.</li>
+        <li><b>“catalogo indisponivel”</b> — sem rede na primeira execução; tente de novo.</li>
+        <li><b><code>delta</code> não é reconhecido</b> — abra um terminal novo (o PATH foi
+            atualizado) ou use o caminho completo que aparece na instalação.</li>
+        <li><b>SmartScreen na primeira execução</b> — “Mais informações → Executar assim mesmo”.</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="foot">
+    <span>Delta Agent · <span id="exeHint"></span></span>
+    <span><a href="#/o-que-e">o que é</a> · <a href="#/como-usar">como usar</a></span>
+  </div>
+</footer>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
+let state = {};
+
+/* ---------- rotas: /#/instalar · /#/o-que-e · /#/como-usar ---------- */
+function show(view) {
+  if (!document.querySelector('.view[data-view="' + view + '"]')) view = 'instalar';
+  $$('.view').forEach(v => v.classList.toggle('on', v.dataset.view === view));
+  $$('nav a').forEach(a => a.classList.toggle('on', a.dataset.go === view));
+  window.scrollTo({ top: 0 });
+}
+function route() {
+  const h = (location.hash || '').replace(/^#\/?/, '');
+  show(h || 'instalar');
+}
+window.addEventListener('hashchange', route);
+
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: body ? 'POST' : 'GET',
+    headers: body ? { 'content-type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const txt = await r.text();
+  try { return JSON.parse(txt); } catch { return { ok: false, error: txt }; }
+}
+
+function addStep(html, cls) {
+  const li = document.createElement('li');
+  li.innerHTML = html;
+  if (cls) li.className = cls;
+  $('#log').appendChild(li);
+  return li;
+}
+
+async function boot() {
+  state = await api('/api/state');
+  if (state.os) $('#osName').textContent = state.os;
+  if (state.version) $('#verBadge').textContent = 'v' + state.version;
+  if (state.defaultDir) $('#dir').value = state.defaultDir;
+  if (state.exe) $('#exeHint').textContent = state.exe;
+
+  /* `delta wiki` abre em /wiki: cai direto na documentação */
+  if (!location.hash && /^\/(wiki|docs)/.test(location.pathname)) {
+    location.replace(location.pathname.replace(/\/$/, '') + '#/o-que-e');
+    return;
+  }
+  route();
+}
+
+$('#pick').onclick = async () => {
+  const b = $('#pick');
+  b.disabled = true; b.textContent = 'aguardando…';
+  const r = await api('/api/pick', {});
+  b.disabled = false; b.textContent = 'Escolher pasta…';
+  if (r.dir) {
+    $('#dir').value = r.dir;
+    $('#msg').innerHTML = 'pasta escolhida: <b>' + r.dir + '</b>';
+  }
+};
+
+$('#go').onclick = async () => {
+  const dir = $('#dir').value.trim();
+  if (!dir) { $('#dir').focus(); return; }
+  $('#form').style.display = 'none';
+  $('#guide').style.display = 'none';
+  $('#okpanel').style.display = 'none';
+  $('#log').style.display = '';
+  $('#log').innerHTML = '';
+  addStep('instalando em <b>' + dir + '</b>…', 'run');
+  const r = await api('/api/install', { dir });
+  $('#log').innerHTML = '';
+  (r.steps || []).forEach(s => addStep(s.text, s.ok ? 'ok' : 'err'));
+
+  if (!r.ok) {
+    addStep(r.error || 'não deu para instalar', 'err');
+    const b = document.createElement('button');
+    b.textContent = 'Voltar'; b.className = 'primary'; b.style.marginTop = '14px';
+    b.onclick = () => { $('#log').style.display = 'none'; $('#form').style.display = ''; };
+    $('#log').appendChild(b);
+    return;
+  }
+
+  /* feedback de instalado, aqui mesmo, depois de escolher a pasta */
+  $('#log').style.display = 'none';
+  $('#okpanel').style.display = '';
+  $('#guide').style.display = '';
+  const pin = r.pinned === 'taskbar' ? 'fixado na barra de tarefas'
+            : r.pinned === 'dock-apps' ? 'no dock'
+            : r.pinned === 'shortcut' ? 'atalho criado' : 'fixe manualmente';
+  $('#paths').innerHTML =
+    'dados&nbsp;&nbsp;&nbsp; <b>' + r.coreDir + '</b><br>' +
+    'programa <b>' + r.exePath + '</b><br>' +
+    'comando&nbsp; <b>delta</b> → ' + r.resolved +
+    ' <span class="c">(' + pin + ')</span>';
+};
+
+$('#again').onclick = () => {
+  $('#okpanel').style.display = 'none';
+  $('#guide').style.display = 'none';
+  $('#log').style.display = 'none';
+  $('#form').style.display = '';
+  $('#msg').innerHTML = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+$('#close').onclick = async () => {
+  await api('/api/quit', {});
+  document.body.innerHTML =
+    '<div style="max-width:820px;margin:0 auto;padding:90px 24px;text-align:center">' +
+    '<div style="font:400 46px/1 Georgia,serif">Δ</div>' +
+    '<h2 style="font:400 30px/1.2 Georgia,serif;margin:20px 0 8px">Pode fechar esta aba</h2>' +
+    '<p style="color:#71717a;font:13px ui-monospace,monospace">instalador encerrado · abra um terminal e digite delta</p>' +
+    '</div>';
+};
+
+boot();
+</script>
+</body>
+</html>

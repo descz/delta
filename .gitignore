@@ -1,0 +1,14 @@
+# build
+build/
+bin/
+dist/
+.posix-tests/
+*.o
+*.d
+*.exe
+
+# editores / sistema
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

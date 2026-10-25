@@ -1,0 +1,55 @@
+{
+  "name": "memory_update",
+  "description": "Update an existing durable memory note: pass id (from memory_search/memory_list) plus the fields to change (title, content, kind, scope, tags_json). Fields omitted are preserved; append new information instead of replacing it.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "content": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "scope": {
+        "type": "string"
+      },
+      "tags_json": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "content"
+    ]
+  },
+  "effect": "WRITE_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_WRITE_LOCAL",
+  "requires_approval": false,
+  "handler": "tool_memory_update",
+  "profiles": [
+    "full"
+  ],
+  "category": "memory",
+  "file": "original/tools/memory_update.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1332,
+    "symbol": "tool_memory_update",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "memory",
+  "unified": {
+    "tool": "memory",
+    "op": "update"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

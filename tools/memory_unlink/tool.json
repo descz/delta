@@ -1,0 +1,45 @@
+{
+  "name": "memory_unlink",
+  "description": "Remove a link between two memory notes (from/to are note ids from memory_search or memory_list). Use when a relation is wrong/obsolete or the user asks to disconnect two memories; the notes themselves are kept.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "from": {
+        "type": "string"
+      },
+      "to": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "from",
+      "to"
+    ]
+  },
+  "effect": "WRITE_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_WRITE_LOCAL",
+  "requires_approval": false,
+  "handler": "bridge_memory_unlink_tool",
+  "profiles": [
+    "bridge"
+  ],
+  "category": "memory",
+  "file": "original/tools/memory_unlink.c",
+  "source": {
+    "file": "zeno-bridge.c",
+    "line": 549,
+    "symbol": "bridge_memory_unlink_tool",
+    "origin": "zeno-bridge"
+  },
+  "notes": [
+    "Registrada pelo bridge do servidor (nao faz parte de zeno_tools.c)."
+  ],
+  "family": "memory",
+  "unified": {
+    "tool": "memory",
+    "op": "unlink"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

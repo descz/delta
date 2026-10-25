@@ -1,0 +1,47 @@
+# /thinking: seletor por modelo + lista de modelos com provedor/modelo e preco total
+
+echo ESTADO CONHECIDO: um modelo SEM reasoning
+type /models groq/llama-3.1-8b-instant
+key enter
+status-off
+
+# /thinking: seletor por modelo + lista de modelos com provedor/modelo e preco total
+echo MODELO ATUAL SEM REASONING (groq)
+type /thinking
+key enter
+dump thinking_sem_reasoning
+
+echo TROCANDO PARA DEEPSEEK (tem reasoning)
+type /login
+key enter
+type deepseek
+key enter
+dump pedindo_chave
+type sk-chave-teste
+key enter
+status-off
+dump provedor_trocado
+
+echo LISTA DE MODELOS: provedor/modelo + preco total
+type /models
+key enter
+dump modelos_com_preco
+
+echo ESCOLHENDO UM MODELO
+type v4-pro
+key enter
+status-off
+dump modelo_escolhido
+
+echo SELETOR DE THINKING DO MODELO ESCOLHIDO
+type /thinking
+key enter
+dump seletor_thinking
+
+echo NAVEGANDO E ESCOLHENDO
+key down
+key down
+dump nivel_destacado
+key enter
+status-off
+dump nivel_escolhido

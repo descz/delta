@@ -1,0 +1,24 @@
+# Rolagem da conversa: setas rolam o texto, sem historico de entrada
+size 76 16
+type /help
+key enter
+dump fim_da_conversa
+
+echo SUBINDO 4 LINHAS COM AS SETAS
+key up
+key up
+key up
+key up
+dump quatro_acima
+
+echo END VOLTA AO FIM
+key end
+dump de_volta_no_fim
+
+echo EDITOR COM O CONTORNO COMPLETO
+type texto de teste
+dump editor_caixa
+
+echo VOLTANDO A ROLAR
+key pageup
+dump pageup

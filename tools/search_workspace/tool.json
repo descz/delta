@@ -1,0 +1,45 @@
+{
+  "name": "search_workspace",
+  "description": "Search text across workspace files.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string"
+      },
+      "relative_path": {
+        "type": "string"
+      },
+      "max_results": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "query"
+    ]
+  },
+  "effect": "READ_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_READ_LOCAL",
+  "requires_approval": false,
+  "handler": "tool_search",
+  "profiles": [
+    "full"
+  ],
+  "category": "files",
+  "file": "original/tools/search_workspace.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1323,
+    "symbol": "tool_search",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "fs",
+  "unified": {
+    "tool": "fs",
+    "op": "search"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

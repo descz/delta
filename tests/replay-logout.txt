@@ -1,0 +1,12 @@
+type /logout
+key enter
+dump lista
+key wheel-down
+dump apos_roda
+key enter
+dump depois_do_logout
+type /logout
+key enter
+dump lista_apos
+key enter
+dump tentativa_env

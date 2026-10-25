@@ -1,0 +1,39 @@
+{
+  "name": "browser_navigate",
+  "description": "Navigate a lightweight external reader.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "url"
+    ]
+  },
+  "effect": "BROWSER",
+  "effect_zeno": "ZENO_EFFECT_BROWSER",
+  "requires_approval": true,
+  "handler": "tool_browser_navigate",
+  "profiles": [
+    "full"
+  ],
+  "category": "web",
+  "file": "original/tools/browser_navigate.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1358,
+    "symbol": "tool_browser_navigate",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "web",
+  "unified": {
+    "tool": "web",
+    "op": "browser"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

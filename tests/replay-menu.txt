@@ -1,0 +1,29 @@
+# Menu de comandos: digitar "/" abre a lista, filtrar, navegar, completar
+type /
+dump menu_aberto
+
+echo FILTRANDO POR "m"
+type m
+dump filtrado_m
+
+echo FLECHA PARA BAIXO
+key down
+key down
+dump com_sel_3
+
+echo TAB COMPLETA
+key tab
+input
+dump apos_tab
+
+echo ESC FECHA
+key esc
+dump apos_esc
+
+echo FILTRO SEM RESULTADO
+type zz
+key backspace
+key backspace
+key backspace
+type zzzz
+dump sem_resultado

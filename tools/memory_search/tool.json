@@ -1,0 +1,42 @@
+{
+  "name": "memory_search",
+  "description": "Search durable memories - run this at the start of every user request and whenever the user references past context.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string"
+      },
+      "limit": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "query"
+    ]
+  },
+  "effect": "READ_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_READ_LOCAL",
+  "requires_approval": false,
+  "handler": "tool_memory_search",
+  "profiles": [
+    "full"
+  ],
+  "category": "memory",
+  "file": "original/tools/memory_search.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1333,
+    "symbol": "tool_memory_search",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "memory",
+  "unified": {
+    "tool": "memory",
+    "op": "search"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

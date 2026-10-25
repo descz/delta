@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="200" viewBox="0 0 520 200">
+  <!-- Logo do Zeno: zeta grega (ζ) com o gradiente da identidade
+       (coral -> azul), igual ao glifo em meios blocos da TUI. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#E48A7A"/>
+      <stop offset="100%" stop-color="#4F8EB3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ζ -->
+  <text x="40" y="152"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-style="italic" font-weight="700"
+        font-size="150" fill="url(#g)">ζ</text>
+
+  <!-- eno -->
+  <text x="160" y="152"
+        font-family="'Segoe UI', Arial, sans-serif"
+        font-weight="700"
+        font-size="110" fill="#1B1E24">eno</text>
+
+  <!-- tagline -->
+  <text x="163" y="184"
+        font-family="'Segoe UI', Arial, sans-serif"
+        font-size="19" fill="#6B7280">o agente leve, em C puro</text>
+</svg>

@@ -1,0 +1,43 @@
+{
+  "name": "run_command",
+  "description": "Execute a shell command in the workspace sandbox.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string"
+      },
+      "timeout_seconds": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "command"
+    ]
+  },
+  "effect": "PROCESS",
+  "effect_zeno": "ZENO_EFFECT_PROCESS",
+  "requires_approval": true,
+  "handler": "tool_run_command",
+  "profiles": [
+    "full",
+    "minimal"
+  ],
+  "category": "shell",
+  "file": "original/tools/run_command.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1325,
+    "symbol": "tool_run_command",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "shell",
+  "unified": {
+    "tool": "shell",
+    "op": "run"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

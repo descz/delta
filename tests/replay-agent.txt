@@ -1,0 +1,11 @@
+# Roteiro: conversa completa com o servidor falso (streaming + tool call)
+# bin\delta.exe --replay tests\replay-agent.txt 110 34 --provider openai --model gpt-4o ^
+#     --baseurl http://127.0.0.1:8094/v1 --api-key sk-teste
+
+type leia tests/mock-target.txt e diga o numero
+dump antes_do_enter
+key enter
+dump resposta_completa
+type e agora faca um resumo
+key enter
+dump segundo_turno

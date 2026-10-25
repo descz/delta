@@ -1,0 +1,54 @@
+{
+  "name": "mcp_call",
+  "description": "Call a tool on an external MCP server: pass server_url for HTTP JSON-RPC servers or command for stdio servers (e.g. \"node server.js\"); args_json carries the tool arguments; headers carries HTTP auth headers for server_url (e.g. {\"X-API-KEY\":\"${COMPOSIO_API_KEY}\"} - ${VAR} is read from the environment, never paste secrets literally).",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "server_url": {
+        "type": "string"
+      },
+      "command": {
+        "type": "string",
+        "description": "stdio server command line"
+      },
+      "headers": {
+        "type": "object",
+        "description": "HTTP headers for server_url; ${VAR} expands from the environment"
+      },
+      "tool_name": {
+        "type": "string"
+      },
+      "args_json": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "tool_name"
+    ]
+  },
+  "effect": "WRITE_EXTERNAL",
+  "effect_zeno": "ZENO_EFFECT_WRITE_EXTERNAL",
+  "requires_approval": false,
+  "handler": "tool_mcp",
+  "profiles": [
+    "full",
+    "minimal"
+  ],
+  "category": "extension",
+  "file": "original/tools/mcp_call.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1362,
+    "symbol": "tool_mcp",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "extend",
+  "unified": {
+    "tool": "extend",
+    "op": "mcp"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

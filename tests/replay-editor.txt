@@ -1,0 +1,50 @@
+# Atalhos do editor: Ctrl+U / Ctrl+K / Ctrl+W / Ctrl+Y / Ctrl+Z
+size 80 24
+type primeiro resto da linha e coisa
+key home
+key right
+key right
+key right
+key right
+dump antes
+
+echo CTRL+U APAGA ATE O INICIO DA LINHA
+key ctrl-u
+dump apos_ctrl_u
+
+echo CTRL+Y COLA O QUE FOI APAGADO
+key ctrl-y
+dump apos_ctrl_y
+
+echo CTRL+Z DESFAZ O YANK
+key ctrl-z
+dump apos_ctrl_z
+
+type mais e
+key end
+key left
+key left
+key left
+key left
+key left
+dump cursor_recuado
+
+echo CTRL+K APAGA ATE O FIM DA LINHA
+key ctrl-k
+dump apos_ctrl_k
+
+echo CTRL+Z DESFAZ O CTRL+K
+key ctrl-z
+dump desfeito_ctrl_k
+
+echo CTRL+W APAGA A PALAVRA ANTERIOR
+key ctrl-w
+dump apos_ctrl_w
+
+echo CTRL+Y DEVOLVE A PALAVRA
+key ctrl-y
+dump palavra_de_volta
+
+echo CTRL+X COPIA (sem selecao e sem resposta: avisa)
+key ctrl-x
+dump apos_ctrl_x

@@ -1,0 +1,48 @@
+# /login (lista de provedores + status + chave) e /model por provedor
+echo LISTA DE PROVEDORES
+type /login
+key enter
+dump lista_de_provedores
+
+echo FILTRANDO POR "deepseek"
+type deepseek
+dump filtrado
+
+echo ESCOLHENDO -> PEDE A CHAVE
+key enter
+dump pedindo_a_chave
+
+echo DIGITANDO A CHAVE
+type sk-chave-de-teste-123
+dump chave_digitada
+
+echo ENTER SALVA
+key enter
+status-off
+dump chave_salva
+
+echo MODELOS SO DO PROVEDOR ATIVO
+type /models
+key enter
+dump modelos_do_provedor
+key esc
+
+echo STATUS
+type /status
+key enter
+status-off
+dump status_final
+
+echo LOGOUT: LISTA SO OS CONECTADOS
+type /logout
+key enter
+dump lista_logout
+key esc
+
+echo FILTRO SEM RESULTADO + ESC
+type /models
+key enter
+type zzzzz
+dump filtro_vazio
+key esc
+dump apos_esc

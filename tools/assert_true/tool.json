@@ -1,0 +1,47 @@
+{
+  "name": "assert_true",
+  "description": "Assert exact equality.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "condition_description": {
+        "type": "string"
+      },
+      "value": {
+        "type": "string"
+      },
+      "expected": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "condition_description",
+      "value",
+      "expected"
+    ]
+  },
+  "effect": "READ_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_READ_LOCAL",
+  "requires_approval": false,
+  "handler": "tool_assert_true",
+  "profiles": [
+    "full"
+  ],
+  "category": "verify",
+  "file": "original/tools/assert_true.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1335,
+    "symbol": "tool_assert_true",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "assert",
+  "unified": {
+    "tool": "assert",
+    "op": "equals"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

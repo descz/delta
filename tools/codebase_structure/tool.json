@@ -1,0 +1,31 @@
+{
+  "name": "codebase_structure",
+  "description": "Scan code structure.",
+  "parameters": {
+    "type": "object"
+  },
+  "effect": "READ_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_READ_LOCAL",
+  "requires_approval": false,
+  "handler": "tool_codebase",
+  "profiles": [
+    "full"
+  ],
+  "category": "code",
+  "file": "original/tools/codebase_structure.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1426,
+    "symbol": "tool_codebase",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "code",
+  "unified": {
+    "tool": "code",
+    "op": "structure"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

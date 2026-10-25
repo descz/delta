@@ -1,0 +1,45 @@
+{
+  "name": "glob_workspace",
+  "description": "Return workspace paths matching a glob pattern.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "pattern": {
+        "type": "string"
+      },
+      "relative_path": {
+        "type": "string"
+      },
+      "max_results": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "pattern"
+    ]
+  },
+  "effect": "READ_LOCAL",
+  "effect_zeno": "ZENO_EFFECT_READ_LOCAL",
+  "requires_approval": false,
+  "handler": "tool_glob",
+  "profiles": [
+    "full"
+  ],
+  "category": "files",
+  "file": "original/tools/glob_workspace.c",
+  "source": {
+    "file": "ZenoC/src/zeno_tools.c",
+    "line": 1324,
+    "symbol": "tool_glob",
+    "origin": "ZenoC"
+  },
+  "notes": [],
+  "family": "fs",
+  "unified": {
+    "tool": "fs",
+    "op": "glob"
+  },
+  "port": "port.c",
+  "original": "original.c",
+  "wiring": "wiring.md"
+}

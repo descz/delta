@@ -1,0 +1,34 @@
+# Redimensionamento: o transcript precisa ser remontado na largura nova
+# (era o bug de entrar em tela cheia: as caixas ficavam com a largura antiga)
+
+echo LARGURA 80
+size 80 24
+type /help
+key enter
+key pageup
+key pageup
+dump oitenta
+
+echo ALARGANDO PARA 130 (tela cheia)
+size 130 24
+key pageup
+dump cento_e_trinta
+
+echo ESTREITANDO DE VOLTA PARA 70
+size 70 24
+dump setenta
+
+echo EDITOR COM BORDAS LATERAIS
+type teste com borda lateral
+dump editor_com_bordas
+
+echo TEMA MONO (padrao)
+type /clear
+key enter
+status-off
+dump mono_padrao
+
+echo TEMA DARK DO PI (ainda disponivel)
+type /theme dark
+key enter
+dump tema_dark
