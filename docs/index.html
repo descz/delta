@@ -68,7 +68,7 @@
   <nav>
     <a href="#produto">produto</a><a href="#como-funciona">como funciona</a>
     <a href="#comandos">comandos</a><a href="#dados">dados</a>
-    <a href="#download">download</a><a href="#faq">faq</a>
+    <a href="#download">download</a><a href="#licenca">licença</a><a href="#faq">faq</a>
   </nav>
 </div></header>
 
@@ -249,9 +249,29 @@ chmod +x delta-linux-x86_64.run &amp;&amp; ./delta-linux-x86_64.run
 build.bat           <span class="c"># bin\delta.exe (Windows)</span></pre>
   </section>
 
+  <!-- ===================== LICENÇA ===================== -->
+  <section id="licenca">
+    <div class="k">06 — licença</div>
+    <h2>Source-available, não comercial</h2>
+    <p>O código é público para estudo e uso pessoal ou interno. A licença <b>proíbe vender, alugar,
+       cobrar acesso e clonar</b> (fork público, espelho, pacote, binário, rebranding), e exige
+       crédito ao produto em qualquer divulgação.</p>
+    <table>
+      <tr><th>permitido</th><th>proibido</th></tr>
+      <tr><td>usar, estudar e modificar para uso pessoal, educacional ou interno</td>
+          <td>vender, alugar, cobrar acesso, incluir em produto ou serviço pago</td></tr>
+      <tr><td>compartilhar a cópia <b>não modificada</b>, sem fins lucrativos</td>
+          <td>publicar fork público, espelho, pacote, binário ou <b>clone/rebranding</b></td></tr>
+      <tr><td>citar, escrever e gravar vídeo — <b>com crédito</b></td>
+          <td>remover créditos, nome, símbolo Δ ou o aviso de licença</td></tr>
+    </table>
+    <p style="margin-top:16px">Crédito obrigatório: <b style="color:#fff">Delta Agent — github.com/descz/delta</b>.
+       Permissão comercial ou redistribuição especial: abra uma issue no repositório.</p>
+  </section>
+
   <!-- ===================== FAQ ===================== -->
   <section id="faq">
-    <div class="k">06 — faq</div>
+    <div class="k">07 — faq</div>
     <h2>Perguntas curtas</h2>
 
     <details><summary>Preciso de chave de API?</summary>
@@ -273,13 +293,18 @@ build.bat           <span class="c"># bin\delta.exe (Windows)</span></pre>
       <p>O binário precisa ser compilado na máquina (não há cross-compile confiável para Mach-O).
          O pacote traz um <code>.command</code> que confere as Xcode Command Line Tools e faz tudo.</p></details>
 
+    <details><summary>Posso usar comercialmente ou fazer um fork público?</summary>
+      <p>Não. A licença é source-available e não comercial: proíbe venda, cobrança de acesso e clone
+         (fork público, pacote, binário ou rebranding). Compartilhar a cópia não modificada, sem fins
+         lucrativos e com crédito, é permitido. Veja <a href="https://github.com/descz/delta/blob/main/LICENSE">LICENSE</a>.</p></details>
+
     <details><summary>Meus dados vão para algum lugar?</summary>
       <p>Só para o provedor que você configurar. Histórico, chaves, memória e skills ficam na sua
          pasta <code>.deltaCore</code>.</p></details>
   </section>
 
   <footer>
-    <span>Delta Agent · C11 · MIT</span>
+    <span>Delta Agent · C11 · uso não comercial</span>
     <span><a href="https://github.com/descz/delta">github.com/descz/delta</a></span>
   </footer>
 </div>

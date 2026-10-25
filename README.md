@@ -6,11 +6,15 @@
   <a href="https://github.com/descz/delta/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/descz/delta?style=flat-square&color=white&labelColor=black"></a>
   <img alt="C11" src="https://img.shields.io/badge/C-11-white?style=flat-square&labelColor=black">
   <img alt="deps" src="https://img.shields.io/badge/dependencies-0-white?style=flat-square&labelColor=black">
+  <img alt="source-available" src="https://img.shields.io/badge/source-available-white?style=flat-square&labelColor=black">
   <img alt="windows" src="https://img.shields.io/badge/windows-10%2F11-white?style=flat-square&labelColor=black">
   <img alt="linux" src="https://img.shields.io/badge/linux-x86__64-white?style=flat-square&labelColor=black">
   <img alt="macos" src="https://img.shields.io/badge/macos-11%2B-white?style=flat-square&labelColor=black">
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-white?style=flat-square&labelColor=black"></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-noncommercial-white?style=flat-square&labelColor=black"></a>
 </p>
+
+> **Licença:** código disponível para estudo e uso pessoal/interno — **proibido vender ou clonar**,
+> e toda divulgação deve ser **sem fins lucrativos** e **com créditos** ao projeto. Veja [LICENSE](LICENSE).
 
 **Delta Agent** é um agente de codificação que vive no seu terminal.
 Site: **[descz.github.io/delta](https://descz.github.io/delta/)** · downloads: **[Releases](https://github.com/descz/delta/releases/latest)** Você conversa em linguagem
@@ -218,4 +222,15 @@ tests/          replay + mocks + suítes
 
 ## Licença
 
-MIT — veja [LICENSE](LICENSE).
+**Source-available, uso não comercial.** O código é público para estudo e uso pessoal/interno, mas a
+licença **proíbe venda, aluguel, cobrança de acesso e clone** — e exige crédito ao produto em
+qualquer divulgação. Veja o texto completo em [LICENSE](LICENSE).
+
+| permitido | proibido |
+|---|---|
+| usar, estudar e modificar para uso pessoal, educacional ou interno | vender, alugar, cobrar acesso, incluir em produto/serviço pago |
+| compartilhar a cópia **não modificada**, sem fins lucrativos | publicar fork público, espelho, pacote, binário ou **clone/rebranding** |
+| citar, escrever, gravar vídeo — **com crédito** ao Delta | remover créditos, nome, símbolo Δ ou este aviso |
+
+Crédito obrigatório em qualquer divulgação: **Delta Agent — https://github.com/descz/delta**.
+Permissão comercial, clone ou redistribuição especial: abra uma issue no repositório.

@@ -1,21 +1,129 @@
-MIT License
+DELTA AGENT — LICENÇA DE USO NÃO COMERCIAL (v1.0)
+Delta Agent Non-Commercial License (v1.0)
 
-Copyright (c) 2026 Delta Agent contributors
+Copyright (c) 2026 descz · https://github.com/descz/delta
+Todos os direitos reservados / All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Este é um software de código disponível ("source-available"), NÃO é open source.
+This is source-available software. It is NOT open source.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+--------------------------------------------------------------------------------
+RESUMO EM QUATRO REGRAS  (resumo informativo; vale o texto completo abaixo)
+SUMMARY IN FOUR RULES    (informative summary; the full text below prevails)
+
+1. Pode usar, estudar e modificar para uso pessoal, educacional ou interno.
+   You may use, study and modify it for personal, educational or internal use.
+
+2. PROIBIDO vender, alugar, assinar, cobrar acesso ou incluir em produto/serviço pago.
+   NO selling, renting, licensing, paid access or inclusion in a paid product/service.
+
+3. PROIBIDO clonar: não publique o código (nem derivado) como produto seu, fork
+   público, pacote, binário, template ou rebranding.
+   NO cloning: do not republish the code (or derivatives) as your own product,
+   public fork, package, binary, template or rebrand.
+
+4. Divulgação de cópia não modificada: só SEM FINS LUCRATIVOS e com crédito
+   visível "Delta Agent — https://github.com/descz/delta".
+   Sharing an unmodified copy: NON-PROFIT ONLY and with visible credit
+   "Delta Agent — https://github.com/descz/delta".
+
+--------------------------------------------------------------------------------
+1. CONCESSÃO / GRANT
+
+Sujeito a estes termos, o autor concede a você uma licença mundial, gratuita, não
+exclusiva, não transferível e revogável para: (a) executar o Software; (b) estudar
+o seu código-fonte; (c) modificar o Software e executar as suas modificações —
+exclusivamente para uso pessoal, educacional ou interno, sem exploração comercial.
+
+Subject to these terms, the author grants you a worldwide, royalty-free,
+non-exclusive, non-transferable, revocable license to: (a) run the Software;
+(b) study its source code; (c) modify the Software and run your modifications —
+strictly for personal, educational or internal use, without commercial
+exploitation.
+
+--------------------------------------------------------------------------------
+2. RESTRIÇÕES / RESTRICTIONS
+
+2.1 Uso comercial proibido. Você não pode vender, licenciar, sublicenciar,
+    alugar, cobrar por acesso, distribuir junto de oferta paga, hospedar como
+    serviço pago (SaaS), usar em curso, consultoria ou treinamento pago, nem
+    incorporar o Software (ou derivado) em produto ou serviço comercial.
+    No commercial use of any kind is permitted.
+
+2.2 Clone e produto derivado proibidos. Você não pode publicar, distribuir ou
+    disponibilizar o Software, no todo ou em parte, nem obras derivadas, como:
+    repositório público (fork público, espelho, cópia), pacote (npm, pip, brew,
+    winget, apt, AUR etc.), binário pré-compilado, contêiner, imagem, template,
+    gerador, "clone", versão renomeada ou rebranding — sem autorização prévia e
+    escrita do autor. Cloning, mirroring, repacking, rebranding or publishing a
+    derivative as a separate product is prohibited.
+
+2.3 Redistribuição (limitada). É permitido compartilhar uma cópia NÃO MODIFICADA
+    do Software, desde que: (a) sem qualquer fim lucrativo (nenhuma venda,
+    patrocínio pago, anúncio pago, paywall ou doação obrigatória); (b) este
+    arquivo LICENSE acompanhe a cópia; (c) o nome "Delta Agent", o símbolo Δ e o
+    link https://github.com/descz/delta permaneçam visíveis e intactos; (d) não
+    haja qualquer sugestão de endosso ou afiliação.
+
+2.4 Créditos obrigatórios. Toda divulgação, menção, análise, vídeo, artigo,
+    tutorial, post, screenshot ou demonstração pública do Software deve creditar
+    o produto de forma visível como "Delta Agent" com o link
+    https://github.com/descz/delta. Attribution is mandatory in any public
+    disclosure.
+
+2.5 Avisos e marca. Você não pode remover, ocultar ou alterar avisos de
+    copyright, o nome "Delta Agent", o símbolo Δ ou este arquivo. A licença não
+    concede direitos sobre a marca, o nome ou o logotipo, que permanecem do autor
+    (o uso descritivo, com crédito, é permitido).
+
+--------------------------------------------------------------------------------
+3. AUTORIZAÇÃO COMERCIAL / COMMERCIAL PERMISSION
+
+Qualquer uso comercial, clone, rebranding, redistribuição fora do item 2.3 ou
+publicação de derivado exige autorização prévia e por escrito do autor. Sem essa
+autorização, o uso é proibido. Consulte o contato no repositório.
+
+Any commercial use, cloning, rebranding, redistribution outside 2.3 or publication
+of a derivative requires prior written permission from the author.
+
+--------------------------------------------------------------------------------
+4. SEM GARANTIAS / NO WARRANTY
+
+O SOFTWARE É FORNECIDO "NO ESTADO EM QUE SE ENCONTRA", SEM GARANTIA DE QUALQUER
+TIPO, EXPRESSA OU IMPLÍCITA, INCLUINDO, MAS NÃO SE LIMITANDO A, GARANTIAS DE
+COMERCIALIZAÇÃO, ADEQUAÇÃO A UM FIM ESPECÍFICO E NÃO VIOLAÇÃO.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+--------------------------------------------------------------------------------
+5. LIMITAÇÃO DE RESPONSABILIDADE / LIMITATION OF LIABILITY
+
+EM NENHUM CASO O AUTOR OU OS DETENTORES DO COPYRIGHT SERÃO RESPONSÁVEIS POR
+QUALQUER REIVINDICAÇÃO, DANO OU OUTRA RESPONSABILIDADE, SEJA EM AÇÃO DE
+CONTRATO, ATO ILÍCITO OU DE OUTRA FORMA, DECORRENTE DE, FORA DE OU EM CONEXÃO
+COM O SOFTWARE OU O USO OU OUTRAS NEGOCIAÇÕES NO SOFTWARE.
+
+IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+6. RESCISÃO / TERMINATION
+
+Esta licença termina automaticamente, sem aviso, se você violar qualquer termo.
+Ao terminar, você deve cessar todo uso e destruir todas as cópias e derivados.
+This license terminates automatically upon any violation; you must stop using and
+destroy all copies and derivatives.
+
+--------------------------------------------------------------------------------
+7. LEI APLICÁVEL / GOVERNING LAW
+
+Lei brasileira. Foro: comarca do domicílio do autor.
+Brazilian law. Venue: the author's place of residence.
+
+--------------------------------------------------------------------------------
+Contato para permissões: abra uma issue em https://github.com/descz/delta
+Contact for permissions: open an issue at https://github.com/descz/delta
