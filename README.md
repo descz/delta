@@ -20,10 +20,6 @@ guarda memória e explica o que encontrou — com o modelo que você escolher.
 É **um único executável escrito em C11, sem nenhuma dependência**: nada de Node, Python, npm, pip
 ou instalador de framework. No Windows são **544 KB** e ~1,7 MB de memória privada.
 
-<p align="center">
-  <img src="assets/tui.svg" alt="Delta Agent no terminal" width="820">
-</p>
-
 ---
 
 ## Índice

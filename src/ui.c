@@ -1120,8 +1120,7 @@ int ui_menu(Screen *s, int y, int width, const Theme *t,
 int ui_welcome(Screen *s, int y, int width, const Theme *t, const char *model, const char *cwd)
 {
     /* Logo do Delta Agent: um Δ de 8x6 pixels em meios blocos (▀ ▄ █),
-       tres linhas de altura — a mesma pixel art de assets/ascii-delta.mjs
-       (--style=block). Nome, modelo e cwd alinhados a direita do logo. */
+       tres linhas de altura. Nome, modelo e cwd alinhados a direita do logo. */
     static const char *const LOGO[3] = {
         "   ▄▄",
         " ▄█▀▀█▄",
