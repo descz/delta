@@ -12,7 +12,8 @@
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-MIT-white?style=flat-square&labelColor=black"></a>
 </p>
 
-**Delta Agent** é um agente de codificação que vive no seu terminal. Você conversa em linguagem
+**Delta Agent** é um agente de codificação que vive no seu terminal.
+Site: **[descz.github.io/delta](https://descz.github.io/delta/)** · downloads: **[Releases](https://github.com/descz/delta/releases/latest)** Você conversa em linguagem
 natural e ele executa o trabalho: lê e escreve arquivos, roda comandos, resolve git, consulta a web,
 guarda memória e explica o que encontrou — com o modelo que você escolher.
 
