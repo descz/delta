@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -7,8 +7,7 @@
 <link rel="icon" href="/logo.png">
 <style>
   :root{
-    --bg:#050505; --panel:#0c0c0e; --panel2:#0a0a0b; --ink:#fafafa; --dim:#a1a1aa;
-    --faint:#71717a; --line:#27272a; --line2:#3f3f46;
+    --bg:#050505; --panel:#0c0c0e; --ink:#fafafa; --dim:#a1a1aa; --faint:#71717a; --line:#27272a; --line2:#3f3f46;
     --display:Orbitron,"Eurostile","Agency FB",ui-sans-serif,sans-serif;
     --mono:"Space Mono","JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
   }
@@ -23,9 +22,8 @@
   .serif{font-family:var(--display);letter-spacing:.04em}
   .mono{font-family:var(--mono)}
   .k{font:10.5px var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
-  a{color:inherit;text-decoration:none}
 
-  /* ---------- header (sem linhas) ---------- */
+  /* ---------- header ---------- */
   header{position:sticky;top:0;z-index:20;background:rgba(5,5,5,.82);backdrop-filter:blur(14px)}
   .bar{max-width:1120px;margin:0 auto;padding:0 24px;height:70px;
        display:flex;align-items:center;justify-content:space-between;gap:16px}
@@ -52,7 +50,7 @@
          font:11px var(--mono);color:var(--faint)}
   .trust i{font-style:normal;color:var(--dim)}
 
-  /* ---------- cartões (fundo, sem borda) ---------- */
+  /* ---------- cards ---------- */
   .card{background:var(--panel);border-radius:16px;padding:24px}
   .install{max-width:820px;margin:0 auto}
   label{display:block;font:10.5px var(--mono);letter-spacing:.2em;text-transform:uppercase;
@@ -61,8 +59,8 @@
   input[type=text]{flex:1;min-width:240px;background:#000;border:1px solid transparent;
       color:#fff;border-radius:10px;padding:12px 14px;font:12.5px var(--mono)}
   input[type=text]:focus{outline:none;border-color:var(--line2)}
-  button{font:500 12px var(--mono);border-radius:10px;padding:11px 18px;cursor:pointer;
-         background:#17171a;border:1px solid transparent;color:#fff;transition:.15s}
+  button{font:500 12px var(--mono);letter-spacing:.06em;border-radius:10px;padding:11px 18px;cursor:pointer;
+         background:#141416;border:1px solid transparent;color:#fff;transition:.15s}
   button:hover:not(:disabled){background:#222226}
   button.primary{background:#fff;color:#000;font-weight:600}
   button.primary:hover:not(:disabled){background:#e4e4e7}
@@ -79,7 +77,7 @@
   .steps li.err::before{content:"✗ ";color:#fff}
   .steps li.run::before{content:"→ ";color:var(--dim)}
 
-  /* ---------- instalado ---------- */
+  /* ---------- installed ---------- */
   .okhead{display:flex;align-items:center;gap:12px}
   .okhead .tick{width:34px;height:34px;border-radius:50%;background:#fff;color:#000;
        display:grid;place-items:center;font:700 15px var(--display)}
@@ -103,7 +101,7 @@
 
   /* ---------- docs ---------- */
   .doc{max-width:800px;margin:0 auto}
-  .doc .kicker{font:11px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+  .doc .kicker{font:10px var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--faint)}
   .doc h2{font:900 clamp(24px,3.2vw,38px)/1.15 var(--display);letter-spacing:.03em;text-transform:uppercase;margin:10px 0 14px}
   .doc h3{font:700 12px/1.3 var(--display);letter-spacing:.22em;text-transform:uppercase;margin:34px 0 10px}
   .doc p{color:var(--dim);font-size:14px;margin:0 0 12px}
@@ -129,13 +127,13 @@
       <div class="mark">Δ</div>
       <div>
         <div class="name">Delta Agent</div>
-        <div class="ver">instalação · <span id="osName">detectando…</span></div>
+        <div class="ver">installer · <span id="osName">detecting…</span></div>
       </div>
     </div>
     <nav id="nav">
-      <a href="#/instalar" data-go="instalar">Instalar</a>
-      <a href="#/o-que-e" data-go="o-que-e">O que é</a>
-      <a href="#/como-usar" data-go="como-usar">Como usar</a>
+      <a href="#/install" data-go="install">Install</a>
+      <a href="#/what" data-go="what">What it is</a>
+      <a href="#/how" data-go="how">How to use</a>
       <span class="pill"><span id="verBadge">v—</span></span>
     </nav>
   </div>
@@ -143,34 +141,34 @@
 
 <main>
 
-  <!-- ============================ INSTALAR ============================ -->
-  <section class="view on" data-view="instalar">
+  <!-- ============================ INSTALL ============================ -->
+  <section class="view on" data-view="install">
     <div class="hero">
-      <span class="pill">Terminal · um único executável · sem dependências</span>
-      <h1>Um agente de código<br><em>que vive no seu terminal.</em></h1>
+      <span class="pill">terminal · one binary · zero dependencies</span>
+      <h1>A coding agent<br><em>that lives in your terminal.</em></h1>
       <p class="lede">
-        O Delta lê e edita arquivos, roda comandos, usa git, consulta a web e guarda memória —
-        com o modelo que você escolher. Instala em uma pasta e vira o comando
-        <span class="cmd">delta</span>.
+        Delta reads and edits files, runs commands, uses git, searches the web and keeps memory —
+        with the model you choose. It installs into one folder and becomes the
+        <span class="cmd">delta</span> command.
       </p>
       <div class="trust">
         <span><i>✓</i> Windows 10/11 x64</span>
-        <span><i>✓</i> sem Node, Python ou admin</span>
-        <span><i>✓</i> seus dados em uma pasta só</span>
+        <span><i>✓</i> no Node, Python or admin</span>
+        <span><i>✓</i> your data in one folder</span>
       </div>
     </div>
 
     <section class="card install" id="card">
       <div id="form">
-        <label for="dir">Pasta de dados (skills, mcps, memória, extensões, sistema)</label>
+        <label for="dir">Data folder (skills, mcps, memory, extensions, system)</label>
         <div class="row">
-          <input id="dir" type="text" spellcheck="false" placeholder="C:\Users\você\.deltaCore">
-          <button id="pick" type="button">Escolher pasta…</button>
+          <input id="dir" type="text" spellcheck="false" placeholder="C:\Users\you\.deltaCore">
+          <button id="pick" type="button">Choose folder…</button>
         </div>
-        <div class="hint">Config, chaves de API, sessões e skills ficam aí. Nada é espalhado pelo sistema.</div>
+        <div class="hint">Config, API keys, sessions and skills live here. Nothing is scattered across the system.</div>
         <div class="row" style="margin-top:18px">
-          <button id="go" class="primary" type="button">Instalar</button>
-          <span class="hint" style="margin:0">leva menos de 5 segundos</span>
+          <button id="go" class="primary" type="button">Install</button>
+          <span class="hint" style="margin:0">takes under 5 seconds</span>
         </div>
         <div class="msg" id="msg"></div>
       </div>
@@ -181,15 +179,15 @@
         <div class="okhead">
           <div class="tick">✓</div>
           <div>
-            <h2>Instalado com sucesso.</h2>
-            <div class="hint" style="margin-top:4px">O comando <b style="color:#fff">delta</b> já está no PATH.
-              Abra um terminal <b style="color:#fff">novo</b> e digite <span class="cmd">delta</span>.</div>
+            <h2>Installed successfully.</h2>
+            <div class="hint" style="margin-top:4px">The <b style="color:#fff">delta</b> command is on your PATH.
+              Open a <b style="color:#fff">new</b> terminal and type <span class="cmd">delta</span>.</div>
           </div>
         </div>
         <div class="paths" id="paths"></div>
         <div class="row" style="margin-top:18px">
-          <button id="again" type="button">Instalar em outra pasta</button>
-          <button id="close" class="primary" type="button">Fechar instalador</button>
+          <button id="again" type="button">Install to another folder</button>
+          <button id="close" class="primary" type="button">Close installer</button>
         </div>
       </div>
     </section>
@@ -197,151 +195,153 @@
     <section id="guide" style="display:none">
       <div class="grid">
         <div class="tile">
-          <h3>O que é</h3>
-          <p>Um agente de codificação de terminal em C11. Um arquivo, sem runtime: nada de npm,
-             pip ou instalador de framework.</p>
+          <h3>What it is</h3>
+          <p>A terminal coding agent written in C11. One file, no runtime: no npm, pip or
+             framework installer.</p>
         </div>
         <div class="tile">
-          <h3>O que faz</h3>
+          <h3>What it does</h3>
           <ul>
-            <li>lê, cria e edita arquivos com precisão</li>
-            <li>roda comandos e jobs em background</li>
-            <li>git, web, skills, MCP e memória durável</li>
-            <li>escolhe entre centenas de modelos (models.dev)</li>
+            <li>reads, creates and edits files precisely</li>
+            <li>runs commands and background jobs</li>
+            <li>git, web, skills, MCP and durable memory</li>
+            <li>hundreds of models (models.dev)</li>
           </ul>
         </div>
         <div class="tile">
-          <h3>Como usar</h3>
+          <h3>How to use</h3>
           <ul>
-            <li><span class="cmd">delta</span> retoma o último chat da pasta</li>
-            <li><span class="cmd">/login</span> cola a chave do provedor</li>
-            <li><span class="cmd">/projects &lt;pasta&gt;</span> define onde trabalhar</li>
-            <li><span class="cmd">/help</span> mostra tudo</li>
+            <li><span class="cmd">delta</span> resumes this folder's last chat</li>
+            <li><span class="cmd">/login</span> paste your provider key</li>
+            <li><span class="cmd">/projects &lt;folder&gt;</span> set where it works</li>
+            <li><span class="cmd">/help</span> show everything</li>
           </ul>
         </div>
       </div>
 
       <div class="cmdblock">
-        <div><b>delta</b> <span class="c"># abre o CLI (retoma o último chat desta pasta)</span></div>
-        <div><b>delta --new</b> <span class="c"># começa uma sessão nova</span></div>
-        <div><b>delta wiki</b> <span class="c"># abre esta documentação no navegador</span></div>
-        <div><b>/login</b> <span class="c"># escolhe o provedor e cola a chave (uma vez)</span></div>
-        <div><b>/projects</b> D:\dev\app <span class="c"># onde ele trabalha (fica salvo)</span></div>
-        <div><b>/terminal</b> git status <span class="c"># roda um comando e mostra a saída</span></div>
+        <div><b>delta</b> <span class="c"># open the CLI (resumes this folder's last chat)</span></div>
+        <div><b>delta --new</b> <span class="c"># start a new session</span></div>
+        <div><b>delta wiki</b> <span class="c"># open this documentation in the browser</span></div>
+        <div><b>/login</b> <span class="c"># pick the provider and paste the key (once)</span></div>
+        <div><b>/projects</b> D:\dev\app <span class="c"># where it works (saved)</span></div>
+        <div><b>/terminal</b> git status <span class="c"># run a command and show the output</span></div>
       </div>
     </section>
   </section>
 
-  <!-- ============================ O QUE É ============================ -->
-  <section class="view" data-view="o-que-e">
+  <!-- ============================ WHAT ============================ -->
+  <section class="view" data-view="what">
     <div class="doc">
-      <div class="kicker">documentação</div>
-      <h2>O que é o Delta</h2>
-      <p>O Delta Agent é um agente de codificação que roda no terminal. Você conversa em linguagem
-         natural e ele executa o trabalho: lê arquivos, escreve código, roda comandos, resolve git,
-         consulta a web e explica o que encontrou.</p>
-      <p>É um único executável escrito em C11, sem runtime: não precisa de Node, Python, npm, nem de
-         privilégio de administrador. Ele conversa com o provedor de modelo que você escolher e
-         guarda tudo o que é seu numa pasta só.</p>
+      <div class="kicker">documentation</div>
+      <h2>What Delta is</h2>
+      <p>Delta Agent is a coding agent that runs in your terminal. You talk in natural language and
+         it does the work: reads files, writes code, runs commands, handles git, searches the web and
+         explains what it found.</p>
+      <p>It is a single executable written in C11 with no runtime: no Node, Python, npm, and no
+         administrator rights. It talks to the model provider you choose and keeps everything that is
+         yours in one folder.</p>
 
-      <h3>O que ele faz</h3>
+      <h3>What it does</h3>
       <div class="kv">
-        <b>arquivos</b><span>ler, criar, editar com precisão e procurar no projeto</span>
-        <b>shell</b><span>rodar comandos, jobs em background e ver a saída</span>
-        <b>git</b><span>status, diff, log, commit e checkpoint antes de mexer</span>
-        <b>web</b><span>baixar páginas, extrair dados e ler documentação</span>
-        <b>skills</b><span>fluxos salvos em <code>SKILL.md</code> que ele reaproveita</span>
-        <b>mcp</b><span>falar com servidores MCP (JSON-RPC)</span>
-        <b>memória</b><span>guardar fatos duráveis entre sessões</span>
-        <b>modelos</b><span>centenas de modelos e provedores do catálogo models.dev</span>
+        <b>files</b><span>read, create, edit precisely and search the project</span>
+        <b>shell</b><span>run commands, background jobs and see the output</span>
+        <b>git</b><span>status, diff, log, commit and checkpoint before changing anything</span>
+        <b>web</b><span>download pages, extract data and read documentation</span>
+        <b>skills</b><span>saved workflows in <code>SKILL.md</code> that it reuses</span>
+        <b>mcp</b><span>talk to MCP servers over HTTP or stdio (JSON-RPC)</span>
+        <b>memory</b><span>keep durable facts across sessions</span>
+        <b>models</b><span>hundreds of models and providers from models.dev</span>
       </div>
 
-      <h3>Como funciona</h3>
-      <p>Cada pedido seu vira um turno: o modelo responde em streaming, pede ferramentas, o Delta
-         executa e devolve o resultado, até terminar. Você pode <b>digitar durante o trabalho</b> —
-         a mensagem entra na conversa no meio do turno e ele muda de rumo na hora.</p>
+      <h3>How it works</h3>
+      <p>Every request becomes a turn: the model streams a reply, asks for tools, Delta runs them and
+         returns the result, until the task is done. You can <b>type while it works</b> — the message
+         joins the conversation mid-turn and it changes direction immediately.</p>
       <div class="note">
-        O modelo não é fixo: <code>/models</code> lista o que os seus provedores oferecem e
-        <code>/thinking</code> ajusta o esforço de raciocínio.
+        The model is not fixed: <code>/models</code> lists what your providers offer and
+        <code>/thinking</code> adjusts the reasoning effort.
       </div>
 
-      <h3>Onde ficam os dados</h3>
-      <p>Tudo numa pasta (a que você escolheu ao instalar, por padrão
-         <code>C:\Users\você\.deltaCore</code>):</p>
+      <h3>Where your data lives</h3>
+      <p>All in one folder (the one you chose at install time, by default
+         <code>C:\Users\you\.deltaCore</code>):</p>
       <div class="kv">
-        <b>config.json</b><span>provedor, modelo, idioma, pasta do projeto</span>
-        <b>auth.json</b><span>uma chave de API por provedor</span>
-        <b>sessions/</b><span>o histórico de cada pasta, em JSONL</span>
-        <b>skills/</b><span>suas skills (<code>&lt;nome&gt;/SKILL.md</code>)</span>
-        <b>mcps/</b><span>um <code>.json</code> por servidor MCP</span>
-        <b>extensions/</b><span>extensões plugáveis</span>
-        <b>system/prompt.md</b><span>o que ele deve obedecer sempre</span>
+        <b>config.json</b><span>provider, model, language, project folder</span>
+        <b>auth.json</b><span>one API key per provider</span>
+        <b>sessions/</b><span>history per folder, in JSONL</span>
+        <b>skills/</b><span>your skills (<code>&lt;name&gt;/SKILL.md</code>)</span>
+        <b>mcps/</b><span>one <code>.json</code> per MCP server</span>
+        <b>extensions/</b><span>pluggable extensions</span>
+        <b>system/prompt.md</b><span>rules it must always follow</span>
       </div>
 
-      <h3>Requisitos</h3>
+      <h3>Requirements</h3>
       <ul>
-        <li>Windows 10/11 x64 (o binário é autossuficiente)</li>
-        <li>internet para falar com o provedor do modelo</li>
-        <li>uma chave de API do provedor que você usar</li>
+        <li>Windows 10/11 x64 (the binary is self-contained)</li>
+        <li>internet to reach the model provider</li>
+        <li>an API key from the provider you use</li>
       </ul>
     </div>
   </section>
 
-  <!-- ============================ COMO USAR ============================ -->
-  <section class="view" data-view="como-usar">
+  <!-- ============================ HOW ============================ -->
+  <section class="view" data-view="how">
     <div class="doc">
-      <div class="kicker">documentação</div>
-      <h2>Como usar</h2>
+      <div class="kicker">documentation</div>
+      <h2>How to use</h2>
 
-      <h3>Primeiro uso</h3>
-      <p>Abra um terminal novo e digite <code>delta</code>. Na primeira vez, conecte um provedor:</p>
+      <h3>First run</h3>
+      <p>Open a new terminal and type <code>delta</code>. On the first run, connect a provider:</p>
       <div class="cmdblock">
-        <div><b>/login</b> <span class="c"># lista os provedores, pede a chave e escolhe um modelo</span></div>
-        <div><b>/projects</b> D:\dev\meu-app <span class="c"># passa a trabalhar nessa pasta (fica salvo)</span></div>
-        <div><span class="c"># agora é só escrever o que você quer</span></div>
-        <div><b>leia src/main.c e explique o fluxo</b></div>
+        <div><b>/login</b> <span class="c"># lists providers, asks for the key, picks a model</span></div>
+        <div><b>/projects</b> D:\dev\my-app <span class="c"># start working there (saved)</span></div>
+        <div><span class="c"># now just describe what you want</span></div>
+        <div><b>read src/main.c and explain the flow</b></div>
       </div>
 
-      <h3>Retomar o trabalho</h3>
-      <p>O <code>delta</code> <b>abre no último chat daquela pasta</b>: você continua de onde parou,
-         com o histórico e o contexto. <code>delta --new</code> começa do zero e <code>/new</code>
-         faz o mesmo de dentro da sessão.</p>
+      <h3>Resume your work</h3>
+      <p><code>delta</code> <b>opens the last chat of that folder</b>: you continue where you stopped,
+         with history and context. <code>delta --new</code> starts fresh, and <code>/new</code> does the
+         same from inside the session.</p>
 
-      <h3>Comandos</h3>
+      <h3>Commands</h3>
       <div class="kv">
-        <b>/login</b><span>escolhe provedor e cola a chave</span>
-        <b>/models</b><span>modelos dos provedores conectados</span>
-        <b>/thinking</b><span>esforço de raciocínio</span>
-        <b>/projects</b><span>pasta onde ele trabalha</span>
-        <b>/terminal</b><span>roda um comando no shell e mostra a saída</span>
-        <b>/copy</b><span>copia a última resposta</span>
-        <b>/status</b><span>configuração e uso</span>
-        <b>/help</b><span>todos os comandos e atalhos</span>
+        <b>/login</b><span>pick a provider and paste the key</span>
+        <b>/models</b><span>models from connected providers</span>
+        <b>/thinking</b><span>reasoning effort</span>
+        <b>/projects</b><span>folder where it works</span>
+        <b>/terminal</b><span>run a shell command and show the output</span>
+        <b>/copy</b><span>copy the last reply</span>
+        <b>/undo</b><span>restore the previous content of a file</span>
+        <b>/forlimit</b><span>toggle a tools-per-turn cap</span>
+        <b>/status</b><span>configuration and usage</span>
+        <b>/help</b><span>all commands and shortcuts</span>
       </div>
 
-      <h3>Atalhos</h3>
+      <h3>Shortcuts</h3>
       <div class="kv">
-        <b>Enter</b><span>envia (durante o trabalho: entra na fila e ele lê no meio do turno)</span>
-        <b>Shift+Enter</b><span>quebra a linha</span>
-        <b>Ctrl+C</b><span>interrompe a geração (não fecha o app)</span>
-        <b>Ctrl+X</b><span>copia a última resposta</span>
-        <b>Ctrl+Q</b><span>devolve a última mensagem da fila ao editor</span>
-        <b>mouse</b><span>arrastar seleciona e copia; roda rola a conversa</span>
-        <b>Esc</b><span>limpa a seleção e volta ao fim</span>
+        <b>Enter</b><span>send (while working: it joins the queue and it reads it mid-turn)</span>
+        <b>Shift+Enter</b><span>new line</span>
+        <b>Ctrl+C</b><span>stop the generation (never closes the app)</span>
+        <b>Ctrl+X</b><span>copy the last reply</span>
+        <b>Ctrl+Q</b><span>return the last queued message to the editor</span>
+        <b>mouse</b><span>drag selects and copies; wheel scrolls the conversation</span>
+        <b>Esc</b><span>clear the selection and jump to the end</span>
       </div>
 
-      <h3>Seu sistema</h3>
-      <p>Escreva em <code>system/prompt.md</code> (dentro da pasta de dados) o que o Delta deve
-         obedecer em toda conversa: tom, formato, regras do time. Ele relê o arquivo a cada turno.</p>
+      <h3>Your system</h3>
+      <p>Write in <code>system/prompt.md</code> (inside the data folder) what Delta must always follow:
+         tone, format, team rules. It re-reads the file on every turn.</p>
 
-      <h3>Problemas comuns</h3>
+      <h3>Common issues</h3>
       <ul>
-        <li><b>“sem chave de API”</b> — rode <code>/login</code> ou defina
+        <li><b>“no API key”</b> — run <code>/login</code> or set
             <code>OPENAI_API_KEY</code> / <code>ANTHROPIC_API_KEY</code>.</li>
-        <li><b>“catalogo indisponivel”</b> — sem rede na primeira execução; tente de novo.</li>
-        <li><b><code>delta</code> não é reconhecido</b> — abra um terminal novo (o PATH foi
-            atualizado) ou use o caminho completo que aparece na instalação.</li>
-        <li><b>SmartScreen na primeira execução</b> — “Mais informações → Executar assim mesmo”.</li>
+        <li><b>“catalog unavailable”</b> — no network on the first run; try again.</li>
+        <li><b><code>delta</code> is not recognized</b> — open a new terminal (the PATH was updated)
+            or use the full path shown by the installer.</li>
+        <li><b>SmartScreen on first run</b> — “More info → Run anyway”.</li>
       </ul>
     </div>
   </section>
@@ -351,7 +351,7 @@
 <footer>
   <div class="foot">
     <span>Delta Agent · <span id="exeHint"></span></span>
-    <span><a href="#/o-que-e">o que é</a> · <a href="#/como-usar">como usar</a></span>
+    <span><a href="#/what">what it is</a> · <a href="#/how">how to use</a></span>
   </div>
 </footer>
 
@@ -360,16 +360,16 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 let state = {};
 
-/* ---------- rotas: /#/instalar · /#/o-que-e · /#/como-usar ---------- */
+/* routes: /#/install · /#/what · /#/how */
 function show(view) {
-  if (!document.querySelector('.view[data-view="' + view + '"]')) view = 'instalar';
+  if (!document.querySelector('.view[data-view="' + view + '"]')) view = 'install';
   $$('.view').forEach(v => v.classList.toggle('on', v.dataset.view === view));
   $$('nav a').forEach(a => a.classList.toggle('on', a.dataset.go === view));
   window.scrollTo({ top: 0 });
 }
 function route() {
   const h = (location.hash || '').replace(/^#\/?/, '');
-  show(h || 'instalar');
+  show(h || 'install');
 }
 window.addEventListener('hashchange', route);
 
@@ -398,9 +398,9 @@ async function boot() {
   if (state.defaultDir) $('#dir').value = state.defaultDir;
   if (state.exe) $('#exeHint').textContent = state.exe;
 
-  /* `delta wiki` abre em /wiki: cai direto na documentação */
+  /* `delta wiki` opens /wiki: go straight to the docs */
   if (!location.hash && /^\/(wiki|docs)/.test(location.pathname)) {
-    location.replace(location.pathname.replace(/\/$/, '') + '#/o-que-e');
+    location.replace(location.pathname.replace(/\/$/, '') + '#/what');
     return;
   }
   route();
@@ -408,12 +408,12 @@ async function boot() {
 
 $('#pick').onclick = async () => {
   const b = $('#pick');
-  b.disabled = true; b.textContent = 'aguardando…';
+  b.disabled = true; b.textContent = 'waiting…';
   const r = await api('/api/pick', {});
-  b.disabled = false; b.textContent = 'Escolher pasta…';
+  b.disabled = false; b.textContent = 'Choose folder…';
   if (r.dir) {
     $('#dir').value = r.dir;
-    $('#msg').innerHTML = 'pasta escolhida: <b>' + r.dir + '</b>';
+    $('#msg').innerHTML = 'folder selected: <b>' + r.dir + '</b>';
   }
 };
 
@@ -425,31 +425,31 @@ $('#go').onclick = async () => {
   $('#okpanel').style.display = 'none';
   $('#log').style.display = '';
   $('#log').innerHTML = '';
-  addStep('instalando em <b>' + dir + '</b>…', 'run');
+  addStep('installing to <b>' + dir + '</b>…', 'run');
   const r = await api('/api/install', { dir });
   $('#log').innerHTML = '';
   (r.steps || []).forEach(s => addStep(s.text, s.ok ? 'ok' : 'err'));
 
   if (!r.ok) {
-    addStep(r.error || 'não deu para instalar', 'err');
+    addStep(r.error || 'install failed', 'err');
     const b = document.createElement('button');
-    b.textContent = 'Voltar'; b.className = 'primary'; b.style.marginTop = '14px';
+    b.textContent = 'Back'; b.className = 'primary'; b.style.marginTop = '14px';
     b.onclick = () => { $('#log').style.display = 'none'; $('#form').style.display = ''; };
     $('#log').appendChild(b);
     return;
   }
 
-  /* feedback de instalado, aqui mesmo, depois de escolher a pasta */
+  /* success feedback right here, after choosing the folder */
   $('#log').style.display = 'none';
   $('#okpanel').style.display = '';
   $('#guide').style.display = '';
-  const pin = r.pinned === 'taskbar' ? 'fixado na barra de tarefas'
-            : r.pinned === 'dock-apps' ? 'no dock'
-            : r.pinned === 'shortcut' ? 'atalho criado' : 'fixe manualmente';
+  const pin = r.pinned === 'taskbar' ? 'pinned to the taskbar'
+            : r.pinned === 'dock-apps' ? 'in the dock'
+            : r.pinned === 'shortcut' ? 'shortcut created' : 'pin it manually';
   $('#paths').innerHTML =
-    'dados&nbsp;&nbsp;&nbsp; <b>' + r.coreDir + '</b><br>' +
-    'programa <b>' + r.exePath + '</b><br>' +
-    'comando&nbsp; <b>delta</b> → ' + r.resolved +
+    'data&nbsp;&nbsp;&nbsp;&nbsp; <b>' + r.coreDir + '</b><br>' +
+    'program <b>' + r.exePath + '</b><br>' +
+    'command <b>delta</b> → ' + r.resolved +
     ' <span class="c">(' + pin + ')</span>';
 };
 
@@ -467,8 +467,8 @@ $('#close').onclick = async () => {
   document.body.innerHTML =
     '<div style="max-width:820px;margin:0 auto;padding:90px 24px;text-align:center">' +
     '<div style="font:400 46px/1 Georgia,serif">Δ</div>' +
-    '<h2 style="font:400 30px/1.2 Georgia,serif;margin:20px 0 8px">Pode fechar esta aba</h2>' +
-    '<p style="color:#71717a;font:13px ui-monospace,monospace">instalador encerrado · abra um terminal e digite delta</p>' +
+    '<h2 style="font:900 26px/1.2 var(--display);margin:20px 0 8px;text-transform:uppercase">You can close this tab</h2>' +
+    '<p style="color:#71717a;font:13px ui-monospace,monospace">installer finished · open a terminal and type delta</p>' +
     '</div>';
 };
 

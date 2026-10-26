@@ -1,5 +1,8 @@
 /* tools.c - implementacao das ferramentas */
 #include "tools.h"
+#include "codegraph.h"
+
+#include <time.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -403,6 +406,149 @@ static const char READ_SCHEMA[] =
 /* ------------------------------------------------------------------ */
 /* write                                                               */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* undo: cópia do arquivo antes de cada escrita                        */
+/* ------------------------------------------------------------------ */
+static char *undo_dir(void)
+{
+    char *base = delta_home();
+    char *d = path_join(base, "undo");
+    dir_make(d);
+    free(base);
+    return d;
+}
+
+/* Guarda o conteúdo atual de `path` (se existir) e registra no índice. */
+void tools_undo_snapshot(const char *path)
+{
+    size_t len = 0;
+    char *txt = file_read(path, &len);
+    if (!txt) return;                       /* arquivo novo: nada a restaurar */
+    char *dir = undo_dir();
+    static unsigned long seq = 0;
+    uint64_t t = (uint64_t)time(NULL);
+    char nome[64];
+    snprintf(nome, sizeof nome, "%llu-%lu.bak", (unsigned long long)t, ++seq);
+    char *bak = path_join(dir, nome);
+    if (!file_write(bak, txt, len)) { free(bak); free(dir); free(txt); return; }
+
+    Str line; str_init(&line);
+    str_adds(&line, "{\"backup\":");
+    json_write_string(&line, bak, strlen(bak));
+    str_adds(&line, ",\"path\":");
+    json_write_string(&line, path, strlen(path));
+    str_addf(&line, ",\"bytes\":%zu,\"ts\":%llu}\n", len, (unsigned long long)t);
+    char *idx = path_join(dir, "index.jsonl");
+    file_append(idx, line.data, line.len);
+    str_free(&line);
+    free(idx); free(bak); free(dir); free(txt);
+}
+
+/* Restaura o backup mais recente (do `path`, se informado). */
+int tools_undo_restore(const char *path, char **out_path)
+{
+    char *dir = undo_dir();
+    char *idx = path_join(dir, "index.jsonl");
+    size_t len = 0;
+    char *txt = file_read(idx, &len);
+    free(idx);
+    if (!txt) { free(dir); return 0; }
+
+    /* varre de trás para frente procurando a última linha (com path, se dado) */
+    char *last = NULL; size_t lastlen = 0;
+    size_t pos = 0;
+    while (pos < len) {
+        size_t eol = pos;
+        while (eol < len && txt[eol] != '\n') eol++;
+        if (eol > pos) {
+            char save = txt[eol]; txt[eol] = 0;
+            JValue *v = json_parse_cstr(txt + pos);
+            const char *p = v ? json_str(json_get(v, "path")) : "";
+            int match = !path || !*path || str_eq(p, path) || str_ends(p, path);
+            if (match && v) { last = txt + pos; lastlen = eol - pos; }
+            txt[eol] = save;
+            if (v) json_free(v);
+        }
+        pos = eol + 1;
+    }
+    if (!last) { free(txt); free(dir); return 0; }
+    char keep = last[lastlen];
+    last[lastlen] = 0;
+    JValue *v = json_parse_cstr(last);
+    const char *bak = json_str(json_get(v, "backup"));
+    const char *orig = json_str(json_get(v, "path"));
+    int ok = 0;
+    if (*bak && *orig) {
+        size_t blen = 0;
+        char *data = file_read(bak, &blen);
+        if (data) {
+            ok = file_write(orig, data, blen);
+            free(data);
+        }
+        if (ok && out_path) *out_path = str_dup(orig);
+    }
+    if (v) json_free(v);
+    last[lastlen] = keep;
+    free(txt);
+    free(dir);
+    return ok;
+}
+
+static const char UNDO_SCHEMA[] =
+    "{\"type\":\"object\",\"properties\":{"
+    "\"op\":{\"type\":\"string\",\"enum\":[\"restore\",\"list\"]},"
+    "\"path\":{\"type\":\"string\",\"description\":\"arquivo específico (opcional)\"}},"
+    "\"required\":[\"op\"]}";
+
+static int tool_undo(Tool *self, JValue *args, const char *cwd, ToolResult *res)
+{
+    (void)self; (void)cwd;
+    const char *op = json_str(json_get(args, "op"));
+    if (!*op) op = "restore";
+    if (str_eq(op, "list")) {
+        char *dir = undo_dir();
+        char *idx = path_join(dir, "index.jsonl");
+        size_t len = 0;
+        char *txt = file_read(idx, &len);
+        free(idx); free(dir);
+        if (!txt) { str_adds(&res->output, "(sem histórico de edições)\n"); return 1; }
+        size_t pos = 0; int n = 0;
+        while (pos < len) {
+            size_t eol = pos;
+            while (eol < len && txt[eol] != '\n') eol++;
+            if (eol > pos) {
+                char save = txt[eol]; txt[eol] = 0;
+                JValue *v = json_parse_cstr(txt + pos);
+                if (v && n < 30) {
+                    str_addf(&res->output, "%s  (%ld bytes)\n",
+                             json_str(json_get(v, "path")),
+                             (long)json_num(json_get(v, "bytes"), 0));
+                    n++;
+                }
+                if (v) json_free(v);
+                txt[eol] = save;
+            }
+            pos = eol + 1;
+        }
+        free(txt);
+        if (!n) str_adds(&res->output, "(sem histórico de edições)\n");
+        return 1;
+    }
+    char *restored = NULL;
+    const char *want = json_str(json_get(args, "path"));
+    char *abs = *want ? tools_resolve(cwd, want) : NULL;
+    if (tools_undo_restore(abs ? abs : want, &restored)) {
+        free(abs);
+        str_addf(&res->output, "Restaurado: %s\n", restored ? restored : "?");
+        free(restored);
+        return 1;
+    }
+    free(abs);
+    str_adds(&res->output, "Nada para desfazer.\n");
+    res->is_error = 1;
+    return 0;
+}
+
 static int tool_write(Tool *self, JValue *args, const char *cwd, ToolResult *res)
 {
     (void)self;
@@ -415,6 +561,7 @@ static int tool_write(Tool *self, JValue *args, const char *cwd, ToolResult *res
         return 0;
     }
     int existed = file_exists(path);
+    tools_undo_snapshot(path);
     size_t old_len = 0;
     char *old = existed ? file_read(path, &old_len) : NULL;
 
@@ -734,10 +881,75 @@ static const char GREP_SCHEMA[] =
 /* ------------------------------------------------------------------ */
 /* Registro                                                            */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* graph: consulta o grafo do projeto (montado uma vez, sem reler tudo) */
+/* ------------------------------------------------------------------ */
+static CodeGraph *g_graph = NULL;
+static char      *g_graph_root = NULL;
+
+static CodeGraph *graph_cached(const char *cwd)
+{
+    if (g_graph_root && str_eq(g_graph_root, cwd)) return g_graph;
+    graph_free(g_graph);
+    free(g_graph_root);
+    g_graph = graph_open(cwd, 0);
+    g_graph_root = str_dup(cwd);
+    return g_graph;
+}
+
+static const char GRAPH_SCHEMA[] =
+    "{\"type\":\"object\",\"properties\":{"
+    "\"op\":{\"type\":\"string\",\"enum\":[\"summary\",\"find\",\"file\",\"refs\",\"build\",\"status\"],"
+    "\"description\":\"summary = mapa do projeto; find = símbolos por nome; file = símbolos/imports de um arquivo; "
+    "refs = onde o nome aparece; build = reindexa; status = contagem\"},"
+    "\"name\":{\"type\":\"string\",\"description\":\"nome do símbolo (op=find/refs)\"},"
+    "\"path\":{\"type\":\"string\",\"description\":\"caminho relativo do arquivo (op=file)\"}},"
+    "\"required\":[\"op\"]}";
+
+static int tool_graph(Tool *self, JValue *args, const char *cwd, ToolResult *res)
+{
+    (void)self;
+    const char *op = json_str(json_get(args, "op"));
+    if (!*op) op = "summary";
+    if (str_eq(op, "build")) {
+        graph_free(g_graph); free(g_graph_root); g_graph = NULL; g_graph_root = NULL;
+    }
+    CodeGraph *g = graph_cached(cwd);
+    if (!g) { str_adds(&res->output, "Erro: não consegui montar o grafo."); res->is_error = 1; return 0; }
+
+    if (str_eq(op, "build")) {
+        int n = graph_refresh(g);
+        char *sum = graph_summary(g, 1800);
+        str_addf(&res->output, "Grafo reindexado (%d arquivo(s) atualizado(s)).\n\n%s", n, sum);
+        free(sum);
+    } else if (str_eq(op, "status")) {
+        str_addf(&res->output, "arquivos: %zu\nsímbolos: %zu\n",
+                 graph_file_count(g), graph_sym_count(g));
+        char *p = graph_path_for(cwd);
+        str_addf(&res->output, "cache: %s\n", p);
+        free(p);
+    } else if (str_eq(op, "find")) {
+        char *r = graph_find(g, json_str(json_get(args, "name")), 40);
+        str_adds(&res->output, r); free(r);
+    } else if (str_eq(op, "file")) {
+        char *r = graph_file_info(g, json_str(json_get(args, "path")), 60);
+        str_adds(&res->output, r); free(r);
+    } else if (str_eq(op, "refs")) {
+        char *r = graph_refs(g, json_str(json_get(args, "name")), 30);
+        str_adds(&res->output, r); free(r);
+    } else {
+        char *r = graph_summary(g, 4000);
+        str_adds(&res->output, r); free(r);
+    }
+    return 1;
+}
+
 static const Tool TOOLS[] = {
     { "read",  "Read file contents", READ_SCHEMA,  tool_read },
     { "write", "Create or overwrite files", WRITE_SCHEMA, tool_write },
     { "edit",  "Make precise file edits with exact text replacement", EDIT_SCHEMA, tool_edit },
+    { "graph", "Project graph: symbols and imports (summary|find|file|refs|build|status)", GRAPH_SCHEMA, tool_graph },
+    { "undo",  "Restore the previous content of a file (list|restore)", UNDO_SCHEMA, tool_undo },
     { "bash",  "Execute shell commands (ls, grep, find, etc.)", BASH_SCHEMA, tool_bash },
     { "ls",    "List directory contents", LS_SCHEMA, tool_ls },
     { "find",  "Find files by name substring", FIND_SCHEMA, tool_find_files },

@@ -64,7 +64,7 @@ fi
 
 echo
 echo "[3] comandos da TUI (replay, sem terminal)"
-./bin/delta.exe --replay tests/replay-commands.txt 110 36 > /tmp/delta_cmds.log 2>&1
+./bin/delta.exe --replay tests/replay-commands.txt 110 44 > /tmp/delta_cmds.log 2>&1
 expect /tmp/delta_cmds.log "Mostra os comandos e atalhos" "/help renderiza a tabela de comandos"
 expect /tmp/delta_cmds.log "salva a chave"         "/help nao corta o ultimo caractere"
 expect /tmp/delta_cmds.log "provedor :"            "/status renderiza"
@@ -226,7 +226,7 @@ for _ in $(seq 1 40); do
 done
 if [ -n "$WIKI_PORT" ]; then
     pass "delta wiki subiu o servidor"
-    if curl -s "http://127.0.0.1:$WIKI_PORT/wiki" | grep -q "O que é o Delta"; then
+    if curl -s "http://127.0.0.1:$WIKI_PORT/wiki" | grep -q "What Delta is"; then
         pass "serviu a documentacao em /wiki"
     else fail "documentacao nao veio"; fi
     if grep -q "/wiki" /tmp/delta_wiki.log; then
@@ -261,6 +261,51 @@ expect /tmp/delta_first2.log "O arquivo contem"         "agente responde usando 
 kill $FRESH_MOCK 2>/dev/null
 wait $FRESH_MOCK 2>/dev/null
 rm -rf build/freshcore
+
+echo
+echo "[3j] grafo do projeto, undo, /forlimit e MCP stdio"
+./bin/delta.exe --tool graph '{"op":"find","name":"tool_graph"}' > /tmp/delta_g1.log 2>&1
+expect /tmp/delta_g1.log "tool_graph" "graph: find acha o símbolo"
+./bin/delta.exe --tool graph '{"op":"file","path":"src/codegraph.c"}' > /tmp/delta_g2.log 2>&1
+expect /tmp/delta_g2.log "graph_open" "graph: símbolos do arquivo"
+./bin/delta.exe --tool graph '{"op":"status"}' > /tmp/delta_g3.log 2>&1
+expect /tmp/delta_g3.log "arquivos:" "graph: status"
+
+printf 'antes
+' > build/undo-test.txt
+./bin/delta.exe --tool write '{"path":"build/undo-test.txt","content":"depois
+"}' > /dev/null 2>&1
+./bin/delta.exe --tool undo '{"op":"restore","path":"build/undo-test.txt"}' > /dev/null 2>&1
+if grep -q "antes" build/undo-test.txt; then pass "undo: restaura o conteúdo anterior"; else fail "undo nao restaurou"; fi
+rm -f build/undo-test.txt
+
+printf 'size 100 20
+type /forlimit 3
+key enter
+type /status
+key enter
+dump a
+type /forlimit
+key enter
+type /status
+key enter
+dump b
+' > /tmp/delta_fl.txt
+./bin/delta.exe --replay /tmp/delta_fl.txt 100 20 > /tmp/delta_fl.log 2>&1
+expect /tmp/delta_fl.log "teto de ferramentas por turno: 3" "/forlimit liga com teto"
+expect /tmp/delta_fl.log "teto de ferramentas por turno: desligado" "/forlimit desliga no segundo uso"
+
+if command -v python >/dev/null 2>&1; then
+    rm -rf build/mcpstd
+    DELTA_CORE=build/mcpstd ./bin/delta.exe --tool mcp '{"op":"add","name":"std","command":"python","args":"tests/mcp_std.py"}' > /dev/null 2>&1
+    DELTA_CORE=build/mcpstd ./bin/delta.exe --tool mcp '{"op":"tools","name":"std"}' > /tmp/delta_m1.log 2>&1
+    expect /tmp/delta_m1.log "echo" "mcp stdio: tools/list"
+    DELTA_CORE=build/mcpstd ./bin/delta.exe --tool mcp '{"op":"call","name":"std","tool":"echo","args_json":"{\"x\":\"oi\"}"}' > /tmp/delta_m2.log 2>&1
+    expect /tmp/delta_m2.log "eco: oi" "mcp stdio: tools/call"
+    rm -rf build/mcpstd
+else
+    echo "  (sem python: pulando mcp stdio)"
+fi
 
 echo
 echo "[3c] /terminal (roda no shell e mostra a saida)"
@@ -400,7 +445,7 @@ echo
 echo "[7] menu de comandos (digitar /)"
 ./bin/delta.exe --replay tests/replay-menu.txt 100 30 > /tmp/delta_menu.log 2>&1
 expect /tmp/delta_menu.log "→ help"   "marcador -> no item selecionado"
-expect /tmp/delta_menu.log "(1/20)"            "contador de itens"
+expect /tmp/delta_menu.log "(1/22)"            "contador de itens"
 expect /tmp/delta_menu.log "/models "         "Tab completa o comando"
 expect /tmp/delta_menu.log "Todos os modelos"    "descricao do comando aparece"
 
@@ -889,7 +934,7 @@ printf 'type /help
 key enter
 dump help
 ' > "$AR/langhelp.txt"
-./bin/delta.exe --replay "$AR/langhelp.txt" 100 36 > "$AR/langhelp.log" 2>&1
+./bin/delta.exe --replay "$AR/langhelp.txt" 100 44 > "$AR/langhelp.log" 2>&1
 expect "$AR/langhelp.log" "Show commands and shortcuts" "translator: /help em ingles"
 [ -f "$AR/lang.bak" ] && cp "$AR/lang.bak" "$CFGL" || rm -f "$CFGL"
 

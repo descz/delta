@@ -13,160 +13,170 @@
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-noncommercial-white?style=flat-square&labelColor=black"></a>
 </p>
 
-> **Licença:** código disponível para estudo e uso pessoal/interno — **proibido vender ou clonar**,
-> e toda divulgação deve ser **sem fins lucrativos** e **com créditos** ao projeto. Veja [LICENSE](LICENSE).
+> **License:** source is available for study and personal/internal use — **selling or cloning is
+> prohibited**, and any public disclosure must be **non-profit** and **credited** to the project.
+> See [LICENSE](LICENSE).
 
-**Delta Agent** é um agente de codificação que vive no seu terminal.
-Site: **[descz.github.io/delta](https://descz.github.io/delta/)** · downloads: **[Releases](https://github.com/descz/delta/releases/latest)** Você conversa em linguagem
-natural e ele executa o trabalho: lê e escreve arquivos, roda comandos, resolve git, consulta a web,
-guarda memória e explica o que encontrou — com o modelo que você escolher.
+**Delta Agent** is a coding agent that lives in your terminal.
+Site: **[descz.github.io/delta](https://descz.github.io/delta/)** · downloads: **[Releases](https://github.com/descz/delta/releases/latest)**
 
-É **um único executável escrito em C11, sem nenhuma dependência**: nada de Node, Python, npm, pip
-ou instalador de framework. No Windows são **544 KB** e ~1,7 MB de memória privada.
+You talk in natural language and it does the work: reads and writes files, runs commands, handles
+git, searches the web, keeps memory and explains what it found — with the model you choose.
 
----
-
-## Índice
-
-- [O que ele faz](#o-que-ele-faz)
-- [Instalar](#instalar)
-- [Primeiros passos](#primeiros-passos)
-- [Comandos e atalhos](#comandos-e-atalhos)
-- [Como ele funciona](#como-ele-funciona)
-- [Onde ficam os seus dados](#onde-ficam-os-seus-dados)
-- [Compilar do código](#compilar-do-código)
-- [Testes](#testes)
-- [Estrutura do projeto](#estrutura-do-projeto)
-- [Licença](#licença)
+It is a **single executable written in C11, with no dependencies at all**: no Node, Python, npm, pip
+or framework installer. On Windows it is **544 KB** and about **1.7 MB of private memory**.
 
 ---
 
-## O que ele faz
+## Table of contents
+
+- [What it does](#what-it-does)
+- [Install](#install)
+- [First steps](#first-steps)
+- [Commands and shortcuts](#commands-and-shortcuts)
+- [How it works](#how-it-works)
+- [Where your data lives](#where-your-data-lives)
+- [Build from source](#build-from-source)
+- [Tests](#tests)
+- [Project structure](#project-structure)
+- [License](#license)
+
+---
+
+## What it does
 
 | | |
 |---|---|
-| **Arquivos** | lê, cria, edita com precisão (`edit` por trechos exatos), busca no projeto, mostra diff |
-| **Shell** | roda comandos, mantém jobs em background, `/terminal` mostra a saída num bloco no chat |
-| **Git** | status, diff, log, commit e *checkpoint* antes de mexer |
-| **Web** | baixa páginas, extrai dados, lê documentação — e fala **MCP** (JSON-RPC) |
-| **Skills** | fluxos salvos em `SKILL.md`, indexados no prompt de sistema e reaproveitados |
-| **Memória** | fatos duráveis entre sessões, buscáveis por texto |
-| **Modelos** | catálogo [models.dev](https://models.dev) com centenas de modelos e provedores |
-| **Sessões** | histórico por pasta em JSONL; `delta` retoma o último chat daquela pasta |
-| **Streaming** | resposta token a token, com corte imediato quando você manda uma mensagem no meio |
+| **Files** | reads, creates, edits precisely (exact-block `edit`), searches the project, shows diffs |
+| **Shell** | runs commands, keeps background jobs, `/terminal` shows the output in a chat block |
+| **Git** | status, diff, log, commit and *checkpoint* before changing anything |
+| **Web** | downloads pages, extracts data, reads documentation — and speaks **MCP** over HTTP or stdio |
+| **Skills** | saved workflows in `SKILL.md`, indexed in the system prompt and reused |
+| **Memory** | durable facts across sessions, searchable by text |
+| **Project graph** | indexes symbols and imports once, then answers without re-reading every file |
+| **Models** | [models.dev](https://models.dev) catalog with hundreds of models and providers |
+| **Sessions** | per-folder history in JSONL; `delta` resumes that folder's last chat |
+| **Streaming** | token by token, cut immediately when you send a message mid-turn |
 
-Tudo dentro do terminal, com TUI própria em tela alternativa: cópia com o mouse, seleção por
-arrasto, markdown renderizado (títulos, listas, código, tabelas), cores OkLCH, temas, i18n
-(pt, en, es, zh, ja) e instalador com tela HTML servida **pelo próprio executável**.
+All inside the terminal, with its own TUI: mouse selection and copy, rendered markdown (headings,
+lists, code, tables), OkLCH colors, themes, i18n (pt, en, es, zh, ja) and an installer with an HTML
+screen served **by the executable itself**.
 
-## Instalar
+## Install
 
-Baixe em [**Releases**](https://github.com/descz/delta/releases/latest). Cada sistema tem um arquivo
-que já é o instalador:
+Download from [**Releases**](https://github.com/descz/delta/releases/latest). Each system has one file
+that already is the installer:
 
-| sistema | arquivo | como |
+| system | file | how |
 |---|---|---|
-| **Windows 10/11 x64** | `Delta-windows-x64.zip` (ou `Delta.exe`) | duplo clique → tela de instalação no navegador |
+| **Windows 10/11 x64** | `Delta-windows-x64.zip` (or `Delta.exe`) | double click → install screen in the browser |
 | **Linux x86_64** | `delta-linux-x86_64.run` | `chmod +x delta-linux-x86_64.run && ./delta-linux-x86_64.run` |
-| **macOS 11+** | `delta-macos-source.zip` | descompacte e dê duplo clique em `INSTALAR-MAC.command` |
+| **macOS 11+** | `delta-macos-source.zip` | unzip and double click `INSTALAR-MAC.command` |
 
-O instalador pergunta **onde hospedar os dados**, cria a pasta, copia o binário, coloca `delta` no
-`PATH` e cria o atalho (barra de tarefas no Windows, `.desktop` + favorito no GNOME, `Delta.app` +
-Dock no macOS). O Windows pode avisar no SmartScreen na primeira execução (*Mais informações →
-Executar assim mesmo*) porque o binário não é assinado.
+The installer asks **where to keep the data**, creates the folder, copies the binary, puts `delta` on
+the `PATH` and creates the shortcut (taskbar on Windows, `.desktop` + GNOME favorites on Linux,
+`Delta.app` + Dock on macOS). Windows may warn on SmartScreen the first time (*More info → Run
+anyway*) because the binary is not code-signed.
 
-No macOS não há binário pronto: o pacote leva o código e um `.command` que confere as Xcode Command
-Line Tools (gratuitas), compila e abre o instalador — não existe cross-compile confiável para Mach-O.
+There is no ready-made macOS binary: the package ships the source and a `.command` that checks the
+Xcode Command Line Tools (free), builds and opens the installer — there is no reliable cross-compile
+to Mach-O.
 
-## Primeiros passos
+## First steps
 
 ```text
 $ delta
 sem chave de API · use /login para colar a chave do provedor
 
-/login                          # escolhe o provedor, pede a chave, sugere um modelo
-/projects D:\dev\meu-app        # onde ele trabalha (fica salvo para as próximas vezes)
-leia src/main.c e explique o fluxo
+/login                          # pick the provider, paste the key, get a default model
+/projects D:\dev\my-app         # where it works (saved for next time)
+read src/main.c and explain the flow
 ```
 
-Na segunda vez, `delta` já abre **no último chat daquela pasta**. `delta --new` começa do zero.
+Next time, `delta` opens **in that folder's last chat**. `delta --new` starts fresh.
 
-## Comandos e atalhos
+## Commands and shortcuts
 
-| comando | o que faz |
+| command | what it does |
 |---|---|
-| `/login` `/logout` | conecta/desconecta provedores (chave guardada por provedor) |
-| `/models` | modelos dos provedores conectados |
-| `/thinking` | esforço de raciocínio (off → max, conforme o modelo) |
-| `/projects <pasta>` | define a pasta de trabalho (salva na config) |
-| `/terminal <cmd>` | roda no shell e mostra a saída no chat |
-| `/copy` | copia a última resposta |
-| `/status` `/session` | configuração, uso e sessão |
-| `/new` `/clear` `/reload` `/quit` | sessão nova, limpa, recarrega, sai |
-| `/help` | tudo isso na tela |
+| `/login` `/logout` | connect/disconnect providers (one key per provider) |
+| `/models` | models from connected providers |
+| `/thinking` | reasoning effort (off → max, depending on the model) |
+| `/projects <folder>` | set the working folder (saved in config) |
+| `/terminal <cmd>` | runs in your shell and shows the output in the chat |
+| `/copy` | copies the last reply |
+| `/undo [file]` | restores a file to its content before the last edit |
+| `/forlimit [n]` | toggles a tools-per-turn cap (run again to turn it off) |
+| `/status` `/session` | configuration, usage and session |
+| `/new` `/clear` `/reload` `/quit` | new session, clear, reload, quit |
+| `/help` | all of it on screen |
 
-`delta wiki` abre a documentação no navegador; `delta --setup` reabre o instalador.
+`delta wiki` opens the documentation in the browser; `delta --setup` reopens the installer.
 
-| tecla | ação |
+| key | action |
 |---|---|
-| `Enter` / `Shift+Enter` | envia / quebra linha |
-| `Ctrl+C` | interrompe a geração (nunca fecha o app) |
-| `Ctrl+X` | copia a última resposta |
-| `Ctrl+Q` | devolve a última mensagem da fila ao editor |
-| mouse | arrastar seleciona e copia; roda rola a conversa |
-| `Esc` | limpa a seleção e volta ao fim |
+| `Enter` / `Shift+Enter` | send / new line |
+| `Ctrl+C` | stops the generation (never closes the app) |
+| `Ctrl+X` | copies the last reply |
+| `Ctrl+Q` | returns the last queued message to the editor |
+| mouse | drag selects and copies; wheel scrolls the conversation |
+| `Esc` | clears the selection and jumps to the end |
 
-**Digitar durante o trabalho funciona**: a mensagem entra no chat marcada *na fila* e o agente
-**corta a resposta no meio** para lê-la — sem esperar a mensagem final.
+**Typing while it works is supported**: the message appears in the chat marked *queued* and the agent
+**cuts the reply mid-stream** to read it — no waiting for the final message.
 
-## Como ele funciona
+## How it works
 
-Um turno é: *prompt → modelo (streaming) → tool calls → resultado → próximo passo*, até o modelo
-parar. O Delta é dono do loop e das ferramentas; o modelo só pede.
+A turn is: *prompt → model (streaming) → tool calls → result → next step*, until the model stops.
+Delta owns the loop and the tools; the model only asks.
 
-- **Renderização própria** (`ui.c`): grade de células com cores OkLCH (port fiel de OkLch/OkHsl),
-  markdown → `Doc` de linhas estilizadas, caixas de ferramenta, editor multi-linha com cursor.
-  O transcript é reconstruído **incrementalmente**, bloco a bloco (`tr_y`/`tr_fast_from`), o que
-  mantém o frame em ~0,5 ms mesmo com conversas longas.
-- **Terminal** (`term.c`): modo cru com `ReadConsoleInput` no Windows e `termios` no POSIX; mouse
-  (clique, roda, arrasto), colagem, redimensionamento, tela alternativa e atalhos com modificadores.
-- **Rede** (`provider.c`): WinHTTP no Windows, `curl` no POSIX — SSE lido linha a linha, com
-  *abort* no meio do stream quando você interfere.
-- **Agente** (`agent.c`): histórico tipado (`user`/`assistant`/`tool`), tool calls com id,
-  sessões em JSONL v3 por pasta, prompt de sistema montado a cada turno (com as skills indexadas).
-- **Ferramentas** (`tools.c`, `tools_ext.c`): 40+ operações agrupadas em famílias (`fs`, `shell`,
-  `git`, `web`, `skills`, `mcp`, `memory`, `code`, `assert`, `agent`, `extend`), com timeout,
-  limites de saída e conversão de encoding do console.
-- **Instalador** (`setup.c`): servidor HTTP local (Winsock/Berkeley) que serve uma página embutida
-  (~13 KB, fontes em base64), abre o navegador e executa a instalação — seletor de pasta nativo,
-  cópia do binário, `PATH`, atalhos e *pin*.
+- **Own renderer** (`ui.c`): cell grid with OkLCH colors (faithful port of OkLch/OkHsl), markdown →
+  `Doc` of styled lines, tool boxes, multi-line editor with cursor. The transcript is rebuilt
+  **incrementally**, block by block (`tr_y`/`tr_fast_from`), keeping a frame at ~0.5 ms even in long
+  conversations.
+- **Terminal** (`term.c`): raw mode with `ReadConsoleInput` on Windows and `termios` on POSIX; mouse
+  (click, wheel, drag), paste, resize, alternate screen and modified-key shortcuts.
+- **Network** (`provider.c`): WinHTTP on Windows, `curl` on POSIX — SSE read line by line, with
+  mid-stream *abort* when you step in.
+- **Agent** (`agent.c`): typed history (`user`/`assistant`/`tool`), tool calls with ids, JSONL v3
+  sessions per folder, system prompt rebuilt every turn (with skills indexed and the project graph).
+- **Project graph** (`codegraph.c`): indexes files, symbols and imports once into
+  `~/.deltaCore/graphs/<slug>.graph`; the agent queries it with the `graph` tool instead of reading
+  the whole codebase on every input.
+- **Tools** (`tools.c`, `tools_ext.c`): 40+ operations grouped in families (`fs`, `shell`, `git`,
+  `web`, `skills`, `mcp`, `memory`, `code`, `assert`, `agent`, `extend`), with timeouts, output
+  limits and console encoding conversion. Every write keeps an undo snapshot.
+- **Installer** (`setup.c`): local HTTP server (Winsock/Berkeley) serving an embedded page
+  (~13 KB, fonts in base64), opens the browser and performs the install — native folder picker,
+  binary copy, `PATH`, shortcuts and pinning.
 
-O visual (temas, tokens de cor, tamanhos) segue o mesmo vocabulário de um editor moderno: 56 tokens
-de tema, arquivos `.json` simples em `themes/`.
+The look (themes, color tokens, sizes) follows the same vocabulary as a modern editor: 56 theme
+tokens, plain `.json` files in `themes/`.
 
-## Onde ficam os seus dados
+## Where your data lives
 
-Uma pasta só, escolhida na instalação (padrão `C:\Users\<você>\.deltaCore`):
+One folder, chosen at install time (default `C:\Users\<you>\.deltaCore`):
 
 ```
 .deltaCore/
-  config.json        provedor, modelo, idioma, thinking, projectDir
-  auth.json          uma chave de API por provedor
-  models.v2.json     catálogo models.dev em cache
-  memory.json        memória durável
-  sessions/          --<slug-da-pasta>--/<data>_<id>.jsonl
-  skills/            <nome>/SKILL.md
-  mcps/              um .json por servidor MCP
-  extensions/        extensões plugáveis
-  system/prompt.md   o que ele deve obedecer sempre
-  paste/ jobs/ themes/
+  config.json        provider, model, language, thinking, projectDir
+  auth.json          one API key per provider
+  models.v2.json     cached models.dev catalog
+  memory.json        durable memory
+  sessions/          --<folder-slug>--/<date>_<id>.jsonl
+  skills/            <name>/SKILL.md
+  mcps/              one .json per MCP server (url or command)
+  extensions/        pluggable extensions
+  graphs/            project graph cache (symbols/imports)
+  system/prompt.md   rules it must always follow
+  paste/ jobs/ themes/ undo/
 ```
 
-`system/prompt.md` é relido a cada turno: é ali que você escreve as regras do seu time.
+`system/prompt.md` is re-read every turn: that is where you write your team rules.
 
-## Compilar do código
+## Build from source
 
-Só precisa de um compilador C e da libc do sistema.
+You only need a C compiler and the system libc.
 
 **Windows** (MinGW-w64 / Git Bash):
 
@@ -179,58 +189,59 @@ package.bat          :: dist\Delta.exe + zip
 
 ```bash
 ./build.sh           # bin/delta
-./build.sh --test    # + testes de núcleo
+./build.sh --test    # + core tests
 ./package.sh         # tarball + .run (Linux) | .app + zip + dmg (macOS)
 ```
 
-No macOS, as Xcode Command Line Tools (`xcode-select --install`) bastam. Em runtime, o Linux usa
-`curl` para falar com o provedor.
+On macOS the Xcode Command Line Tools (`xcode-select --install`) are enough. At runtime Linux uses
+`curl` to talk to the provider.
 
-## Testes
+## Tests
 
-Duas suítes, sem framework:
+Two suites, no framework:
 
 ```bash
-bash tests/run_all.sh     # Windows: 60+ verificações (replay da TUI, mock de provedor, instalador)
-bash tests/run_posix.sh   # Linux/macOS: build, núcleo, replay, streaming real, instalador, docs
+bash tests/run_all.sh     # Windows: 60+ checks (TUI replay, provider mock, installer)
+bash tests/run_posix.sh   # Linux/macOS: build, core, replay, real streaming, installer, docs
 ```
 
-O modo **replay** roda a aplicação de verdade sem terminal (`--replay roteiro.txt 110 36`) e despeja
-a tela como texto — é assim que a TUI é testada em CI. O servidor falso (`tests/mock_openai.py`)
-cobre streaming, tool calls, erros HTTP, retry e o *steer* no meio do stream.
+The **replay** mode runs the real application without a terminal (`--replay script.txt 110 36`) and
+dumps the screen as text — that is how the TUI is tested in CI. The fake provider
+(`tests/mock_openai.py`) covers streaming, tool calls, HTTP errors, retries and mid-stream steering.
 
-## Estrutura do projeto
+## Project structure
 
 ```
 src/
-  main.c        TUI, comandos, editor, transcript
-  agent.c       loop do agente, sessões, prompt de sistema, config/auth
-  provider.c    streaming (WinHTTP / curl), tool calls, uso de tokens
-  tools.c       fs, shell, git, diff, web
-  tools_ext.c   skills, mcp, memory, code, assert, agent, extend
-  setup.c       instalador (servidor local + tela HTML embutida)
-  ui.c          grade de células, markdown, componentes
+  main.c        TUI, commands, editor, transcript
+  agent.c       agent loop, sessions, system prompt, config/auth
+  provider.c    streaming (WinHTTP / curl), tool calls, token usage
+  codegraph.c   project graph: files, symbols, imports
+  tools.c       fs, shell, git, diff, web, undo
+  tools_ext.c   skills, mcp (HTTP/stdio), memory, code, assert, agent, extend
+  setup.c       installer (local server + embedded HTML screen)
+  ui.c          cell grid, markdown, components
   term.c        terminal (Win32 / POSIX)
-  theme.c okcolor.c  temas e cores OkLCH
-  clipboard.c   colagem (texto, imagem, arquivos)
+  theme.c okcolor.c  themes and OkLCH colors
+  clipboard.c   paste (text, image, files)
   json.c util.c i18n.c extensions.c modelsdev.c
-installer/      a página do instalador (embutida no exe)
+installer/      installer page (embedded in the exe)
 docs/           landing page (GitHub Pages)
 assets/         logo, hero, screenshots
-tests/          replay + mocks + suítes
+tests/          replay scripts + mocks + suites
 ```
 
-## Licença
+## License
 
-**Source-available, uso não comercial.** O código é público para estudo e uso pessoal/interno, mas a
-licença **proíbe venda, aluguel, cobrança de acesso e clone** — e exige crédito ao produto em
-qualquer divulgação. Veja o texto completo em [LICENSE](LICENSE).
+**Source-available, non-commercial.** The source is public for study and personal/internal use, but
+the license **forbids selling, renting, paid access and cloning** — and requires credit to the
+product in any public disclosure.
 
-| permitido | proibido |
+| allowed | forbidden |
 |---|---|
-| usar, estudar e modificar para uso pessoal, educacional ou interno | vender, alugar, cobrar acesso, incluir em produto/serviço pago |
-| compartilhar a cópia **não modificada**, sem fins lucrativos | publicar fork público, espelho, pacote, binário ou **clone/rebranding** |
-| citar, escrever, gravar vídeo — **com crédito** ao Delta | remover créditos, nome, símbolo Δ ou este aviso |
+| use, study and modify for personal, educational or internal use | sell, rent, charge for access, include in a paid product/service |
+| share the **unmodified** copy, non-profit | publish a public fork, mirror, package, binary or **clone/rebrand** |
+| cite, write, record videos — **with credit** | removing credits, the name, the Δ symbol or this notice |
 
-Crédito obrigatório em qualquer divulgação: **Delta Agent — https://github.com/descz/delta**.
-Permissão comercial, clone ou redistribuição especial: abra uma issue no repositório.
+Mandatory credit: **Delta Agent — https://github.com/descz/delta**.
+Commercial permission, cloning or special redistribution: open an issue in the repository.

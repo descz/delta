@@ -21,6 +21,9 @@ typedef struct Tool {
 } Tool;
 
 void        tool_result_init(ToolResult *r);
+/* undo: guarda/restaura o conteúdo anterior de um arquivo */
+void        tools_undo_snapshot(const char *path);
+int         tools_undo_restore(const char *path, char **out_path);
 void        tool_result_free(ToolResult *r);
 
 /* Chamado mentre uma ferramenta longa roda (bash): deixa a TUI redesenhar

@@ -152,6 +152,8 @@ static const Cmd COMMANDS[] = {
     { "translator","Troca o idioma da interface",                      "pt-BR|pt|en|es|zh|ja", 1 },
     { "reload",    "Recarrega config e tema do disco",                NULL,                 0 },
     { "quit",      "Sai do Delta Agent",                              NULL,                 0 },
+    { "forlimit",  "Liga/desliga o teto de ferramentas por turno",     "[n]",                1 },
+    { "undo",      "Restaura o conteudo anterior de um arquivo",       "[arquivo]",          1 },
 };
 #define N_COMMANDS ((int)(sizeof COMMANDS / sizeof COMMANDS[0]))
 
@@ -2015,6 +2017,37 @@ static void handle_command(const char *raw)
         return;
     }
 
+    /* /forlimit [n]: teto de ferramentas por turno (liga/desliga) */
+    if (str_eq(cmd, "/forlimit")) {
+        int cur = agent_tool_limit();
+        if (cur > 0) {
+            agent_set_tool_limit(0);
+            notify("teto de ferramentas por turno: desligado");
+        } else {
+            int n = *rest ? atoi(rest) : 8;
+            if (n <= 0) n = 8;
+            agent_set_tool_limit(n);
+            notify("teto de ferramentas por turno: %d (use /forlimit de novo para desligar)", n);
+        }
+        render();
+        return;
+    }
+
+    /* /undo [arquivo]: restaura o conteudo anterior a ultima edicao */
+    if (str_eq(cmd, "/undo")) {
+        const char *alvo = rest && *rest ? rest : NULL;
+        char *p = NULL;
+        if (tools_undo_restore(alvo, &p)) {
+            notify("restaurado: %s", p ? p : "?");
+            free(p);
+            app.tr_dirty = 1;
+        } else {
+            notify("nada para desfazer");
+        }
+        render();
+        return;
+    }
+
     if (str_eq(cmd, "/copy")) {
         copy_last_response();
         render();
@@ -2364,6 +2397,12 @@ static void handle_command(const char *raw)
                  app.cfg.supports_image ? "sim (Ctrl+V cola imagem)" : "nao",
                  app.catalog_loaded ? "models.dev carregado" : "nao carregado",
                  app.agent.cwd, session_id());
+        {
+            char lb[32];
+            if (agent_tool_limit() > 0) snprintf(lb, sizeof lb, "%d por turno", agent_tool_limit());
+            else snprintf(lb, sizeof lb, "sem limite");
+            str_addf(&b->text, "ferramentas : %s\n", lb);
+        }
         app.tr_dirty = 1;
         render();
         return;

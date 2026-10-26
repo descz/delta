@@ -60,7 +60,7 @@ set "CFLAGS=-std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc"
 set "LDFLAGS=-static -lwinhttp -luser32 -lkernel32 -lmsvcrt -lws2_32 -lshell32 -lole32 -luuid"
 
 set "OBJS="
-for %%F in (util json okcolor theme ui term clipboard i18n tools tools_ext extensions provider modelsdev agent setup main) do (
+for %%F in (util json okcolor theme ui term clipboard i18n tools tools_ext extensions provider modelsdev agent codegraph setup main) do (
     echo   cc src\%%F.c
     "%GCC%" %CFLAGS% -c "src\%%F.c" -o "build\%%F.o" || exit /b 1
     set "OBJS=!OBJS! build\%%F.o"

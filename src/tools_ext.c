@@ -2791,8 +2791,10 @@ static int skills_op(JValue *a, const char *cwd, ToolResult *res)
 
 typedef struct {
     char name[96];
-    char url[1024];
+    char url[1024];      /* HTTP */
     char headers[512];
+    char command[512];   /* stdio: executável */
+    char args[1024];     /* stdio: argumentos */
 } McpConfig;
 
 static char *mcp_path(void)
@@ -2820,7 +2822,24 @@ static int mcp_load_file(const char *path, McpConfig *arr, int n, int max)
         snprintf(arr[n].name, sizeof arr[n].name, "%s", json_str(json_get(it, "name")));
         snprintf(arr[n].url, sizeof arr[n].url, "%s", json_str(json_get(it, "url")));
         snprintf(arr[n].headers, sizeof arr[n].headers, "%s", json_str(json_get(it, "headers")));
-        if (arr[n].url[0]) n++;
+        snprintf(arr[n].command, sizeof arr[n].command, "%s", json_str(json_get(it, "command")));
+        {
+            JValue *aargs = json_get(it, "args");
+            if (aargs && aargs->kind == J_ARR) {
+                size_t k = 0;
+                arr[n].args[0] = 0;
+                for (size_t j = 0; j < aargs->count; j++) {
+                    const char *v = json_str(aargs->items[j]);
+                    if (!*v) continue;
+                    k += (size_t)snprintf(arr[n].args + k, sizeof arr[n].args - k, "%s%s",
+                                          k ? " " : "", v);
+                    if (k >= sizeof arr[n].args) break;
+                }
+            } else {
+                snprintf(arr[n].args, sizeof arr[n].args, "%s", json_str(aargs));
+            }
+        }
+        if (arr[n].url[0] || arr[n].command[0]) n++;
     }
     json_free(v);
     return n;
@@ -2865,6 +2884,12 @@ static int mcp_save(McpConfig *arr, int n)
         json_write_string(&out, arr[i].url, strlen(arr[i].url));
         str_adds(&out, ",\"headers\":");
         json_write_string(&out, arr[i].headers, strlen(arr[i].headers));
+        if (arr[i].command[0]) {
+            str_adds(&out, ",\"command\":");
+            json_write_string(&out, arr[i].command, strlen(arr[i].command));
+            str_adds(&out, ",\"args\":");
+            json_write_string(&out, arr[i].args, strlen(arr[i].args));
+        }
         str_addc(&out, '}');
     }
     str_addc(&out, ']');
@@ -2913,6 +2938,10 @@ static int mcp_chamar(const char *url, const char *headers, const char *corpo, S
     return 1;
 }
 
+/* transporte stdio (definido mais abaixo) */
+static int mcp_stdio_op(const McpConfig *c, const char *op, const char *tool,
+                        const char *args_json, ToolResult *res);
+
 static int mcp_op(JValue *a, const char *cwd, ToolResult *res)
 {
     (void)cwd;
@@ -2929,7 +2958,10 @@ static int mcp_op(JValue *a, const char *cwd, ToolResult *res)
     if (str_eq(op, "add")) {
         const char *url = arg_s(a, "url");
         const char *nome = arg_s(a, "name");
-        if (!*url) { err_out(res, "Erro: 'url' e' obrigatorio."); return 0; }
+        const char *cmdv = arg_s(a, "command");
+        const char *argsv = arg_s(a, "args");
+        if (!*url && !*cmdv) { err_out(res, "Erro: informe 'url' (HTTP) ou 'command' (stdio)."); return 0; }
+        if (!*nome && *cmdv) nome = "stdio";
         char derivado[96] = { 0 };
         if (!*nome) {
             const char *h = strstr(url, "://");
@@ -2943,10 +2975,12 @@ static int mcp_op(JValue *a, const char *cwd, ToolResult *res)
         snprintf(cfg[n].name, sizeof cfg[n].name, "%s", nome);
         snprintf(cfg[n].url, sizeof cfg[n].url, "%s", url);
         snprintf(cfg[n].headers, sizeof cfg[n].headers, "%s", arg_s(a, "headers"));
+        snprintf(cfg[n].command, sizeof cfg[n].command, "%s", cmdv);
+        snprintf(cfg[n].args, sizeof cfg[n].args, "%s", argsv);
         n++;
         if (!mcp_save(cfg, n)) { err_out(res, "Erro: nao consegui gravar a configuracao."); return 0; }
-        str_addf(&res->output, "MCP registrado: %s -> %s\n", cfg[n - 1].name, url);
-        return 1;
+        str_addf(&res->output, "MCP registrado: %s -> %s\n", cfg[n - 1].name,
+                 *url ? url : cfg[n - 1].command);
     }
     if (str_eq(op, "remove")) {
         const char *nome = arg_s(a, "name");
@@ -2971,7 +3005,17 @@ static int mcp_op(JValue *a, const char *cwd, ToolResult *res)
     else {
         for (int i = 0; i < n; i++) if (str_eq(cfg[i].name, nome)) { alvo = cfg[i]; break; }
     }
-    if (!alvo.url[0]) { err_out(res, "Erro: informe 'name' (registrado com op=add) ou 'url'."); return 0; }
+    if (!alvo.url[0] && !alvo.command[0]) {
+        err_out(res, "Erro: informe 'name' (registrado com op=add), 'url' ou 'command'.");
+        return 0;
+    }
+    /* servidor por stdio (command/args): sobe o processo e fala JSON-RPC */
+    if (!alvo.url[0] && alvo.command[0]) {
+        if (str_eq(op, "tools"))
+            return mcp_stdio_op(&alvo, "tools", "", "{}", res);
+        if (str_eq(op, "call"))
+            return mcp_stdio_op(&alvo, "call", arg_s(a, "tool"), arg_s(a, "args_json"), res);
+    }
 
     /* initialize (pega Mcp-Session-Id, se o servidor exigir) */
     Str corpo; str_init(&corpo);
@@ -3171,6 +3215,275 @@ static int tool_assert(Tool *self, JValue *a, const char *cwd, ToolResult *res) 
 static int tool_agent(Tool *self, JValue *a, const char *cwd, ToolResult *res)   { (void)self; return agent_op(a, cwd, res); }
 static int tool_extend(Tool *self, JValue *a, const char *cwd, ToolResult *res)  { (void)self; return extend_op(a, cwd, res); }
 static int tool_skills(Tool *self, JValue *a, const char *cwd, ToolResult *res)  { (void)self; return skills_op(a, cwd, res); }
+/* ------------------------------------------------------------------ */
+/* MCP por stdio: sobe o servidor, manda initialize + o pedido, lê a   */
+/* resposta com o id pedido e encerra o processo.                      */
+/* ------------------------------------------------------------------ */
+static void mcp_line_for(Str *out, int id, const char *method, const char *params)
+{
+    str_addf(out, "{\"jsonrpc\":\"2.0\",\"id\":%d,\"method\":\"", id);
+    str_adds(out, method);
+    str_adds(out, "\",\"params\":");
+    str_adds(out, params ? params : "{}");
+    str_adds(out, "}\n");
+}
+
+/* procura "id":N aceitando espaços ("id": 2, "id" : 2) */
+static int mcp_has_id(const char *buf, int id)
+{
+    char num[24];
+    snprintf(num, sizeof num, "%d", id);
+    const char *p = buf;
+    while ((p = strstr(p, "\"id\"")) != NULL) {
+        const char *q = p + 4;
+        while (*q == ' ' || *q == '\t' || *q == '\r' || *q == '\n') q++;
+        if (*q != ':') { p += 4; continue; }
+        q++;
+        while (*q == ' ' || *q == '\t') q++;
+        size_t l = strlen(num);
+        if (!strncmp(q, num, l)) {
+            char depois = q[l];
+            if (depois == ',' || depois == '}' || depois == ' ' || depois == '\r' || depois == '\n')
+                return 1;
+        }
+        p += 4;
+    }
+    return 0;
+}
+
+#ifdef _WIN32
+static int mcp_stdio_run(const McpConfig *c, int want_id, const char *params,
+                         Str *resp, Str *erro)
+{
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof sa;
+    sa.lpSecurityDescriptor = NULL;
+    sa.bInheritHandle = TRUE;
+
+    HANDLE inR = NULL, inW = NULL, outR = NULL, outW = NULL;
+    if (!CreatePipe(&inR, &inW, &sa, 0)) return 0;
+    if (!CreatePipe(&outR, &outW, &sa, 0)) { CloseHandle(inR); CloseHandle(inW); return 0; }
+    SetHandleInformation(inW, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(outR, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof si);
+    memset(&pi, 0, sizeof pi);
+    si.cb = sizeof si;
+    si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    si.hStdInput = inR;
+    si.hStdOutput = outW;
+    si.hStdError = outW;
+
+    Str cmd; str_init(&cmd);
+    str_adds(&cmd, "\"");
+    str_adds(&cmd, c->command);
+    str_adds(&cmd, "\"");
+    if (c->args[0]) { str_adds(&cmd, " "); str_adds(&cmd, c->args); }
+    char *mut = str_dup(cmd.data);
+    str_free(&cmd);
+
+    int ok = CreateProcessA(NULL, mut, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    free(mut);
+    CloseHandle(inR);
+    CloseHandle(outW);
+    if (!ok) {
+        CloseHandle(inW); CloseHandle(outR);
+        str_adds(erro, "nao consegui iniciar o servidor MCP (command/args)");
+        return 0;
+    }
+
+    Str req; str_init(&req);
+    mcp_line_for(&req, 1, "initialize",
+        "{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"delta-agent\",\"version\":\"1.0\"}}");
+    mcp_line_for(&req, 0, "notifications/initialized", "{}");
+    {
+        char metodo[64] = "";
+        const char *p = params;
+        size_t i = 0;
+        while (*p && *p != '\n' && i < sizeof metodo - 1) metodo[i++] = *p++;
+        metodo[i] = 0;
+        if (*p == '\n') p++;
+        if (metodo[0]) mcp_line_for(&req, want_id, metodo, p);
+    }
+    DWORD wr = 0;
+    WriteFile(inW, req.data, (DWORD)req.len, &wr, NULL);
+    str_free(&req);
+    CloseHandle(inW);
+
+    uint64_t t0 = now_ms();
+    char buf[4096];
+    Str acc; str_init(&acc);
+    for (;;) {
+        if (now_ms() - t0 > 20000) break;
+        DWORD avail = 0;
+        if (!PeekNamedPipe(outR, NULL, 0, NULL, &avail, NULL)) break;
+        if (avail > 0) {
+            DWORD got = 0;
+            DWORD want = avail > sizeof buf ? (DWORD)sizeof buf : avail;
+            if (!ReadFile(outR, buf, want, &got, NULL) || got == 0) break;
+            str_add(&acc, buf, got);
+            if (mcp_has_id(acc.data, want_id)) break;
+        } else {
+            if (WaitForSingleObject(pi.hProcess, 30) == WAIT_OBJECT_0) {
+                DWORD a2 = 0;
+                while (PeekNamedPipe(outR, NULL, 0, NULL, &a2, NULL) && a2 > 0) {
+                    DWORD got = 0;
+                    DWORD want = a2 > sizeof buf ? (DWORD)sizeof buf : a2;
+                    if (!ReadFile(outR, buf, want, &got, NULL) || got == 0) break;
+                    str_add(&acc, buf, got);
+                }
+                break;
+            }
+        }
+    }
+    TerminateProcess(pi.hProcess, 0);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    CloseHandle(outR);
+
+    int achou = 0;
+    size_t pos = 0;
+    while (pos < acc.len) {
+        size_t eol = pos;
+        while (eol < acc.len && acc.data[eol] != '\n') eol++;
+        char save = acc.data[eol];
+        acc.data[eol] = 0;
+        if (mcp_has_id(acc.data + pos, want_id)) {
+            str_add(resp, acc.data + pos, eol - pos);
+            achou = 1;
+        }
+        acc.data[eol] = save;
+        pos = eol + 1;
+        if (achou) break;
+    }
+    if (!achou) {
+        str_adds(erro, "servidor MCP nao respondeu (stdio)");
+        if (acc.len) { str_adds(erro, ": "); str_add(erro, acc.data, acc.len > 300 ? 300 : acc.len); }
+    }
+    str_free(&acc);
+    return achou;
+}
+#else
+static int mcp_stdio_run(const McpConfig *c, int want_id, const char *params,
+                         Str *resp, Str *erro)
+{
+    /* POSIX: uma execução por pedido, stdin por arquivo (servidores one-shot) */
+    char tpl[128], treq[160], tresp[160];
+    snprintf(tpl, sizeof tpl, "/tmp/delta-mcp-%lu", (unsigned long)getpid());
+    snprintf(treq, sizeof treq, "%s.in", tpl);
+    snprintf(tresp, sizeof tresp, "%s.out", tpl);
+    Str req; str_init(&req);
+    mcp_line_for(&req, 1, "initialize",
+        "{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"delta-agent\",\"version\":\"1.0\"}}");
+    mcp_line_for(&req, 0, "notifications/initialized", "{}");
+    {
+        char metodo[64] = "";
+        const char *p = params;
+        size_t i = 0;
+        while (*p && *p != '\n' && i < sizeof metodo - 1) metodo[i++] = *p++;
+        metodo[i] = 0;
+        if (*p == '\n') p++;
+        if (metodo[0]) mcp_line_for(&req, want_id, metodo, p);
+    }
+    file_write(treq, req.data, req.len);
+    str_free(&req);
+    Str cmd; str_init(&cmd);
+    str_addf(&cmd, "%s %s < '%s' > '%s' 2>/dev/null", c->command, c->args, treq, tresp);
+    int rc = system(cmd.data);
+    str_free(&cmd);
+    size_t len = 0;
+    char *txt = file_read(tresp, &len);
+    remove(treq);
+    remove(tresp);
+    if (!txt) { str_adds(erro, "servidor MCP nao respondeu (stdio)"); return 0; }
+    char *hit = NULL;
+    for (char *p = txt; *p; p++) if (mcp_has_id(p, want_id)) { hit = p; break; }
+    int ok = 0;
+    if (hit) {
+        char *start = hit;
+        while (start > txt && start[-1] != '\n') start--;
+        char *end = strchr(start, '\n');
+        str_add(resp, start, end ? (size_t)(end - start) : strlen(start));
+        ok = 1;
+    }
+    if (!ok) str_adds(erro, "servidor MCP nao respondeu (stdio)");
+    free(txt);
+    (void)rc;
+    return ok;
+}
+#endif
+
+/* Executa o pedido via stdio e imprime tools/list ou tools/call. */
+static int mcp_stdio_op(const McpConfig *c, const char *op, const char *tool,
+                        const char *args_json, ToolResult *res)
+{
+    Str params; str_init(&params);
+    int id = 2;
+    if (str_eq(op, "tools")) {
+        str_adds(&params, "tools/list\n{}");
+    } else {
+        id = 3;
+        str_adds(&params, "tools/call\n{\"name\":");
+        json_write_string(&params, tool, strlen(tool));
+        str_adds(&params, ",\"arguments\":");
+        str_adds(&params, args_json && *args_json ? args_json : "{}");
+        str_addc(&params, '}');
+    }
+    Str resp; str_init(&resp);
+    Str err; str_init(&err);
+    int ok = mcp_stdio_run(c, id, params.data, &resp, &err);
+    str_free(&params);
+    if (!ok) {
+        err_out(res, "%s", err.data ? err.data : "falha no MCP stdio");
+        str_free(&resp);
+        str_free(&err);
+        return 0;
+    }
+    str_free(&err);
+    JValue *v = mcp_resposta(resp.data ? resp.data : "");
+    JValue *erro = v ? json_get(v, "error") : NULL;
+    if (erro) {
+        err_out(res, "Erro do MCP: %s", json_str(json_get(erro, "message")));
+        json_free(v);
+        str_free(&resp);
+        return 0;
+    }
+    JValue *result = v ? json_get(v, "result") : NULL;
+    if (str_eq(op, "tools")) {
+        JValue *tools = result ? json_get(result, "tools") : NULL;
+        if (tools && tools->kind == J_ARR) {
+            str_addf(&res->output, "%lu tool(s):\n", (unsigned long)tools->count);
+            for (size_t i = 0; i < tools->count; i++) {
+                JValue *t = tools->items[i];
+                str_addf(&res->output, "- %s: %.200s\n", json_str(json_get(t, "name")),
+                         json_str(json_get(t, "description")));
+            }
+            json_free(v);
+            str_free(&resp);
+            return 1;
+        }
+        err_out(res, "resposta inesperada do MCP stdio");
+        json_free(v);
+        str_free(&resp);
+        return 0;
+    }
+    JValue *content = result ? json_get(result, "content") : NULL;
+    if (content && content->kind == J_ARR) {
+        for (size_t i = 0; i < content->count; i++) {
+            const char *txt = json_str(json_get(content->items[i], "text"));
+            if (*txt) str_adds(&res->output, txt);
+        }
+    } else if (result) {
+        str_adds(&res->output, "(resultado sem content textual)\n");
+    }
+    json_free(v);
+    str_free(&resp);
+    return 1;
+}
+
 static int tool_mcp(Tool *self, JValue *a, const char *cwd, ToolResult *res)     { (void)self; return mcp_op(a, cwd, res); }
 
 /* ------------------------------------------------------------------ */
@@ -3192,6 +3505,8 @@ static const char MCP_SCHEMA[] =
     "\"op\":{\"type\":\"string\",\"enum\":[\"list\",\"add\",\"remove\",\"tools\",\"call\"]},"
     "\"name\":{\"type\":\"string\",\"description\":\"nome do servidor registrado\"},"
     "\"url\":{\"type\":\"string\",\"description\":\"endpoint HTTP do MCP (add ou avulso)\"},"
+    "\"command\":{\"type\":\"string\",\"description\":\"executavel do servidor MCP via stdio\"},"
+    "\"args\":{\"type\":\"string\",\"description\":\"argumentos do comando stdio\"},"
     "\"headers\":{\"type\":\"string\",\"description\":\"cabecalhos extras, um por linha\"},"
     "\"tool\":{\"type\":\"string\",\"description\":\"ferramenta do MCP para op=call\"},"
     "\"args_json\":{\"type\":\"string\",\"description\":\"argumentos JSON de op=call\"}},"

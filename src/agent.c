@@ -2,6 +2,7 @@
 #include "agent.h"
 #include "tools.h"
 #include "json.h"
+#include "codegraph.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -732,6 +733,11 @@ const char *agent_context_usage(const Agent *a, long *used, long *window)
     return "";
 }
 
+/* limite de ferramentas por turno (0 = sem limite) */
+static int g_tool_limit = 0;
+void agent_set_tool_limit(int n) { g_tool_limit = n < 0 ? 0 : n; }
+int  agent_tool_limit(void) { return g_tool_limit; }
+
 static const AgentCB *g_bridge_cb = NULL;
 static void *g_bridge_ud = NULL;
 
@@ -770,6 +776,7 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
     if (user_text && *user_text) agent_push_user(a, user_text);
 
     const int MAX_STEPS = 60;
+    int usadas = 0;                    /* ferramentas executadas neste turno */
     for (int step = 0; step < MAX_STEPS; step++) {
         /* intervalo entre thinking/tools: injeta mensagens enfileiradas */
         if (cb && cb->on_interval) cb->on_interval(cb->ud);
@@ -848,6 +855,25 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
                 if (err) str_adds(err, "interrompido");
                 return 0;
             }
+            /* /forlimit: acima do teto, a ferramenta não roda — o modelo é
+               avisado e deve fechar o turno com o que já tem */
+            if (g_tool_limit > 0 && usadas >= g_tool_limit) {
+                Msg *tm = msglist_add(&a->msgs, ROLE_TOOL);
+                str_addf(&tm->text,
+                         "Limite de ferramentas por turno atingido (%d). "
+                         "Não chame mais ferramentas: responda com o que você já sabe "
+                         "ou peça ao usuário para usar /forlimit para desligar o limite.",
+                         g_tool_limit);
+                tm->tool_call_id = str_dup(tc->id);
+                tm->tool_name = str_dup(tc->name);
+                tm->is_error = 1;
+                session_append(a, "message", tm);
+                if (cb && cb->on_tool_end)
+                    cb->on_tool_end(cb->ud, tc->name, tm->text.data ? tm->text.data : "",
+                                    tm->text.len, 1, 0.0);
+                continue;
+            }
+            usadas++;
             if (cb && cb->on_tool_start) cb->on_tool_start(cb->ud, tc->name, tc->args);
 
             const Tool *tool = tool_find(tc->name);

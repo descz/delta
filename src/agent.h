@@ -54,6 +54,9 @@ typedef struct {
 } AgentCB;
 
 void agent_init(Agent *a, Config *cfg, const char *cwd);
+/* Teto de ferramentas por turno (0 = sem limite). /forlimit usa isto. */
+void agent_set_tool_limit(int n);
+int  agent_tool_limit(void);
 /* Troca a pasta de trabalho e remonta o prompt de sistema (usado no /projects). */
 void agent_set_cwd(Agent *a, const char *cwd);
 void agent_free(Agent *a);
