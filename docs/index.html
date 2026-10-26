@@ -3,310 +3,487 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Delta Agent — agente de código no terminal</title>
+<title>Delta Agent — o agente de código do seu terminal</title>
+<meta name="description" content="Delta é um agente de código que vive no terminal: lê e edita arquivos, roda comandos, resolve git, consulta a web e guarda memória. Um executável em C11, sem dependências.">
 <link rel="icon" href="logo.png">
 <style>
-  @font-face{font-family:Orbitron;font-weight:700 900;font-display:swap;src:url(fonts/orbitron.woff2) format('woff2')}
+  @font-face{font-family:Inter;font-weight:100 900;font-display:swap;src:url(fonts/inter.woff2) format('woff2')}
   @font-face{font-family:'Space Mono';font-weight:400 700;font-display:swap;src:url(fonts/spacemono.woff2) format('woff2')}
-  :root{--bg:#050505;--panel:#0b0b0d;--ink:#fafafa;--dim:#a1a1aa;--faint:#71717a;--line:#1f1f23;--line2:#2e2e34;
-        --display:Orbitron,"Eurostile",ui-sans-serif;--mono:"Space Mono",ui-monospace,Consolas,monospace}
+  :root{
+    --bg:#000; --card:#0a0a0a; --border:#1c1c1c; --txt:#fff;
+    --muted:#8a8a8a; --muted2:#a3a3a3; --radius:20px; --max:1200px;
+    --mono:"Space Mono",ui-monospace,Consolas,monospace;
+  }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.8 var(--mono);-webkit-font-smoothing:antialiased}
+  body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.6 Inter,-apple-system,"Segoe UI",Roboto,sans-serif;
+       -webkit-font-smoothing:antialiased;overflow-x:hidden}
   a{color:inherit;text-decoration:none}
-  .wrap{max-width:1100px;margin:0 auto;padding:0 24px}
-  header{position:sticky;top:0;z-index:9;background:rgba(5,5,5,.88);backdrop-filter:blur(14px)}
-  .bar{display:flex;align-items:center;justify-content:space-between;height:68px;gap:16px}
-  .brand{display:flex;align-items:center;gap:12px}
-  .brand .d{font:900 26px/1 var(--display)}
-  .brand b{font:700 11px/1 var(--display);letter-spacing:.34em}
-  .brand span{display:block;font:10px/1.6 var(--mono);color:var(--faint);letter-spacing:.14em}
-  nav{display:flex;gap:16px;font-size:11.5px;color:var(--dim);flex-wrap:wrap}
-  nav a:hover{color:#fff}
-  .btn{display:inline-block;background:#fff;color:#000;font:600 12px var(--mono);padding:11px 18px;border-radius:10px;letter-spacing:.04em}
-  .btn.ghost{background:#101012;color:#fff;border:1px solid var(--line2)}
-  .hero{padding:84px 0 30px;position:relative;overflow:hidden}
-  .grid{position:absolute;inset:0;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:40px 40px;pointer-events:none}
-  .hero h1{position:relative;font:900 clamp(34px,6.2vw,72px)/1.02 var(--display);letter-spacing:.01em;margin:14px 0 18px}
-  .hero h1 span{color:#3f3f46}
-  .lede{position:relative;max-width:640px;color:var(--dim);font-size:14px}
-  .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px;position:relative}
-  .stats{display:flex;gap:26px;flex-wrap:wrap;margin-top:34px;position:relative}
-  .stat b{display:block;font:900 20px/1.2 var(--display);letter-spacing:.04em}
-  .stat span{font:10px var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
-  section{padding:56px 0;border-top:1px solid var(--line)}
-  h2{font:900 clamp(20px,3vw,30px)/1.15 var(--display);letter-spacing:.03em;margin:0 0 10px;text-transform:uppercase}
-  h3{font:700 11px var(--display);letter-spacing:.22em;text-transform:uppercase;margin:0 0 10px}
-  .k{font:10px var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--faint);margin-bottom:10px}
-  p{color:var(--dim);max-width:760px}
-  .grid3{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));margin-top:24px}
-  .grid4{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:24px}
-  .card{background:var(--panel);border-radius:14px;padding:18px}
-  .card p{margin:0;font-size:12.5px;max-width:none}
-  .card ul{margin:8px 0 0;padding-left:16px;font-size:12.5px;color:var(--dim)}
-  .card code{font:11.5px var(--mono);color:#fff}
-  table{width:100%;border-collapse:collapse;margin-top:18px;font-size:12.5px}
-  td,th{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
-  th{font:700 10px var(--display);letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
-  td code,code{background:#000;padding:1px 6px;border-radius:6px;color:#fff;font:11.5px var(--mono)}
-  pre{background:#000;border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow:auto;font-size:12.5px;color:#d4d4d8;line-height:1.9}
-  pre .c{color:var(--faint)}
-  .flow{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:22px}
-  .step{background:#000;border:1px solid var(--line);border-radius:12px;padding:14px}
-  .step b{display:block;font:700 10px var(--display);letter-spacing:.2em;color:var(--faint);margin-bottom:6px}
-  .step span{font-size:12.5px;color:var(--dim)}
-  details{background:var(--panel);border-radius:12px;padding:14px 18px;margin-top:10px}
-  summary{cursor:pointer;color:#fff;font-size:12.5px}
-  details p{margin:10px 0 0}
-  footer{border-top:1px solid var(--line);padding:26px 0;color:var(--faint);font-size:11.5px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .container{max-width:var(--max);margin:0 auto;padding:0 24px}
+  .mono{font-family:var(--mono)}
+
+  /* ---------- navbar ---------- */
+  .navbar{position:fixed;top:0;left:0;right:0;z-index:50;transition:.25s;
+          background:transparent}
+  .navbar.scrolled{background:rgba(0,0,0,.82);backdrop-filter:blur(16px);border-bottom:1px solid #141414}
+  .nav-inner{max-width:var(--max);margin:0 auto;padding:0 24px;height:72px;
+             display:flex;align-items:center;justify-content:space-between;gap:18px}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand .d{font-size:26px;line-height:1;color:#fff}
+  .brand-name{font-weight:600;font-size:15px;letter-spacing:-.01em}
+  .brand-dim{color:#6e6e6e;font-weight:500}
+  .nav-links{display:flex;gap:26px;font-size:13.5px;color:var(--muted)}
+  .nav-links a:hover{color:#fff}
+  .nav-right{display:flex;align-items:center;gap:12px}
+  .btn{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:12px 22px;
+       font-size:13.5px;font-weight:600;transition:.2s;border:1px solid transparent;cursor:pointer}
+  .btn-white{background:#fff;color:#000}
+  .btn-white:hover{background:#e6e6e6}
+  .btn-outline{border-color:#2a2a2a;color:#fff;background:transparent}
+  .btn-outline:hover{border-color:#4a4a4a;background:#0d0d0d}
+  .btn-sm{padding:9px 17px;font-size:12.5px}
+  .nav-toggle{display:none;background:none;border:0;padding:8px;cursor:pointer}
+  .nav-toggle span{display:block;width:20px;height:2px;background:#fff;margin:4px 0;border-radius:2px}
+  .nav-mobile{display:none}
+
+  /* ---------- hero ---------- */
+  .hero{padding:150px 0 20px;text-align:center;position:relative}
+  .hero::before{content:"";position:absolute;inset:-40% 10% auto;height:520px;
+                background:radial-gradient(50% 60% at 50% 40%,rgba(255,255,255,.07),transparent 70%);
+                pointer-events:none}
+  .badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border:1px solid #232323;
+         border-radius:999px;font:12px var(--mono);color:var(--muted);background:#070707;position:relative}
+  .dot{width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 10px #4ade80;animation:pulse 2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .hero-title{position:relative;font-size:clamp(40px,6.6vw,80px);line-height:1.04;font-weight:700;
+              letter-spacing:-.035em;margin:30px auto 24px;max-width:16ch}
+  .hero-title em{font-style:italic;font-weight:600}
+  .hero-title .dim{color:#6e6e6e}
+  .hero-sub{max-width:640px;margin:0 auto;font-size:18px;line-height:1.6;color:var(--muted2)}
+  .hero-sub strong{color:#fff;font-weight:600}
+  .hero-cta{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:34px 0 16px;position:relative}
+  .hero-note{font-size:13px;color:#5f5f5f}
+
+  /* ---------- stats ---------- */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;padding:64px 0 30px}
+  .stat{text-align:center}
+  .stat strong{display:block;font-size:clamp(32px,3.4vw,46px);font-weight:700;letter-spacing:-.02em;
+               margin-bottom:6px;background:linear-gradient(180deg,#fff,#8f8f8f);
+               -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .stat span{font-size:13px;color:var(--muted);line-height:1.45;display:block}
+
+  /* ---------- seções ---------- */
+  .section{padding:86px 0;border-top:1px solid #111}
+  .kicker{font:11px var(--mono);letter-spacing:.22em;text-transform:uppercase;color:#6f6f6f;margin:0 0 14px}
+  .section-title{font-size:clamp(30px,4.2vw,52px);line-height:1.08;font-weight:700;
+                 letter-spacing:-.03em;margin:0 0 16px}
+  .section-title em{font-style:italic;font-weight:600;color:#c9c9c9}
+  .section-sub{max-width:640px;color:var(--muted2);font-size:16.5px;margin:0 0 8px}
+  .section-sub strong{color:#fff;font-weight:600}
+
+  /* ---------- cards ---------- */
+  .grid{display:grid;gap:16px;margin-top:38px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+        padding:26px;transition:.25s}
+  .card:hover{border-color:#2e2e2e;transform:translateY(-2px)}
+  .card h3{font-size:16.5px;font-weight:600;letter-spacing:-.01em;margin:0 0 10px;color:#fff}
+  .card p{margin:0;color:var(--muted);font-size:14.5px;line-height:1.65}
+  .card .num{font:11px var(--mono);color:#4a4a4a;letter-spacing:.16em;margin-bottom:14px}
+  .card ul{margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:14px}
+  .card li{margin:3px 0}
+
+  /* ---------- loop ---------- */
+  .loop{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:38px}
+  .node{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 18px;position:relative}
+  .node b{display:block;font:11px var(--mono);letter-spacing:.18em;color:#4f4f4f;margin-bottom:10px}
+  .node span{font-size:14px;color:#d4d4d4;line-height:1.5;display:block}
+  .node::after{content:"→";position:absolute;right:-16px;top:50%;transform:translateY(-50%);
+               color:#2c2c2c;font-size:15px}
+  .node:last-child::after{display:none}
+
+  /* ---------- white card ---------- */
+  .white-card{background:#fff;color:#000;border-radius:26px;padding:52px;
+              display:grid;grid-template-columns:.9fr 1.1fr;gap:48px;margin-top:12px}
+  .white-card .kicker{color:#8a8a8a}
+  .white-card h2{font-size:clamp(26px,3.4vw,40px);line-height:1.1;letter-spacing:-.03em;margin:0;font-weight:700}
+  .wc-item{display:flex;gap:14px;margin-bottom:22px}
+  .wc-item:last-child{margin-bottom:0}
+  .wc-item svg{flex:0 0 20px;height:20px;margin-top:2px;color:#000}
+  .wc-item h4{font-size:15.5px;font-weight:600;margin:0 0 5px}
+  .wc-item p{margin:0;font-size:14px;color:#525252;line-height:1.6}
+
+  /* ---------- instalar ---------- */
+  .os-card h3{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .tag{font:10.5px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#6f6f6f}
+  pre{background:#060606;border:1px solid var(--border);border-radius:14px;padding:18px 20px;
+      overflow:auto;font:12.5px/1.95 var(--mono);color:#d4d4d8;margin:26px 0 0}
+  pre .c{color:#5f5f5f}
+  code{font:12.5px var(--mono);background:#101010;padding:2px 7px;border-radius:6px;color:#fff}
+
+  /* ---------- faq ---------- */
+  .faq-list{display:flex;flex-direction:column;gap:12px;margin-top:36px}
+  .faq{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:0 22px;
+       transition:.2s;overflow:hidden}
+  .faq:hover{border-color:#2e2e2e}
+  .faq summary{list-style:none;cursor:pointer;padding:20px 0;font-size:15.5px;font-weight:500;
+               display:flex;justify-content:space-between;gap:16px;align-items:center}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:"+";color:#6f6f6f;font-weight:400;font-size:18px;transition:.2s}
+  .faq[open] summary::after{content:"–"}
+  .faq p{margin:0 0 20px;color:var(--muted);font-size:14.5px;max-width:76ch}
+
+  /* ---------- footer ---------- */
+  footer{border-top:1px solid #141414;padding:44px 0 40px;margin-top:40px}
+  .foot{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;align-items:center}
+  .foot .license{font-size:12.5px;color:#5f5f5f;max-width:520px;line-height:1.6}
+  .foot a:hover{color:#fff}
+
+  /* ---------- reveal ---------- */
+  .reveal{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s ease}
+  .reveal.in{opacity:1;transform:none}
+
+  @media (max-width:900px){
+    .nav-links{display:none}
+    .nav-toggle{display:block}
+    .nav-mobile{display:none;position:absolute;top:72px;left:0;right:0;background:#050505;
+                border-bottom:1px solid #141414;padding:16px 24px;flex-direction:column;gap:14px;font-size:14px}
+    .nav-mobile.open{display:flex}
+    .stats{grid-template-columns:repeat(2,1fr);gap:28px;padding:44px 0 10px}
+    .g3,.g2{grid-template-columns:1fr}
+    .loop{grid-template-columns:1fr 1fr}
+    .node::after{display:none}
+    .white-card{grid-template-columns:1fr;padding:32px;gap:28px}
+    .hero{padding-top:118px}
+  }
 </style>
 </head>
 <body>
-<header><div class="wrap bar">
-  <div class="brand"><div class="d">Δ</div>
-    <div><b>DELTA AGENT</b><span>v1.0.0 · C11</span></div></div>
-  <nav>
-    <a href="#produto">produto</a><a href="#como-funciona">como funciona</a>
-    <a href="#comandos">comandos</a><a href="#dados">dados</a>
-    <a href="#download">download</a><a href="#licenca">licença</a><a href="#faq">faq</a>
-  </nav>
-</div></header>
 
-<div class="wrap">
-
-  <div class="hero">
-    <div class="grid"></div>
-    <div class="k">terminal · um arquivo · zero dependências</div>
-    <h1>UM AGENTE DE CÓDIGO<br><span>QUE VIVE NO SEU TERMINAL.</span></h1>
-    <p class="lede">Conversa em linguagem natural e executa: lê e edita arquivos, roda comandos,
-      resolve git, consulta a web, usa skills, MCP e memória — com o modelo que você escolher.
-      Um executável em C11, sem Node, sem Python, sem instalador de framework.</p>
-    <div class="cta">
-      <a class="btn" href="https://github.com/descz/delta/releases/latest">baixar</a>
-      <a class="btn ghost" href="https://github.com/descz/delta">código no github</a>
-    </div>
-    <div class="stats">
-      <div class="stat"><b>544 KB</b><span>um binário</span></div>
-      <div class="stat"><b>0</b><span>dependências</span></div>
-      <div class="stat"><b>40+</b><span>operações de ferramenta</span></div>
-      <div class="stat"><b>3</b><span>sistemas</span></div>
-      <div class="stat"><b>~1,7 MB</b><span>de memória</span></div>
+<header class="navbar" id="navbar">
+  <div class="nav-inner">
+    <a href="#top" class="brand">
+      <span class="d">Δ</span>
+      <span class="brand-name">Delta <span class="brand-dim">Agent</span></span>
+    </a>
+    <nav class="nav-links">
+      <a href="#apresentacao">Apresentação</a>
+      <a href="#loop">Como ele pensa</a>
+      <a href="#sabe-fazer">O que ele sabe fazer</a>
+      <a href="#porque">Por que Delta</a>
+      <a href="#instalar">Instalar</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-right">
+      <a href="https://github.com/descz/delta/releases/latest" class="btn btn-white btn-sm">Baixar</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Abrir menu"><span></span><span></span><span></span></button>
     </div>
   </div>
+  <div class="nav-mobile" id="navMobile">
+    <a href="#apresentacao">Apresentação</a>
+    <a href="#loop">Como ele pensa</a>
+    <a href="#sabe-fazer">O que ele sabe fazer</a>
+    <a href="#porque">Por que Delta</a>
+    <a href="#instalar">Instalar</a>
+    <a href="#faq">FAQ</a>
+  </div>
+</header>
 
-  <!-- ===================== PRODUTO ===================== -->
-  <section id="produto">
-    <div class="k">01 — o produto</div>
-    <h2>Um binário, um agente</h2>
-    <p>O Delta é um agente de codificação de terminal. Ele segura o loop: fala com o modelo,
-       recebe pedidos de ferramenta, executa e devolve o resultado — até a tarefa terminar.
-       Você não monta prompt de sistema, não cola arquivo: descreve o que quer e revisa o que ele fez.</p>
+<main id="top">
 
-    <div class="grid3">
-      <div class="card"><h3>Leitura e escrita</h3>
-        <p>lê arquivos (com limites e offset), cria, edita por trechos exatos, busca no projeto,
-           lista estrutura, mostra diff e faz checkpoint no git antes de mexer.</p></div>
-      <div class="card"><h3>Shell de verdade</h3>
-        <p>roda comandos com timeout, mantém jobs em background com log, e o
-           <code>/terminal &lt;cmd&gt;</code> executa no seu shell e mostra a saída num bloco no chat.</p></div>
-      <div class="card"><h3>Git sem susto</h3>
-        <p>status, diff, log, commit e <i>checkpoint</i> — ele salva o estado antes de alterar,
-           então dá para voltar sem perder trabalho.</p></div>
-      <div class="card"><h3>Web e MCP</h3>
-        <p>baixa páginas, extrai links/dados, segue redirects, e fala JSON-RPC com
-           servidores MCP registrados em <code>~/.deltaCore/mcps/</code>.</p></div>
-      <div class="card"><h3>Skills e memória</h3>
-        <p>fluxos repetidos viram <code>SKILL.md</code> e entram no índice do prompt;
-           fatos duráveis ficam na memória e são buscados antes de perguntar de novo.</p></div>
-      <div class="card"><h3>Modelos à escolha</h3>
-        <p>catálogo models.dev: centenas de modelos e provedores. <code>/models</code> lista os
-           conectados, <code>/thinking</code> ajusta o esforço de raciocínio.</p></div>
-    </div>
-
-    <div class="grid4" style="margin-top:12px">
-      <div class="card"><h3>TUI própria</h3><p>tela alternativa, markdown renderizado
-        (títulos, listas, tabelas, código), temas, 5 idiomas, mouse e seleção com cópia.</p></div>
-      <div class="card"><h3>Sessões por pasta</h3><p>histórico em JSONL por diretório:
-        <code>delta</code> reabre o último chat daquela pasta.</p></div>
-      <div class="card"><h3>Streaming com steer</h3><p>digite enquanto ele trabalha: a mensagem
-        entra na fila e ele corta a resposta no meio para lê-la.</p></div>
-      <div class="card"><h3>Instalador embutido</h3><p>o próprio executável sobe uma página local,
-        escolhe a pasta e se instala no PATH com atalho.</p></div>
+  <!-- ================= HERO ================= -->
+  <section class="hero">
+    <div class="container">
+      <span class="badge reveal"><span class="dot"></span> v1.0.0 · C11 · zero dependências</span>
+      <h1 class="hero-title reveal">
+        Um agente de código que <em>faz</em><br>
+        <span class="dim">o trabalho no seu terminal</span>
+      </h1>
+      <p class="hero-sub reveal">
+        Peça no seu idioma: <strong>ler código, editar arquivos, rodar comandos, resolver git,
+        consultar a web</strong>. O Delta executa — no seu projeto, com o modelo que você escolher.
+        E lembra do contexto na próxima vez.
+      </p>
+      <div class="hero-cta reveal">
+        <a href="https://github.com/descz/delta/releases/latest" class="btn btn-white">Baixar para o seu sistema</a>
+        <a href="#loop" class="btn btn-outline">Ver como ele pensa</a>
+      </div>
+      <p class="hero-note reveal">Windows · Linux · macOS — um arquivo, sem Node, sem Python, sem admin</p>
     </div>
   </section>
 
-  <!-- ===================== COMO FUNCIONA ===================== -->
-  <section id="como-funciona">
-    <div class="k">02 — como funciona</div>
-    <h2>Um turno, cinco passos</h2>
-    <p>O agente é dono do loop; o modelo só pede. Cada pedido de ferramenta vira uma execução real
-       no seu projeto, e o resultado volta para o modelo decidir o próximo passo.</p>
-    <div class="flow">
-      <div class="step"><b>01</b><span>você escreve</span></div>
-      <div class="step"><b>02</b><span>modelo responde em streaming</span></div>
-      <div class="step"><b>03</b><span>pede ferramentas (JSON)</span></div>
-      <div class="step"><b>04</b><span>Delta executa e devolve</span></div>
-      <div class="step"><b>05</b><span>repete até terminar</span></div>
-    </div>
-    <p style="margin-top:22px">Quando você digita no meio do turno, o stream é cortado no próximo
-       fragmento, o texto parcial fica no histórico e a sua mensagem entra como novo passo — sem
-       esperar a resposta final.</p>
-
-    <div class="grid3" style="margin-top:26px">
-      <div class="card"><h3>Render incremental</h3>
-        <p>cada bloco guarda a linha onde começa; o transcript é remontado a partir do primeiro bloco
-           sujo. Frame típico: 0,5 ms com centenas de blocos.</p></div>
-      <div class="card"><h3>Terminal nativo</h3>
-        <p>modo cru com <code>ReadConsoleInput</code> no Windows e <code>termios</code> no POSIX;
-           mouse, colagem, redimensionamento e tela alternativa.</p></div>
-      <div class="card"><h3>Rede enxuta</h3>
-        <p>WinHTTP no Windows, <code>curl</code> no POSIX. SSE lido linha a linha, com abort
-           imediato quando você interfere.</p></div>
+  <!-- ================= NÚMEROS ================= -->
+  <section class="container">
+    <div class="stats">
+      <div class="stat reveal"><strong>544 KB</strong><span>um único executável<br>para tudo</span></div>
+      <div class="stat reveal"><strong>0</strong><span>dependências<br>de runtime</span></div>
+      <div class="stat reveal"><strong>40+</strong><span>operações de ferramenta<br>no dia a dia</span></div>
+      <div class="stat reveal"><strong>3</strong><span>sistemas com instalador<br>próprio</span></div>
     </div>
   </section>
 
-  <!-- ===================== COMANDOS ===================== -->
-  <section id="comandos">
-    <div class="k">03 — comandos</div>
-    <h2>Tudo por uma barra</h2>
-<pre><span class="c"># primeiro uso</span>
-delta                    <span class="c">abre o CLI (retoma o último chat desta pasta)</span>
-/login                   <span class="c">escolhe o provedor e cola a chave</span>
-/projects D:\dev\app     <span class="c">onde ele trabalha (fica salvo)</span>
+  <!-- ================= APRESENTAÇÃO ================= -->
+  <section class="section" id="apresentacao">
+    <div class="container">
+      <p class="kicker reveal">apresentação</p>
+      <h2 class="section-title reveal">Um binário. <em>Um agente.</em></h2>
+      <p class="section-sub reveal">
+        O Delta conversa com o modelo e executa o trabalho de verdade: abre o arquivo, edita o trecho,
+        roda o teste, lê o erro, corrige. Tudo no terminal, com o mesmo modelo mental de um editor.
+      </p>
+
+      <div class="grid g3">
+        <div class="card reveal">
+          <div class="num">01</div>
+          <h3>Ele executa, não só responde</h3>
+          <p>Lê e edita arquivos por trechos exatos, roda comandos com timeout, mantém jobs em
+             background, faz diff e commit. O resultado aparece no chat, não numa aba separada.</p>
+        </div>
+        <div class="card reveal">
+          <div class="num">02</div>
+          <h3>Ele lembra</h3>
+          <p>Sessões por pasta em JSONL: <code>delta</code> reabre o último chat daquela pasta com
+             todo o histórico. Skills viram <code>SKILL.md</code>; fatos duráveis vão para a memória.</p>
+        </div>
+        <div class="card reveal">
+          <div class="num">03</div>
+          <h3>Você manda no meio</h3>
+          <p>Digite enquanto ele trabalha. A mensagem entra na fila e ele <b>corta a resposta</b> no
+             próximo fragmento para ler — sem esperar o turno terminar.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LOOP ================= -->
+  <section class="section" id="loop">
+    <div class="container">
+      <p class="kicker reveal">como ele pensa</p>
+      <h2 class="section-title reveal">O loop do turno</h2>
+      <p class="section-sub reveal">
+        O agente é dono do loop; o modelo só pede. Cada pedido de ferramenta vira uma execução real
+        no seu projeto e o resultado volta para o modelo decidir o próximo passo.
+      </p>
+
+      <div class="loop">
+        <div class="node reveal"><b>01</b><span>Você escreve o pedido</span></div>
+        <div class="node reveal"><b>02</b><span>O modelo responde em streaming</span></div>
+        <div class="node reveal"><b>03</b><span>Pede ferramentas (JSON)</span></div>
+        <div class="node reveal"><b>04</b><span>Delta executa e devolve</span></div>
+        <div class="node reveal"><b>05</b><span>Repete até terminar</span></div>
+      </div>
+
+      <div class="grid g3" style="margin-top:18px">
+        <div class="card reveal">
+          <h3>Render incremental</h3>
+          <p>Cada bloco guarda a linha onde começa; o transcript é remontado a partir do primeiro
+             bloco sujo. Frame típico de 0,5 ms mesmo com centenas de blocos.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Terminal nativo</h3>
+          <p>Modo cru com <code>ReadConsoleInput</code> no Windows e <code>termios</code> no POSIX:
+             mouse, colagem, redimensionamento, tela alternativa e atalhos com modificadores.</p>
+        </div>
+        <div class="card reveal">
+          <h3>Rede enxuta</h3>
+          <p>WinHTTP no Windows, <code>curl</code> no POSIX. SSE lido linha a linha, com abort
+             imediato quando você interfere no meio do stream.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= O QUE SABE FAZER ================= -->
+  <section class="section" id="sabe-fazer">
+    <div class="container">
+      <p class="kicker reveal">o que ele sabe fazer</p>
+      <h2 class="section-title reveal">Um agente só. <em>Ajudinha de mais ninguém.</em></h2>
+      <p class="section-sub reveal">
+        Ferramentas locais, sem serviço no meio: o seu projeto, o seu shell, o seu git.
+      </p>
+
+      <div class="grid g3">
+        <div class="card reveal"><h3>Arquivos</h3>
+          <ul><li>ler com offset e limite</li><li>editar por trechos exatos</li>
+              <li>criar, apagar, mover</li><li>buscar e listar estrutura</li></ul></div>
+        <div class="card reveal"><h3>Shell</h3>
+          <ul><li>comandos com timeout</li><li>jobs em background com log</li>
+              <li><code>/terminal &lt;cmd&gt;</code> no chat</li><li>saída em UTF-8 no Windows</li></ul></div>
+        <div class="card reveal"><h3>Git</h3>
+          <ul><li>status, diff, log</li><li>commit com mensagem</li>
+              <li>checkpoint antes de mexer</li><li>volta sem perder trabalho</li></ul></div>
+        <div class="card reveal"><h3>Web</h3>
+          <ul><li>baixar páginas e seguir redirects</li><li>extrair links e dados</li>
+              <li>sessão com cookies</li><li>modo leitura</li></ul></div>
+        <div class="card reveal"><h3>Skills e MCP</h3>
+          <ul><li>fluxos em <code>SKILL.md</code></li><li>índice no prompt de sistema</li>
+              <li>servidores MCP (JSON-RPC)</li><li>um <code>.json</code> por servidor</li></ul></div>
+        <div class="card reveal"><h3>Memória</h3>
+          <ul><li>fatos duráveis por escopo</li><li>busca por texto</li>
+              <li>ligações entre notas</li><li>sessão retomada por pasta</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= POR QUE ================= -->
+  <section class="section" id="porque">
+    <div class="container">
+      <div class="white-card reveal">
+        <div>
+          <p class="kicker">por que delta</p>
+          <h2>Feito para<br>não atrapalhar</h2>
+        </div>
+        <div>
+          <div class="wc-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12.5l5 5L20 6.5"/></svg>
+            <div><h4>Um arquivo, sem runtime</h4>
+              <p>544 KB em C11. Abre na hora, não depende de Node, Python ou atualização de framework.</p></div>
+          </div>
+          <div class="wc-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12.5l5 5L20 6.5"/></svg>
+            <div><h4>Seus dados na sua pasta</h4>
+              <p>Chaves, histórico, memória e skills ficam em <code>.deltaCore</code>. Nada espalhado pelo sistema.</p></div>
+          </div>
+          <div class="wc-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12.5l5 5L20 6.5"/></svg>
+            <div><h4>Você escolhe o modelo</h4>
+              <p>Catálogo models.dev: centenas de modelos. Troque com <code>/models</code> e ajuste o esforço com <code>/thinking</code>.</p></div>
+          </div>
+          <div class="wc-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12.5l5 5L20 6.5"/></svg>
+            <div><h4>Sem caixa-preta</h4>
+              <p>Cada ferramenta aparece no chat com argumentos, saída e tempo. Você revisa o que ele fez antes de confiar.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= INSTALAR ================= -->
+  <section class="section" id="instalar">
+    <div class="container">
+      <p class="kicker reveal">instalar</p>
+      <h2 class="section-title reveal">Do zero ao primeiro <em>pedido</em> em minutos</h2>
+      <p class="section-sub reveal">
+        Cada download já é o instalador: pergunta a pasta, copia o binário, põe <code>delta</code> no PATH
+        e cria o atalho.
+      </p>
+
+      <div class="grid g3">
+        <div class="card os-card reveal"><h3>Windows 10/11 <span class="tag">x64</span></h3>
+          <p><code>Delta.exe</code> — programa + instalador num arquivo. Duplo clique abre a tela no navegador.</p></div>
+        <div class="card os-card reveal"><h3>Linux <span class="tag">x86_64</span></h3>
+          <p><code>delta-linux-x86_64.run</code> — auto-extraível, instala e deixa <code>delta</code> no PATH.</p></div>
+        <div class="card os-card reveal"><h3>macOS <span class="tag">11+</span></h3>
+          <p>Pacote com o código + <code>INSTALAR-MAC.command</code>: compila na máquina e instala o app.</p></div>
+      </div>
+
+<pre class="reveal"><span class="c"># linux</span>
+chmod +x delta-linux-x86_64.run &amp;&amp; ./delta-linux-x86_64.run
+
+<span class="c"># primeiro uso</span>
+delta                    <span class="c"># abre o CLI (retoma o último chat desta pasta)</span>
+/login                   <span class="c"># escolhe o provedor e cola a chave</span>
+/projects D:\dev\app     <span class="c"># onde ele trabalha (fica salvo)</span>
 
 <span class="c"># no dia a dia</span>
 leia src/main.c e explique o fluxo
-/terminal git status     <span class="c">roda no shell e mostra a saída no chat</span>
-/copy                    <span class="c">copia a última resposta</span>
-delta wiki               <span class="c">abre esta documentação no navegador</span></pre>
+/terminal git status     <span class="c"># roda no shell e mostra a saída no chat</span>
+/copy                    <span class="c"># copia a última resposta</span>
+delta wiki               <span class="c"># abre esta documentação no navegador</span></pre>
 
-    <table>
-      <tr><th>comando</th><th>o que faz</th></tr>
-      <tr><td><code>/login</code> <code>/logout</code></td><td>conecta/desconecta provedores (chave guardada por provedor)</td></tr>
-      <tr><td><code>/models</code></td><td>modelos dos provedores conectados</td></tr>
-      <tr><td><code>/thinking</code></td><td>esforço de raciocínio (off → max, conforme o modelo)</td></tr>
-      <tr><td><code>/projects &lt;pasta&gt;</code></td><td>define a pasta de trabalho e memoriza</td></tr>
-      <tr><td><code>/terminal &lt;cmd&gt;</code></td><td>roda no shell e mostra a saída no chat</td></tr>
-      <tr><td><code>/copy</code></td><td>copia a última resposta (ou arraste o mouse)</td></tr>
-      <tr><td><code>/status</code> <code>/session</code></td><td>configuração, uso e sessão</td></tr>
-      <tr><td><code>/new</code> <code>/clear</code> <code>/reload</code> <code>/quit</code></td><td>sessão nova, limpa, recarrega, sai</td></tr>
-      <tr><td><code>/help</code></td><td>tudo isso na tela</td></tr>
-    </table>
-
-    <table style="margin-top:26px">
-      <tr><th>tecla</th><th>ação</th></tr>
-      <tr><td><code>Enter</code> / <code>Shift+Enter</code></td><td>envia / quebra linha</td></tr>
-      <tr><td><code>Ctrl+C</code></td><td>interrompe a geração (nunca fecha o app)</td></tr>
-      <tr><td><code>Ctrl+X</code></td><td>copia a última resposta</td></tr>
-      <tr><td><code>Ctrl+Q</code></td><td>devolve a última mensagem da fila ao editor</td></tr>
-      <tr><td><code>mouse</code></td><td>arrastar seleciona e copia; roda rola a conversa</td></tr>
-      <tr><td><code>Esc</code></td><td>limpa a seleção e volta ao fim</td></tr>
-    </table>
-  </section>
-
-  <!-- ===================== DADOS ===================== -->
-  <section id="dados">
-    <div class="k">04 — dados</div>
-    <h2>Uma pasta sua, nada espalhado</h2>
-    <p>Tudo fica na pasta escolhida na instalação (padrão <code>C:\Users\você\.deltaCore</code>).</p>
-<pre>.deltaCore/
-  config.json        provedor, modelo, idioma, thinking, projectDir
-  auth.json          uma chave de API por provedor
-  models.v2.json     catálogo models.dev em cache
-  memory.json        memória durável
-  sessions/          --&lt;slug-da-pasta&gt;--/&lt;data&gt;_&lt;id&gt;.jsonl
-  skills/            &lt;nome&gt;/SKILL.md
-  mcps/              um .json por servidor MCP
-  extensions/        extensões plugáveis
-  system/prompt.md   o que ele deve obedecer sempre
-  paste/ jobs/ themes/</pre>
-    <p><code>system/prompt.md</code> é relido a cada turno: é ali que você escreve as regras do time.</p>
-  </section>
-
-  <!-- ===================== DOWNLOAD ===================== -->
-  <section id="download">
-    <div class="k">05 — download</div>
-    <h2>Escolha o sistema</h2>
-    <p>Arquivos na <a href="https://github.com/descz/delta/releases/latest"><b style="color:#fff">página de releases</b></a>.
-       Cada um já é o instalador: ele pergunta a pasta, copia o binário, põe <code>delta</code> no PATH
-       e cria o atalho.</p>
-    <div class="grid3">
-      <div class="card"><h3>Windows 10/11</h3>
-        <p><code>Delta.exe</code> — programa + instalador num arquivo. Duplo clique abre a tela no navegador.</p>
-        <p style="margin-top:12px"><a class="btn" href="https://github.com/descz/delta/releases/latest">baixar .exe</a></p></div>
-      <div class="card"><h3>Linux x86_64</h3>
-        <p><code>delta-linux-x86_64.run</code> — auto-extraível, instala e deixa <code>delta</code> no PATH.</p>
-        <p style="margin-top:12px"><a class="btn" href="https://github.com/descz/delta/releases/latest">baixar .run</a></p></div>
-      <div class="card"><h3>macOS 11+</h3>
-        <p>pacote com o código + <code>INSTALAR-MAC.command</code>: compila na máquina e instala o app.</p>
-        <p style="margin-top:12px"><a class="btn" href="https://github.com/descz/delta/releases/latest">baixar .zip</a></p></div>
+      <div class="grid g3" style="margin-top:16px">
+        <div class="card reveal"><h3>Comandos</h3>
+          <ul><li><code>/models</code> modelos conectados</li><li><code>/thinking</code> esforço</li>
+              <li><code>/status</code> configuração e uso</li><li><code>/help</code> tudo na tela</li></ul></div>
+        <div class="card reveal"><h3>Atalhos</h3>
+          <ul><li><code>Enter</code> envia · <code>Shift+Enter</code> quebra</li>
+              <li><code>Ctrl+C</code> interrompe (não fecha)</li><li><code>Ctrl+X</code> copia a resposta</li>
+              <li><code>Ctrl+Q</code> devolve a fila ao editor</li></ul></div>
+        <div class="card reveal"><h3>Dados</h3>
+          <ul><li><code>config.json</code> · <code>auth.json</code></li>
+              <li><code>sessions/</code> por pasta</li><li><code>skills/</code> · <code>mcps/</code></li>
+              <li><code>system/prompt.md</code> as suas regras</li></ul></div>
+      </div>
     </div>
-<pre style="margin-top:22px"><span class="c"># linux</span>
-chmod +x delta-linux-x86_64.run &amp;&amp; ./delta-linux-x86_64.run
-
-<span class="c"># compilar do código</span>
-./build.sh          <span class="c"># bin/delta (Linux/macOS)</span>
-build.bat           <span class="c"># bin\delta.exe (Windows)</span></pre>
   </section>
 
-  <!-- ===================== LICENÇA ===================== -->
-  <section id="licenca">
-    <div class="k">06 — licença</div>
-    <h2>Source-available, não comercial</h2>
-    <p>O código é público para estudo e uso pessoal ou interno. A licença <b>proíbe vender, alugar,
-       cobrar acesso e clonar</b> (fork público, espelho, pacote, binário, rebranding), e exige
-       crédito ao produto em qualquer divulgação.</p>
-    <table>
-      <tr><th>permitido</th><th>proibido</th></tr>
-      <tr><td>usar, estudar e modificar para uso pessoal, educacional ou interno</td>
-          <td>vender, alugar, cobrar acesso, incluir em produto ou serviço pago</td></tr>
-      <tr><td>compartilhar a cópia <b>não modificada</b>, sem fins lucrativos</td>
-          <td>publicar fork público, espelho, pacote, binário ou <b>clone/rebranding</b></td></tr>
-      <tr><td>citar, escrever e gravar vídeo — <b>com crédito</b></td>
-          <td>remover créditos, nome, símbolo Δ ou o aviso de licença</td></tr>
-    </table>
-    <p style="margin-top:16px">Crédito obrigatório: <b style="color:#fff">Delta Agent — github.com/descz/delta</b>.
-       Permissão comercial ou redistribuição especial: abra uma issue no repositório.</p>
+  <!-- ================= FAQ ================= -->
+  <section class="section" id="faq">
+    <div class="container">
+      <p class="kicker reveal">faq</p>
+      <h2 class="section-title reveal">Perguntas curtas</h2>
+
+      <div class="faq-list">
+        <details class="faq reveal"><summary>Preciso de chave de API?</summary>
+          <p>Sim, de um provedor que você use (OpenAI, Anthropic, OpenRouter, DeepSeek, opencode…).
+             <code>/login</code> pede a chave uma vez e guarda por provedor em <code>auth.json</code>.</p></details>
+
+        <details class="faq reveal"><summary>Roda offline?</summary>
+          <p>O programa roda; o modelo não. Sem rede ele continua abrindo o CLI, as sessões e as
+             ferramentas locais — mas não conversa com o provedor.</p></details>
+
+        <details class="faq reveal"><summary>Por que C11?</summary>
+          <p>Um executável sem runtime abre instantaneamente e não quebra com atualização de Node.
+             A TUI, o parser JSON, o markdown e o cliente HTTP são todos escritos no projeto.</p></details>
+
+        <details class="faq reveal"><summary>O Windows avisou que o app é desconhecido</summary>
+          <p>É o SmartScreen por falta de assinatura digital: <b>Mais informações → Executar assim mesmo</b>.</p></details>
+
+        <details class="faq reveal"><summary>E no macOS?</summary>
+          <p>O binário precisa ser compilado na máquina — não há cross-compile confiável para Mach-O.
+             O pacote traz um <code>.command</code> que confere as Xcode Command Line Tools e faz tudo.</p></details>
+
+        <details class="faq reveal"><summary>Posso usar comercialmente ou fazer um fork público?</summary>
+          <p>Não. A licença é <b>source-available e não comercial</b>: proíbe venda, cobrança de acesso
+             e clone (fork público, pacote, binário ou rebranding). Compartilhar a cópia não modificada,
+             sem fins lucrativos e com crédito, é permitido.
+             Veja <a href="https://github.com/descz/delta/blob/main/LICENSE"><b>LICENSE</b></a>.</p></details>
+
+        <details class="faq reveal"><summary>Meus dados vão para algum lugar?</summary>
+          <p>Só para o provedor que você configurar. Histórico, chaves, memória e skills ficam na sua
+             pasta <code>.deltaCore</code>.</p></details>
+      </div>
+    </div>
   </section>
 
-  <!-- ===================== FAQ ===================== -->
-  <section id="faq">
-    <div class="k">07 — faq</div>
-    <h2>Perguntas curtas</h2>
+</main>
 
-    <details><summary>Preciso de chave de API?</summary>
-      <p>Sim, de um provedor que você use (OpenAI, Anthropic, OpenRouter, DeepSeek, opencode…).
-         <code>/login</code> pede a chave uma vez e guarda em <code>auth.json</code> por provedor.</p></details>
+<footer>
+  <div class="container foot">
+    <div class="brand"><span class="d">Δ</span><span class="brand-name">Delta <span class="brand-dim">Agent</span></span></div>
+    <div class="license">
+      Código source-available, uso não comercial — proibido vender ou clonar. Toda divulgação deve
+      creditar <a href="https://github.com/descz/delta">Delta Agent</a>.
+    </div>
+    <div style="font-size:12.5px;color:#5f5f5f">
+      <a href="https://github.com/descz/delta">github</a> ·
+      <a href="https://github.com/descz/delta/releases/latest">releases</a> ·
+      <a href="https://github.com/descz/delta/blob/main/LICENSE">licença</a>
+    </div>
+  </div>
+</footer>
 
-    <details><summary>Roda offline?</summary>
-      <p>O programa roda; o modelo não. Sem rede ele continua abrindo o CLI, as sessões e as
-         ferramentas locais — mas não conversa com o provedor.</p></details>
+<script>
+  // navbar sólida ao rolar
+  const nav = document.getElementById('navbar');
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 12);
+  onScroll(); addEventListener('scroll', onScroll, { passive: true });
 
-    <details><summary>Por que C11?</summary>
-      <p>Um executável, sem runtime, abre instantaneamente e não quebra com atualização de Node.
-         A TUI, o parser JSON, o markdown e o cliente HTTP são todos nossos.</p></details>
+  // menu mobile
+  const t = document.getElementById('navToggle'), mob = document.getElementById('navMobile');
+  t.addEventListener('click', () => mob.classList.toggle('open'));
+  mob.querySelectorAll('a').forEach(a => a.addEventListener('click', () => mob.classList.remove('open')));
 
-    <details><summary>O Windows avisou que o app é desconhecido</summary>
-      <p>É o SmartScreen por falta de assinatura digital: <b>Mais informações → Executar assim mesmo</b>.</p></details>
-
-    <details><summary>E no macOS?</summary>
-      <p>O binário precisa ser compilado na máquina (não há cross-compile confiável para Mach-O).
-         O pacote traz um <code>.command</code> que confere as Xcode Command Line Tools e faz tudo.</p></details>
-
-    <details><summary>Posso usar comercialmente ou fazer um fork público?</summary>
-      <p>Não. A licença é source-available e não comercial: proíbe venda, cobrança de acesso e clone
-         (fork público, pacote, binário ou rebranding). Compartilhar a cópia não modificada, sem fins
-         lucrativos e com crédito, é permitido. Veja <a href="https://github.com/descz/delta/blob/main/LICENSE">LICENSE</a>.</p></details>
-
-    <details><summary>Meus dados vão para algum lugar?</summary>
-      <p>Só para o provedor que você configurar. Histórico, chaves, memória e skills ficam na sua
-         pasta <code>.deltaCore</code>.</p></details>
-  </section>
-
-  <footer>
-    <span>Delta Agent · C11 · uso não comercial</span>
-    <span><a href="https://github.com/descz/delta">github.com/descz/delta</a></span>
-  </footer>
-</div>
+  // reveal no scroll
+  const io = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach((el, i) => {
+    el.style.transitionDelay = Math.min(i % 4, 3) * 60 + 'ms';
+    io.observe(el);
+  });
+</script>
 </body>
 </html>
