@@ -3,7 +3,7 @@
 #ifndef DELTA_UTIL_H
 #define DELTA_UTIL_H
 
-#define DELTA_VERSION "0.1.1"
+#define DELTA_VERSION "0.1.2"
 
 #include <stddef.h>
 #include <stdint.h>
