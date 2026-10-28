@@ -13,6 +13,8 @@
 #else
 #  include <unistd.h>
 #  include <string.h>
+#  include <fcntl.h>
+#  include <errno.h>
 #endif
 
 /* ------------------------------------------------------------------ */
@@ -429,6 +431,21 @@ static void stream_state_free(StreamState *st)
 
 int provider_stream_abort = 0;
 
+static void (*g_wait_tick)(void *) = NULL;
+static void *g_wait_ud = NULL;
+
+void provider_set_wait_tick(void (*fn)(void *), void *ud)
+{
+    g_wait_tick = fn;
+    g_wait_ud = ud;
+}
+
+/* Um "respiro" da leitura: a UI desenha e le o teclado. */
+static void wait_tick(void)
+{
+    if (g_wait_tick) g_wait_tick(g_wait_ud);
+}
+
 static void emit(StreamState *st, int kind, const char *s, size_t n)
 {
     if (provider_stream_abort) return;      /* o leitor ja vai cortar */
@@ -831,13 +848,34 @@ static int http_post_stream(const char *url, const Provider *p, const char *sess
     Str evname; str_init(&evname);
     Str linebuf; str_init(&linebuf);
 
+    /* timeout curto de recepcao: a leitura devolve o controle a cada ~100 ms
+       para a TUI desenhar o spinner e responder ao Ctrl+C mesmo enquanto o
+       provedor nao mandou o primeiro byte. */
+    WinHttpSetTimeouts(req, 0, 30000, 30000, 100);
+
     for (;;) {
         DWORD avail = 0;
-        if (!WinHttpQueryDataAvailable(req, &avail)) break;
+        if (!WinHttpQueryDataAvailable(req, &avail)) {
+            if (GetLastError() == ERROR_WINHTTP_TIMEOUT) {
+                wait_tick();
+                if (provider_stream_abort) break;
+                continue;
+            }
+            break;
+        }
         if (avail == 0) break;
         char *buf = (char *)malloc(avail + 1);
         DWORD got = 0;
-        if (!WinHttpReadData(req, buf, avail, &got) || got == 0) { free(buf); break; }
+        if (!WinHttpReadData(req, buf, avail, &got) || got == 0) {
+            DWORD erro_leitura = GetLastError();
+            free(buf);
+            if (erro_leitura == ERROR_WINHTTP_TIMEOUT) {
+                wait_tick();
+                if (provider_stream_abort) break;
+                continue;
+            }
+            break;
+        }
         buf[got] = 0;
 
         size_t i = 0;
@@ -929,10 +967,45 @@ static int http_post_stream(const char *url, const Provider *p, const char *sess
     Str evname; str_init(&evname);
     Str linebuf; str_init(&linebuf);
     char buf[8192];
-    size_t got;
-    while ((got = fread(buf, 1, sizeof buf, f)) > 0) {
+
+    /* pipe de saida do curl em modo nao bloqueante: sem isso a leitura ficava
+       parada no primeiro byte e a tela congelava (spinner e Ctrl+C mortos). */
+    int fd = fileno(f);
+    if (fd < 0) {
+        pclose(f);
+        remove(tbody);
+        str_free(&evname);
+        str_free(&linebuf);
+        str_adds(err, "nao consegui ler a saida do curl");
+        return 0;
+    }
+    {
+        int fl = fcntl(fd, F_GETFL, 0);
+        if (fl >= 0) fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+    }
+
+    for (;;) {
+        if (provider_stream_abort) break;
+        wait_tick();
+        fd_set rf;
+        FD_ZERO(&rf);
+        FD_SET(fd, &rf);
+        struct timeval tv = { 0, 100000 };
+        int r = select(fd + 1, &rf, NULL, NULL, &tv);
+        if (r < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (r == 0) continue;                     /* sem dados: desenha e volta */
+
+        ssize_t got = read(fd, buf, sizeof buf);
+        if (got == 0) break;
+        if (got < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) continue;
+            break;
+        }
         size_t i = 0;
-        while (i < got) {
+        while (i < (size_t)got) {
             char c = buf[i];
             if (c == '\n') {
                 size_t ll = linebuf.len;
@@ -945,7 +1018,6 @@ static int http_post_stream(const char *url, const Provider *p, const char *sess
             }
             i++;
         }
-        if (provider_stream_abort) break;
     }
     int rc = pclose(f);
     str_free(&evname);
@@ -986,7 +1058,7 @@ static int http_post_stream(const char *url, const Provider *p, const char *sess
 /* GET simples                                                         */
 /* ------------------------------------------------------------------ */
 #ifdef _WIN32
-int http_get_text(const char *url, Str *out, Str *err)
+int http_get_text_to(const char *url, Str *out, Str *err, int timeout_sec)
 {
     Url u;
     if (!parse_url(url, &u)) { if (err) str_adds(err, "URL invalida"); return 0; }
@@ -1001,10 +1073,20 @@ int http_get_text(const char *url, Str *out, Str *err)
     int ok = 0;
     HINTERNET session = WinHttpOpen(L"delta-agent/1.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                     WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (session) {
+        DWORD ms = (DWORD)((timeout_sec > 0 ? timeout_sec : 60) * 1000);
+        WinHttpSetTimeouts(session, ms, ms, ms, ms);
+    }
     HINTERNET conn = session ? WinHttpConnect(session, host, (INTERNET_PORT)u.port, 0) : NULL;
     HINTERNET req = conn ? WinHttpOpenRequest(conn, L"GET", path, NULL, WINHTTP_NO_REFERER,
                                               WINHTTP_DEFAULT_ACCEPT_TYPES,
                                               str_istarts(u.scheme, "https") ? WINHTTP_FLAG_SECURE : 0) : NULL;
+    if (req) {
+        /* o GitHub responde 302 para objects.githubusercontent.com: sem isto
+           o download do binario morria no redirecionamento */
+        DWORD politica = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
+        WinHttpSetOption(req, WINHTTP_OPTION_REDIRECT_POLICY, &politica, sizeof politica);
+    }
     if (req && WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                                   WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
         WinHttpReceiveResponse(req, NULL)) {
@@ -1041,11 +1123,11 @@ int http_get_text(const char *url, Str *out, Str *err)
     return ok;
 }
 #else
-int http_get_text(const char *url, Str *out, Str *err)
+int http_get_text_to(const char *url, Str *out, Str *err, int timeout_sec)
 {
     /* POSIX: usa curl, que ja esta em qualquer distro */
     Str cmd; str_init(&cmd);
-    str_adds(&cmd, "curl -fsSL '");
+    str_addf(&cmd, "curl -fsSL --max-time %d '", timeout_sec > 0 ? timeout_sec : 60);
     str_adds(&cmd, url);
     str_adds(&cmd, "' 2>/dev/null");
     FILE *f = popen(cmd.data, "r");
@@ -1059,6 +1141,11 @@ int http_get_text(const char *url, Str *out, Str *err)
     return 1;
 }
 #endif
+
+int http_get_text(const char *url, Str *out, Str *err)
+{
+    return http_get_text_to(url, out, err, 60);
+}
 
 /* ------------------------------------------------------------------ */
 /* Execucao do turno                                                   */

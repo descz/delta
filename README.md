@@ -106,12 +106,17 @@ Next time, `delta` opens **in that folder's last chat**. `delta --new` starts fr
 | `/terminal <cmd>` | runs in your shell and shows the output in the chat |
 | `/copy` | copies the last reply |
 | `/undo [file]` | restores a file to its content before the last edit |
+| `/update` | installs the newest version from GitHub (the app warns at startup when one exists) |
 | `/forlimit [n]` | toggles a tools-per-turn cap (run again to turn it off) |
 | `/status` `/session` | configuration, usage and session |
 | `/new` `/clear` `/reload` `/quit` | new session, clear, reload, quit |
 | `/help` | all of it on screen |
 
 `delta wiki` opens the documentation in the browser; `delta --setup` reopens the installer.
+`delta update` does the same job without opening the app: `delta update --check` only reports, and
+the command replaces the running executable in place (on Windows it is renamed, so the file can be
+swapped while it runs). The TUI checks for a new release once a day and shows a notice at startup;
+turn that off with `"updateCheck": false` in `config.json` or `DELTA_NO_UPDATE_CHECK=1`.
 
 | key | action |
 |---|---|
@@ -119,7 +124,7 @@ Next time, `delta` opens **in that folder's last chat**. `delta --new` starts fr
 | `Ctrl+C` | stops the generation (never closes the app) |
 | `Ctrl+X` | copies the last reply |
 | `Ctrl+Q` | returns the last queued message to the editor |
-| mouse | drag selects and copies; wheel scrolls the conversation |
+| mouse | click selects a whole message (`Ctrl+X` copies it, without the box); drag selects text and copies on release; wheel scrolls the conversation |
 | `Esc` | clears the selection and jumps to the end |
 
 **Typing while it works is supported**: the message appears in the chat marked *queued* and the agent
@@ -168,6 +173,7 @@ One folder, chosen at install time (default `C:\Users\<you>\.deltaCore`):
   mcps/              one .json per MCP server (url or command)
   extensions/        pluggable extensions
   graphs/            project graph cache (symbols/imports)
+  update.json        last release check (version, asset, timestamp)
   system/prompt.md   rules it must always follow
   paste/ jobs/ themes/ undo/
 ```

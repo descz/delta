@@ -929,16 +929,20 @@ int ui_editor(Screen *s, int y, int width, const Theme *t,
     screen_put(s, 0, y, 0x256D, st_border);            /* ╭ */
     screen_put(s, width - 1, y, 0x256E, st_border);    /* ╮ */
     if (working && width > 12) {
-        const char *sp = SPIN[((spin_frame % 10) + 10) % 10];
+        /* spin_frame < 0: mostra so' o rotulo (aviso passageiro, sem spinner) */
+        int tem_spinner = spin_frame >= 0;
+        const char *sp = tem_spinner ? SPIN[((spin_frame % 10) + 10) % 10] : NULL;
         int msgw = work_msg ? str_width(work_msg) : 0;
-        int statusw = 1 + 1 + msgw;
+        int statusw = 2 + (tem_spinner ? 2 : 0) + msgw;
         if (width >= statusw + 8) {
             Style st_sp = { tcolor_hex(theme_tok(t, TK_ACCENT)), COL_DEFAULT, 0 };
             Style st_msg = { tcolor_hex(theme_tok(t, TK_MUTED)), COL_DEFAULT, 0 };
             int col = 1;
             col += screen_text(s, col, y, "\u2500 ", 4, st_border, -1);
-            col += screen_text(s, col, y, sp, strlen(sp), st_sp, -1);
-            col += screen_text(s, col, y, " ", 1, st_border, -1);
+            if (tem_spinner) {
+                col += screen_text(s, col, y, sp, strlen(sp), st_sp, -1);
+                col += screen_text(s, col, y, " ", 1, st_border, -1);
+            }
             col += screen_text(s, col, y, work_msg ? work_msg : "",
                                work_msg ? strlen(work_msg) : 0, st_msg, -1);
             if (col < width - 1) screen_text(s, col, y, " ", 1, st_border, -1);

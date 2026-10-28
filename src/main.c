@@ -10,6 +10,7 @@
 #include "json.h"
 #include "i18n.h"
 #include "setup.h"
+#include "update.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,7 +74,6 @@ typedef struct {
 
     int      working;
     Str      work_msg;
-    int      spin_frame;
 
     int      scroll;
     Str      status;
@@ -103,10 +103,12 @@ typedef struct {
     int      tr_fast;           /* 1 = so' repintar a partir de tr_fast_from */
     size_t   tr_fast_from;
 
-    /* selecao por arrasto no transcript (coords = celulas do app.tr) */
+    /* selecao no transcript (coords = celulas do app.tr) */
     int      sel_active;
     int      sel_ax, sel_ay;    /* ancora */
     int      sel_hx, sel_hy;    /* cabeca */
+    int      sel_drag;          /* 1 = arrasto livre; 0 = mensagem clicada */
+    int      sel_click_x, sel_click_y;   /* onde o clique comecou */
     int      tr_start;          /* linha do transcript que aparece na linha 0 da tela */
     int      tr_view;           /* linhas visiveis do transcript */
 } App;
@@ -126,8 +128,9 @@ typedef struct {
 /* chave i18n de cada comando, na mesma ordem da tabela */
 static const char *const CMD_KEYS[] = {
     "cmd.help", "cmd.login", "cmd.logout", "cmd.models", "cmd.thinking", "cmd.theme",
-    "cmd.tools", "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new", "cmd.clear", "cmd.stop",
-    "cmd.skills", "cmd.copy", "cmd.terminal", "cmd.extensions", "cmd.translator", "cmd.reload", "cmd.quit"
+    "cmd.tools", "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new",
+    "cmd.clear", "cmd.stop", "cmd.skills", "cmd.copy", "cmd.extensions", "cmd.translator",
+    "cmd.reload", "cmd.quit", "cmd.forlimit", "cmd.undo", "cmd.update"
 };
 
 
@@ -152,8 +155,9 @@ static const Cmd COMMANDS[] = {
     { "translator","Troca o idioma da interface",                      "pt-BR|pt|en|es|zh|ja", 1 },
     { "reload",    "Recarrega config e tema do disco",                NULL,                 0 },
     { "quit",      "Sai do Delta Agent",                              NULL,                 0 },
-    { "forlimit",  "Liga/desliga o teto de ferramentas por turno",     "[n]",                1 },
+    { "forlimit", "Liga/desliga o teto de ferramentas por turno",     "[n]",                1 },
     { "undo",      "Restaura o conteudo anterior de um arquivo",       "[arquivo]",          1 },
+    { "update",    "Instala a versao mais nova do GitHub",              "[--check]",          1 },
 };
 #define N_COMMANDS ((int)(sizeof COMMANDS / sizeof COMMANDS[0]))
 
@@ -753,10 +757,48 @@ static void notify(const char *fmt, ...)
     set_status("%s", buf);
 }
 
-/* ================================================================== */
-/* Render do transcript                                                */
-/* ================================================================== */
-static void render_transcript(int width, size_t from);
+/* Aviso passageiro: aparece so' na borda do editor por alguns segundos.
+   Copia/selecao usam isto para nao sujar a conversa com um bloco a cada
+   Ctrl+X (que era o que acontecia com notify()). */
+static void notify_status(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    char buf[512];
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    str_clear(&app.status);
+    if (*buf) str_adds(&app.status, buf);
+    app.status_until = now_ms() + 3000;
+}
+
+/* Indice do quadro do spinner. Vem do RELOGIO, nao de um contador de frames:
+   durante o turno o laco principal esta' bloqueado dentro do agente, entao o
+   contador so' andava quando o usuario mexia no teclado e o "Working" ficava
+   congelado. */
+static int spin_from_clock(void)
+{
+    return (int)((now_ms() / 90u) % 10u);
+}
+
+/* Aviso de versao nova na inicializacao. Roda uma vez por sessao, no primeiro
+   frame ocioso (a tela ja' esta' desenhada), e respeita o cache de 24 h: a
+   primeira consulta do dia custa uma requisicao, as outras sao instantaneas. */
+static int g_update_checked = 0;
+
+static void update_boot_notice(void)
+{
+    if (!app.cfg.check_updates) return;
+    char *aviso = update_notice(1);
+    if (!aviso) return;
+    Block *b = block_add(B_INFO);
+    str_adds(&b->text, aviso);
+    free(aviso);
+    notify_status("versao nova disponivel \u00b7 /update instala");
+    app.tr_dirty = 1;
+    render();
+}
+
 /* Desenha UM bloco a partir de y; devolve a linha seguinte. */
 static int draw_block(Screen *s, int y, int width, Block *b)
 {
@@ -1060,14 +1102,22 @@ static void render(void)
     int ey = rows - footer_h - editor_h - menu_h;
     char wmsg[128];
     const char *wm = app.work_msg.data ? app.work_msg.data : "Working...";
-    if (app.working && fila_count() > 0) {
-        snprintf(wmsg, sizeof wmsg, "%s \u00b7 %d na fila", wm, fila_count());
-        wm = wmsg;
+    int mostrar_status = 0;
+    int spin = -1;                       /* -1 = sem spinner (aviso estatico) */
+    if (app.working) {
+        spin = spin_from_clock();
+        if (fila_count() > 0) {
+            snprintf(wmsg, sizeof wmsg, "%s \u00b7 %d na fila", wm, fila_count());
+            wm = wmsg;
+        }
+    } else if (app.status.len && now_ms() < app.status_until) {
+        wm = app.status.data;            /* aviso passageiro (copia, etc.) */
+        mostrar_status = 1;
     }
     if (fila_vis > 0) (void)0;
     ui_editor(&app.screen, ey, cols, &app.theme, edit_text, edit_len, edit_cur,
-              app.working, wm,
-              app.spin_frame, 0, 8, (const char **)app.imgs, app.n_imgs);
+              app.working || mostrar_status, wm,
+              spin, 0, 8, (const char **)app.imgs, app.n_imgs);
     if (app.ext_mode) ext_panel_draw(&app.screen, ey, cols);
     if (app.picker) {
         const char *titulo = menu_title();
@@ -1195,6 +1245,16 @@ static void tools_tick_ui(void *ud)
             break;
         }
     }
+    maybe_render(0);
+}
+
+/* Mesmo papel do tools_tick_ui, mas para o stream do provedor: e' chamado
+   quando a leitura esta' parada esperando byte (o modelo "pensando"). Sem
+   ele a tela ficava congelada e o Ctrl+C so' valia depois do primeiro token. */
+static void provider_tick_ui(void *ud)
+{
+    (void)ud;
+    ui_poll_input();
     maybe_render(0);
 }
 
@@ -1337,8 +1397,7 @@ static int cb_should_abort(void *ud)
         clip_free(&c);
         free(dir);
     }
-    /* anima o spinner */
-    app.spin_frame = (app.spin_frame + 1) % 10;
+    /* o spinner segue o relogio (render()); aqui so' precisa redesenhar */
     maybe_render(0);
     return 0;
 }
@@ -1706,6 +1765,7 @@ static void submit_input(void)
 
     /* Roda turno apos turno: mensagens enfileiradas enquanto o agente
        trabalhava entram aqui (ou no intervalo de thinking/tools). */
+    agent_rebuild_prompt(&app.agent);   /* tools/skills criadas no turno anterior */
     for (;;) {
         Str err; str_init(&err);
         app.working = 1;
@@ -2054,6 +2114,41 @@ static void handle_command(const char *raw)
         return;
     }
 
+    /* /update [--check]: consulta os releases do GitHub e troca o binario */
+    if (str_eq(cmd, "/update") || str_eq(cmd, "/atualizar")) {
+        Block *b = block_add(B_INFO);
+        str_adds(&b->text, "procurando versoes novas no GitHub...");
+        app.tr_dirty = 1;
+        render();
+
+        UpdateInfo u;
+        int ok = update_check(&u, 0);
+        str_clear(&b->text);
+        if (!ok) {
+            str_addf(&b->text, "nao consegui consultar os releases: %s",
+                     u.err[0] ? u.err : "sem conexao");
+            if (u.available)
+                str_addf(&b->text, "\n(pelo cache, a versao %s esta disponivel: %s)\n",
+                         u.latest, u.page);
+            else
+                str_addc(&b->text, '\n');
+        } else if (!u.available) {
+            str_addf(&b->text, "voce ja esta na versao mais nova (%s).", u.current);
+        } else if (str_istarts(rest, "--check")) {
+            str_addf(&b->text, "nova versao %s (a sua: %s)\n%s\n", u.latest, u.current, u.page);
+        } else {
+            Str msg; str_init(&msg);
+            str_addf(&b->text, "nova versao %s (a sua: %s)\n", u.latest, u.current);
+            int trocou = update_apply(&u, &msg);
+            if (msg.len) str_addf(&b->text, "%s\n", msg.data);
+            if (!trocou && u.page[0]) str_addf(&b->text, "pagina do release: %s\n", u.page);
+            str_free(&msg);
+        }
+        app.tr_dirty = 1;
+        render();
+        return;
+    }
+
     /* /terminal <comando>: roda no shell do sistema e mostra a saida aqui
        dentro, num bloco igual ao das ferramentas. */
     if (str_eq(cmd, "/terminal") || str_eq(cmd, "/sh") || str_eq(cmd, "/exec")) {
@@ -2385,7 +2480,7 @@ static void handle_command(const char *raw)
         }
         str_addf(&b->text,
                  "provedor : %s\nmodelo   : %s\nendpoint : %s\nchave    : %s\nthinking : %s\ntema     : %s\n"
-                 "contexto : %s%ld\ncatalogo : %s\ncwd      : %s\nsessao   : %s\n",
+                 "contexto : %s%ld\nimagem   : %s\ncatalogo : %s\ncwd      : %s\nsessao   : %s\n",
                  app.cfg.provider ? app.cfg.provider : "?",
                  app.cfg.model ? app.cfg.model : "?",
                  app.cfg.base_url ? app.cfg.base_url : "?",
@@ -2617,11 +2712,12 @@ static void input_yank(void)
 }
 
 /* ================================================================== */
-/* Selecao por arrasto (transcript)                                    */
+/* Selecao no transcript + copia                                       */
 /* ================================================================== */
 static void sel_clear(void)
 {
     app.sel_active = 0;
+    app.sel_drag = 0;
 }
 
 static void sel_normalize(int *y0, int *x0, int *y1, int *x1)
@@ -2641,32 +2737,163 @@ static int sel_has_text(void)
     return y0 != y1 || x0 != x1;
 }
 
-/* Extrai o texto selecionado das celulas do transcript. */
-static void selection_text(Str *out)
+/* Ultima linha (exclusiva) do bloco i no transcript. */
+static int block_row_end(size_t i)
 {
-    int y0, x0, y1, x1;
-    sel_normalize(&y0, &x0, &y1, &x1);
-    if (y1 >= app.tr.rows) y1 = app.tr.rows - 1;
-    if (y0 > y1) return;
-    int cols = app.tr.cols;
-    for (int y = y0; y <= y1; y++) {
-        int xs = (y == y0) ? x0 : 0;
-        int xe = (y == y1) ? x1 : cols - 1;
-        if (xs > cols - 1) xs = cols - 1;
+    int inicio = app.blocks[i].tr_y;
+    if (i + 1 < app.n_blocks) {
+        int fim = app.blocks[i + 1].tr_y;
+        if (fim > inicio) return fim;
+    }
+    return app.tr_end_y > inicio ? app.tr_end_y : inicio + 1;
+}
+
+/* Bloco que ocupa a linha `row` (1 = achou). */
+static int sel_block_at(int row, int *out_ini, int *out_fim)
+{
+    for (size_t i = 0; i < app.n_blocks; i++) {
+        int ini = app.blocks[i].tr_y;
+        int fim = block_row_end(i);
+        if (row >= ini && row < fim) {
+            *out_ini = ini;
+            *out_fim = fim;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Texto "de verdade" de um bloco: sem moldura, sem wrap visual, sem o
+   rodape de tokens. E' o que o usuario espera ao copiar uma mensagem. */
+static void block_plain_text(const Block *b, Str *out)
+{
+    if (b->kind == B_TOOL) {
+        if (b->tool_name && *b->tool_name) {
+            str_adds(out, b->tool_name);
+            if (b->tool_args && *b->tool_args) {
+                str_addc(out, ' ');
+                str_adds(out, b->tool_args);
+            }
+            if (b->tool_output.len) str_addc(out, '\n');
+        }
+        if (b->tool_output.len) str_add(out, b->tool_output.data, b->tool_output.len);
+        return;
+    }
+    if (b->text.len) str_add(out, b->text.data, b->text.len);
+}
+
+static int eh_sem_conteudo(uint32_t cp)
+{
+    /* espaco, celula nunca escrita ou desenho de caixa (╭─│╰ etc.) */
+    return cp == 0 || cp == ' ' || cp == '\t' || (cp >= 0x2500 && cp <= 0x257F);
+}
+
+static void sel_push_line(Str *out, const char *s, size_t n)
+{
+    if (n == 0) {
+        if (out->len && out->data[out->len - 1] != '\n') str_addc(out, '\n');
+        return;
+    }
+    if (out->len && out->data[out->len - 1] != '\n') str_addc(out, '\n');
+    str_add(out, s, n);
+    str_addc(out, '\n');
+}
+
+/* Trecho cru da grade (usado so' quando a selecao pega meia mensagem):
+   tira a moldura e os espacos das pontas de cada linha. */
+static void sel_grid_range(Str *out, int ya, int yb, int xa, int xb)
+{
+    int rows = app.tr.rows, cols = app.tr.cols;
+    if (ya < 0) ya = 0;
+    if (yb >= rows) yb = rows - 1;
+    if (cols <= 0) return;
+    for (int y = ya; y <= yb; y++) {
+        int xs = (y == ya) ? xa : 0;
+        int xe = (y == yb) ? xb : cols - 1;
         if (xs < 0) xs = 0;
         if (xe > cols - 1) xe = cols - 1;
-        Str line; str_init(&line);
+        int first = -1, last = -1;
         for (int x = xs; x <= xe; x++) {
             uint32_t cp = app.tr.cp[(size_t)y * (size_t)cols + (size_t)x];
-            if (cp == 0) cp = ' ';       /* celula nunca escrita */
+            if (!eh_sem_conteudo(cp)) {
+                if (first < 0) first = x;
+                last = x;
+            }
+        }
+        if (first < 0) { sel_push_line(out, "", 0); continue; }
+        Str line; str_init(&line);
+        for (int x = first; x <= last; x++) {
+            uint32_t cp = app.tr.cp[(size_t)y * (size_t)cols + (size_t)x];
+            if (cp == 0) cp = ' ';
             char buf[4];
             int n = utf8_encode(cp, buf);
             str_add(&line, buf, (size_t)n);
         }
-        while (line.len && line.data[line.len - 1] == ' ') str_truncate(&line, line.len - 1);
-        if (line.len) str_add(out, line.data, line.len);
-        if (y < y1) str_addc(out, '\n');
+        sel_push_line(out, line.data, line.len);
         str_free(&line);
+    }
+}
+
+/* Texto da selecao. Regra: mensagem inteira sai do modelo de blocos (texto
+   original, sem quebras do wrap nem moldura de caixa); o que estiver cortado
+   no meio sai da grade, limpo. */
+static void selection_text(Str *out)
+{
+    int y0, x0, y1, x1;
+    sel_normalize(&y0, &x0, &y1, &x1);
+    if (app.tr.rows <= 0) return;
+    if (y0 < 0) y0 = 0;
+    if (y1 >= app.tr.rows) y1 = app.tr.rows - 1;
+    if (y0 > y1) return;
+    const int cols = app.tr.cols;
+
+    size_t i = 0;
+    int y = y0;
+    while (y <= y1) {
+        while (i < app.n_blocks && block_row_end(i) <= y) i++;
+        if (i >= app.n_blocks) {          /* fim: cabecalho/linhas soltas */
+            sel_grid_range(out, y, y1, (y == y0) ? x0 : 0, x1);
+            break;
+        }
+        int bs = app.blocks[i].tr_y;
+        int be = block_row_end(i);
+        if (bs > y) {                     /* linhas antes do bloco */
+            int ate = (bs - 1 > y1) ? y1 : bs - 1;
+            sel_grid_range(out, y, ate, (y == y0) ? x0 : 0, (ate == y1) ? x1 : cols - 1);
+            y = ate + 1;
+            continue;
+        }
+        int cobre_tudo = (y <= bs) && (y1 >= be - 1) &&
+                         (y > y0 || x0 == 0) &&
+                         (y1 > be - 1 || x1 >= cols - 1);
+        if (cobre_tudo) {
+            Str t; str_init(&t);
+            block_plain_text(&app.blocks[i], &t);
+            if (t.len) {
+                if (out->len && out->data[out->len - 1] != '\n') str_addc(out, '\n');
+                str_add(out, t.data, t.len);
+                if (out->data[out->len - 1] != '\n') str_addc(out, '\n');
+            }
+            str_free(&t);
+            y = be;
+            i++;
+            continue;
+        }
+        int ate = (be - 1 > y1) ? y1 : be - 1;
+        if (ate < y) { i++; continue; }
+        sel_grid_range(out, y, ate, (y == y0) ? x0 : 0, (ate == y1) ? x1 : cols - 1);
+        y = ate + 1;
+    }
+
+    /* sem linhas em branco nas pontas */
+    while (out->len && (out->data[out->len - 1] == '\n' || out->data[out->len - 1] == ' '))
+        str_truncate(out, out->len - 1);
+    size_t ini = 0;
+    while (ini < out->len && out->data[ini] == '\n') ini++;
+    if (ini) {
+        memmove(out->data, out->data + ini, out->len - ini);
+        out->len -= ini;
+        out->data[out->len] = 0;
     }
 }
 
@@ -2693,26 +2920,42 @@ static void render_selection(void)
     }
 }
 
-/* Ctrl+X / /copy: com selecao ativa copia ela; senao a ultima resposta. */
-static void copy_last_response(void)
+/* Copia para o clipboard e avisa na borda do editor (sem entrar no chat). */
+static int copy_text(const char *rotulo, Str *t)
+{
+    if (!t || !t->len) {
+        notify_status("nada para copiar ainda");
+        return 0;
+    }
+    int ok = clipboard_write_text(t->data);
+    if (ok) notify_status("%s (%d caracteres)", rotulo, (int)utf8_len(t->data));
+    else    notify_status("nao deu para copiar (clipboard ocupado?)");
+    return ok;
+}
+
+/* O que o Ctrl+X levaria agora: a selecao, ou a ultima resposta. */
+static void copy_payload(Str *out)
 {
     if (app.sel_active && sel_has_text()) {
-        Str t; str_init(&t);
-        selection_text(&t);
-        int ok = clipboard_write_text(t.data);
-        if (ok) notify("seleção copiada (%d caracteres)", utf8_len(t.data));
-        else    notify("não deu para copiar");
-        str_free(&t);
+        selection_text(out);
         return;
     }
     Block *last = NULL;
     for (size_t i = 0; i < app.n_blocks; i++)
         if (app.blocks[i].kind == B_ASSISTANT && app.blocks[i].text.len) last = &app.blocks[i];
-    if (!last) { notify("nada para copiar ainda"); return; }
-    if (clipboard_write_text(last->text.data))
-        notify("última resposta copiada (%d caracteres)", utf8_len(last->text.data));
-    else
-        notify("não deu para copiar");
+    if (last) str_add(out, last->text.data, last->text.len);
+    while (out->len && (out->data[out->len - 1] == '\n' || out->data[out->len - 1] == ' '))
+        str_truncate(out, out->len - 1);
+}
+
+/* Ctrl+X / /copy: com selecao ativa copia ela; senao a ultima resposta. */
+static void copy_last_response(void)
+{
+    int selecao = app.sel_active && sel_has_text();
+    Str t; str_init(&t);
+    copy_payload(&t);
+    copy_text(selecao ? "selecao copiada" : "ultima resposta copiada", &t);
+    str_free(&t);
 }
 
 /* ================================================================== */
@@ -2975,16 +3218,26 @@ static void handle_event(const Event *ev)
     int n_items = (int)g_items_n;
     if (ev->type != EV_CTRL_KEY && ev->type != EV_RESIZE) app.ctrl_key_ms = 0;
 
-    /* -------- mouse: roda seleciona/rola, clique seleciona, clique de novo confirma -------- */
-    /* -------- selecao por arrasto no transcript: copia ao soltar -------- */
+    /* -------- mouse: clique seleciona a mensagem; arrasto seleciona texto -------- */
     if (ev->type == EV_DRAG) {
         if (app.menu_visible || app.picker) return;
         if (ev->my < 0 || ev->my >= app.tr_view) return;
         int ty = app.tr_start + ev->my;
         if (ty >= app.tr.rows) return;
         int tx = ev->mx >= app.tr.cols ? app.tr.cols - 1 : ev->mx;
+        if (app.sel_active && !app.sel_drag) {
+            /* veio de um clique (mensagem inteira): recomeca no ponto clicado */
+            app.sel_drag = 1;
+            app.sel_ax = app.sel_click_x;
+            app.sel_ay = app.sel_click_y;
+            app.sel_hx = tx;
+            app.sel_hy = ty;
+            render();
+            return;
+        }
         if (!app.sel_active) {
             app.sel_active = 1;
+            app.sel_drag = 1;
             app.sel_ax = app.sel_hx = tx;
             app.sel_ay = app.sel_hy = ty;
             render();
@@ -2998,17 +3251,15 @@ static void handle_event(const Event *ev)
         return;
     }
     if (ev->type == EV_RELEASE) {
-        if (app.sel_active && sel_has_text()) {
+        if (app.sel_active && app.sel_drag && sel_has_text()) {
             Str t; str_init(&t);
             selection_text(&t);
-            if (t.len) {
-                if (clipboard_write_text(t.data))
-                    notify("seleção copiada (%d caracteres)", utf8_len(t.data));
-                else
-                    notify("não deu para copiar");
-            }
+            if (t.len) copy_text("selecao copiada", &t);
             str_free(&t);
+        } else if (app.sel_active && !app.sel_drag) {
+            notify_status("mensagem selecionada \u00b7 Ctrl+X copia");
         }
+        render();
         return;   /* mantem o destaque; Esc ou novo clique limpa */
     }
     if (ev->type == EV_WHEEL) {
@@ -3039,10 +3290,25 @@ static void handle_event(const Event *ev)
         if (!app.menu_visible && !app.picker && ev->my >= 0 && ev->my < app.tr_view) {
             int ty = app.tr_start + ev->my;
             if (ty < app.tr.rows) {
+                int tx = ev->mx >= app.tr.cols ? app.tr.cols - 1 : ev->mx;
+                int ini = 0, fim = 0;
+                /* clique = seleciona a mensagem inteira (Ctrl+X copia limpo);
+                   arrastar a partir daqui vira selecao livre de texto. */
+                app.sel_click_x = tx;
+                app.sel_click_y = ty;
+                app.sel_drag = 0;
                 app.sel_active = 1;
-                app.sel_ax = app.sel_hx = ev->mx >= app.tr.cols ? app.tr.cols - 1 : ev->mx;
-                app.sel_ay = app.sel_hy = ty;
+                if (sel_block_at(ty, &ini, &fim)) {
+                    app.sel_ax = 0;
+                    app.sel_ay = ini;
+                    app.sel_hx = app.tr.cols - 1;
+                    app.sel_hy = fim - 1;
+                } else {
+                    app.sel_ax = app.sel_hx = tx;
+                    app.sel_ay = app.sel_hy = ty;
+                }
             }
+            render();
         }
         return;
     }
@@ -3664,6 +3930,32 @@ static int run_replay(const char *path, int cols, int rows, int force_offline)
             render();
             dump_screen_plain(&app.screen, stdout);
             printf("\n");
+        } else if (str_eq(line, "select-block")) {
+            /* teste: seleciona a mensagem inteira (sem depender de coordenada) */
+            int idx = arg ? atoi(arg) : 0;
+            render();
+            if (idx < 0) idx = (int)app.n_blocks + idx;   /* -1 = ultima */
+            if (idx >= 0 && (size_t)idx < app.n_blocks) {
+                int ini = app.blocks[idx].tr_y;
+                int fim = block_row_end((size_t)idx);
+                app.sel_active = 1;
+                app.sel_drag = 1;
+                app.sel_ax = 0;
+                app.sel_ay = ini;
+                app.sel_hx = app.tr.cols > 0 ? app.tr.cols - 1 : 0;
+                app.sel_hy = fim - 1;
+                render();
+            }
+        } else if (str_eq(line, "copy-text")) {
+            /* teste: imprime o que o Ctrl+X copiaria (sem passar pelo clipboard) */
+            Str t; str_init(&t);
+            copy_payload(&t);
+            printf("--- copiado ---\n%.*s\n--- fim ---\n\n", (int)t.len, t.data ? t.data : "");
+            str_free(&t);
+        } else if (str_eq(line, "update-check")) {
+            /* teste: mesmo caminho do aviso de versao nova da inicializacao */
+            update_boot_notice();
+            render();
         } else if (str_eq(line, "status-off")) {
             app.status_until = 0;
             render();
@@ -3776,6 +4068,7 @@ static void usage(void)
         "  delta --core <dir>        pasta de dados (padrao: <usuario>/.deltaCore)\n"
         "  delta --setup             instalador com tela (abre no navegador)\n"
         "  delta --install <dir>     instala sem tela (dados em <dir>)\n"
+        "  delta update [--check]    instala a versao mais nova do GitHub\n"
         "  delta --tools             lista as ferramentas\n"
         "  delta --tool <nome> <json>  roda uma ferramenta direto (teste)\n"
         "  delta --version           versao\n"
@@ -3801,6 +4094,7 @@ static int started_from_explorer(void)
 int main(int argc, char **argv)
 {
     memset(&app, 0, sizeof app);
+    update_init(argv[0]);        /* argv[0] para achar o proprio exe (POSIX sem /proc) */
     str_init(&app.input);
     str_init(&app.work_msg);
     str_init(&app.status);
@@ -3882,6 +4176,8 @@ int main(int argc, char **argv)
         } else if (str_eq(a, "--help") || str_eq(a, "-h")) {
             usage();
             return 0;
+        } else if (str_eq(a, "update")) {
+            return update_cli(argc - i, argv + i);   /* aceita --check */
         } else if (str_eq(a, "wiki") || str_eq(a, "docs")) {
             return setup_run(1);          /* delta wiki -> documentacao */
         } else if (a[0] != '-') {
@@ -4002,6 +4298,7 @@ int main(int argc, char **argv)
         term_set_title(title);
     }
     tools_set_tick(tools_tick_ui, NULL);
+    provider_set_wait_tick(provider_tick_ui, NULL);
     if (app.cfg.api_key) notify("pronto (%s/%s)", app.cfg.provider, app.cfg.model);
     else notify("sem API key: use /login <chave>");
 
@@ -4039,6 +4336,10 @@ int main(int argc, char **argv)
             continue;
         }
         if (nev == 0) {
+            if (!g_update_checked) {
+                g_update_checked = 1;
+                update_boot_notice();      /* aviso de versao nova (cache de 24 h) */
+            }
             /* Ctrl pressionado e nenhum caractere veio: o console nao colou
                texto, entao pode ser imagem/video no clipboard. */
             if (app.ctrl_key_ms) {
@@ -4076,7 +4377,6 @@ int main(int argc, char **argv)
                 }
             }
             if (app.working) {
-                app.spin_frame = (app.spin_frame + 1) % 10;
                 render();
             } else if (app.status.len && now_ms() >= app.status_until) {
                 str_clear(&app.status);

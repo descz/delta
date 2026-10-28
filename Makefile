@@ -39,7 +39,8 @@ endif
 
 CORE_SRC := src/util.c src/json.c src/okcolor.c src/theme.c src/ui.c
 APP_SRC  := src/term.c src/clipboard.c src/i18n.c src/tools.c src/tools_ext.c \
-            src/extensions.c src/provider.c src/modelsdev.c src/agent.c src/codegraph.c src/setup.c src/main.c
+            src/extensions.c src/provider.c src/modelsdev.c src/agent.c src/codegraph.c \
+            src/update.c src/setup.c src/main.c
 ALL_SRC  := $(CORE_SRC) $(APP_SRC)
 
 OBJ      := $(patsubst src/%.c,$(BUILD)/%.o,$(ALL_SRC))

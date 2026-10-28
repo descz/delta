@@ -33,6 +33,9 @@ void        tools_set_tick(void (*fn)(void *), void *ud);
 /* Lista terminada por um Tool com name == NULL. */
 const Tool *tools_all(void);
 const Tool *tool_find(const char *name);
+/* Descarta a tabela cacheada (depois de criar/remover/ligar extensoes):
+   sem isso uma tool dinamica nova nunca chegava ao modelo. */
+void        tools_invalidate(void);
 
 /* Familias unificadas (tools_ext.c): fs, git, shell, web, memory, code,
    assert, agent, extend. Lista terminada por name == NULL. */

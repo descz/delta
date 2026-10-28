@@ -4,6 +4,9 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 ROOT="$(pwd)"
+# a TUI de verdade consulta releases no boot; nos testes isso fica desligado
+# (a secao [19] liga de novo, apontando para um release falso)
+export DELTA_NO_UPDATE_CHECK=1
 CFG_GLOBAL="$HOME/.deltaCore/config.json"
 cp "$CFG_GLOBAL" "$ROOT/build/cfg-global.bak" 2>/dev/null
 AUTH_GLOBAL="$HOME/.deltaCore/auth.json"
@@ -72,6 +75,15 @@ expect /tmp/delta_cmds.log "read - Read file"      "/tools lista as ferramentas"
 expect /tmp/delta_cmds.log "comando desconhecido"  "comando invalido avisa no rodape"
 expect /tmp/delta_cmds.log "Limpa a conversa"      "bloco multilinha quebra linha"
 reject /tmp/delta_cmds.log "esta ajud$"            "nenhuma linha perde o ultimo caractere"
+
+# copiar mensagem (selecao por clique) tem que sair limpa: sem a moldura das
+# caixas de ferramenta e sem as quebras do wrap visual
+./bin/delta.exe --replay tests/replay-copia.txt 56 24 > /tmp/delta_copia.log 2>&1
+sed -n '/--- copiado ---/,/--- fim ---/p' /tmp/delta_copia.log > /tmp/delta_copia.txt
+expect /tmp/delta_copia.txt "terminal echo alpha beta"  "copiar: texto do bloco vai inteiro"
+reject /tmp/delta_copia.txt "│"                         "copiar: sem moldura de caixa"
+reject /tmp/delta_copia.txt "^  terminal \$"             "copiar: sem o titulo decorado da caixa"
+expect /tmp/delta_copia.log "  /help                              Mostra os comandos e atalhos" "copiar: linha longa nao chega quebrada"
 
 echo
 echo "[3b] fila enquanto o agente trabalha (replay)"
@@ -279,7 +291,9 @@ printf 'antes
 if grep -q "antes" build/undo-test.txt; then pass "undo: restaura o conteúdo anterior"; else fail "undo nao restaurou"; fi
 rm -f build/undo-test.txt
 
-printf 'size 100 20
+# tela alta: o dump mostra o fim do transcript e o aviso do /forlimit precisa
+# continuar visivel depois dos blocos do /status
+printf 'size 100 30
 type /forlimit 3
 key enter
 type /status
@@ -291,7 +305,7 @@ type /status
 key enter
 dump b
 ' > /tmp/delta_fl.txt
-./bin/delta.exe --replay /tmp/delta_fl.txt 100 20 > /tmp/delta_fl.log 2>&1
+./bin/delta.exe --replay /tmp/delta_fl.txt 100 30 > /tmp/delta_fl.log 2>&1
 expect /tmp/delta_fl.log "teto de ferramentas por turno: 3" "/forlimit liga com teto"
 expect /tmp/delta_fl.log "teto de ferramentas por turno: desligado" "/forlimit desliga no segundo uso"
 
@@ -445,7 +459,7 @@ echo
 echo "[7] menu de comandos (digitar /)"
 ./bin/delta.exe --replay tests/replay-menu.txt 100 30 > /tmp/delta_menu.log 2>&1
 expect /tmp/delta_menu.log "→ help"   "marcador -> no item selecionado"
-expect /tmp/delta_menu.log "(1/22)"            "contador de itens"
+expect /tmp/delta_menu.log "(1/23)"            "contador de itens"
 expect /tmp/delta_menu.log "/models "         "Tab completa o comando"
 expect /tmp/delta_menu.log "Todos os modelos"    "descricao do comando aparece"
 
@@ -846,7 +860,9 @@ printf 'type /skills
 key enter
 dump skills
 ' > "$AR/sk.txt"
-./bin/delta.exe --replay "$AR/sk.txt" 100 20 > "$AR/skui.log" 2>&1
+# tela alta o bastante para a lista inteira caber: com muitas skills globais
+# instaladas (/help, ~/.agents/skills) o dump de 20 linhas mostrava so' o fim
+./bin/delta.exe --replay "$AR/sk.txt" 100 60 > "$AR/skui.log" 2>&1
 expect "$AR/skui.log" "teste-prompt"        "/skills lista a skill"
 rm -f build/mock-last-request.json
 ./bin/delta.exe -p "oi" --provider openai --model gpt-4o     --baseurl "http://127.0.0.1:$PORT/v1" --api-key sk-teste > /dev/null 2>&1
@@ -889,6 +905,17 @@ if ./bin/delta.exe --tools | grep -q "^eco-ar "; then fail "extensions: disable 
 if grep -q '"name":"eco-ar".*"enabled":false\|"enabled":false[^}]*"name":"eco-ar"' "$EXTF" 2>/dev/null || grep -q '"enabled":false' "$EXTF"; then pass "extensions: estado persistido"; else fail "extensions: estado nao persistido"; fi
 ./bin/delta.exe --tool extensions '{"op":"enable","name":"eco-ar"}' > /dev/null 2>&1
 if ./bin/delta.exe --tools | grep -q "^eco-ar "; then pass "extensions: enable religou"; else fail "extensions: enable falhou"; fi
+
+# tool criada em runtime tem que valer NO MESMO processo (regressao: a tabela
+# de tools era cacheada no boot e a tool nova so' aparecia depois de reiniciar)
+cat > "$AR/extlive.txt" <<'EOF'
+extensions {"op":"add","kind":"tool","name":"eco-live","arg":"echo","desc":"teste live","schema":"{\"type\":\"object\",\"properties\":{\"x\":{\"type\":\"string\"}}}"}
+eco-live {"x":"1"}
+extensions {"op":"remove","name":"eco-live"}
+EOF
+./bin/delta.exe --tool-script "$AR/extlive.txt" > "$AR/extlive.log" 2>&1
+expect "$AR/extlive.log" '"x":"1"'  "extensions: tool criada em runtime roda no mesmo processo"
+reject "$AR/extlive.log" "desconhecida"  "extensions: tool nova achada por tool_find"
 
 # painel /extensions (abre e liga/desliga)
 printf 'type /extensions
@@ -1031,6 +1058,78 @@ if grep -q "Delta Store" "$AR/spa2.log"; then fail "data: filtro nao filtrou"; e
 expect "$AR/spa3.log" "/api/itens?page=2"  "data: endpoint no JS"
 [ -f "$AR/site.pid" ] && kill "$(cat "$AR/site.pid")" 2>/dev/null
 [ -f "$AR/http.pid" ] && kill "$(cat "$AR/http.pid")" 2>/dev/null
+
+echo
+echo "[19] delta update (release falso no GitHub)"
+UPD="$AR/upd"
+rm -rf "$UPD"
+mkdir -p "$UPD"
+# versao do binario que os testes vao atualizar (o "ja' atualizado" usa ela)
+CURVER=$(./bin/delta.exe --version 2>/dev/null | awk '{print $3}')
+[ -n "$CURVER" ] || { fail "update: nao consegui ler a versao atual"; CURVER=0.1.0; }
+# binario "novo" falso: PE de mentira, maior que o minimo aceito
+python - "$UPD/novo.bin" <<'PYEOF'
+import sys
+dados = b"MZ" + b"\x90" * 1024 + b"delta-atualizado-v99.9.9\n" + b"\x90" * 40000
+open(sys.argv[1], "wb").write(dados)
+PYEOF
+(python tests/update_fake.py $((PORT + 7)) v99.9.9 Delta.exe "$UPD/novo.bin" > /dev/null 2>&1 &
+ echo $! > "$UPD/upd.pid")
+(python tests/update_fake.py $((PORT + 8)) "v$CURVER" Delta.exe "$UPD/novo.bin" > /dev/null 2>&1 &
+ echo $! > "$UPD/atual.pid")
+sleep 2
+cp bin/delta.exe "$UPD/Delta.exe"
+rm -rf "$UPD/core" "$UPD/core2"
+UPD9="http://127.0.0.1:$((PORT + 7))/latest"
+UPD1="http://127.0.0.1:$((PORT + 8))/latest"
+UPDATE_ON="DELTA_NO_UPDATE_CHECK=0"
+
+# a) aviso na inicializacao (mesmo caminho do boot da TUI)
+printf 'update-check\ndump aviso\n' > "$UPD/aviso.txt"
+env $UPDATE_ON DELTA_UPDATE_URL="$UPD9" DELTA_CORE="$UPD/core" \
+    ./bin/delta.exe --replay "$UPD/aviso.txt" 100 30 > "$UPD/aviso.log" 2>&1
+expect "$UPD/aviso.log" "99.9.9"                 "update: aviso de versao nova na inicializacao"
+expect "$UPD/aviso.log" "use /update"            "update: aviso ensina o comando"
+
+# b) o cache de 24 h evita nova consulta: com a URL quebrada o aviso continua
+env $UPDATE_ON DELTA_UPDATE_URL="http://127.0.0.1:1/latest" DELTA_CORE="$UPD/core" \
+    ./bin/delta.exe --replay "$UPD/aviso.txt" 100 30 > "$UPD/aviso2.log" 2>&1
+expect "$UPD/aviso2.log" "99.9.9"                 "update: cache dispensa a rede"
+
+# c) --check nao troca nada
+cp "$UPD/Delta.exe" "$UPD/Delta.exe.old"          # sobra de outra tentativa
+DELTA_UPDATE_URL="$UPD9" DELTA_CORE="$UPD/core" \
+    "$UPD/Delta.exe" update --check > "$UPD/check.log" 2>&1
+expect "$UPD/check.log" "99.9.9"                  "update --check: mostra a versao nova"
+if [ -f "$UPD/Delta.exe.old" ]; then fail "update: nao limpou o .old"; else pass "update: limpa o .old no inicio"; fi
+if cmp -s "$UPD/Delta.exe" bin/delta.exe; then pass "update --check: nao trocou o binario"; else fail "update --check trocou o binario"; fi
+
+# d) delta update troca o executavel em uso
+DELTA_UPDATE_URL="$UPD9" DELTA_CORE="$UPD/core" \
+    "$UPD/Delta.exe" update > "$UPD/upd.log" 2>&1
+expect "$UPD/upd.log" "atualizado para 99.9.9"    "update: instala a versao nova"
+expect "$UPD/upd.log" "reinicie"                 "update: avisa para reiniciar"
+if cmp -s "$UPD/Delta.exe" bin/delta.exe; then fail "update: binario nao foi trocado"; else pass "update: binario trocado"; fi
+if [ "$(stat -c%s "$UPD/Delta.exe" 2>/dev/null)" = "$(stat -c%s "$UPD/novo.bin" 2>/dev/null)" ]; then
+    pass "update: conteudo do release no lugar"
+else fail "update: tamanho diferente do release"; fi
+
+# e) ja' atualizado
+DELTA_UPDATE_URL="$UPD1" DELTA_CORE="$UPD/core2" \
+    ./bin/delta.exe update > "$UPD/atual.log" 2>&1
+expect "$UPD/atual.log" "versao mais nova"        "update: reconhece que ja esta atualizado"
+
+# f) sem binario para a plataforma (release so' com codigo-fonte)
+(python tests/update_fake.py $((PORT + 9)) v99.9.9 Delta-macos-source.zip "$UPD/novo.bin" > /dev/null 2>&1 &
+ echo $! > "$UPD/mac.pid")
+sleep 2
+rm -rf "$UPD/core3"
+DELTA_UPDATE_URL="http://127.0.0.1:$((PORT + 9))/latest" DELTA_CORE="$UPD/core3" \
+    ./bin/delta.exe update > "$UPD/mac.log" 2>&1
+expect "$UPD/mac.log" "nao publica binario"      "update: avisa quando nao ha binario"
+
+kill "$(cat "$UPD/upd.pid")" "$(cat "$UPD/atual.pid")" "$(cat "$UPD/mac.pid")" 2>/dev/null
+wait "$(cat "$UPD/upd.pid")" 2>/dev/null
 
 [ -f "$ROOT/build/cfg-global.bak" ] && cp "$ROOT/build/cfg-global.bak" "$CFG_GLOBAL" 2>/dev/null
 # as chaves do usuario voltam como estavam (os testes usam chaves falsas)

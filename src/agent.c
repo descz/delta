@@ -37,6 +37,7 @@ int config_load(Config *c, char *note, size_t note_len)
     memset(c, 0, sizeof(*c));
     c->max_tokens = 8192;
     c->temperature = 0;
+    c->check_updates = 1;
     c->thinking_level = str_dup("off");
 
     char *path = config_path();
@@ -55,6 +56,7 @@ int config_load(Config *c, char *note, size_t note_len)
             if ((s = json_str(json_get(v, "language")))[0]) c->language = str_dup(s);
             if ((s = json_str(json_get(v, "projectDir")))[0]) c->project_dir = str_dup(s);
             if ((s = json_str(json_get(v, "thinkingLevel")))[0]) { free(c->thinking_level); c->thinking_level = str_dup(s); }
+            if (json_get(v, "updateCheck")) c->check_updates = json_bool(json_get(v, "updateCheck"), 1);
             JValue *hv = json_get(v, "headers");
             if (hv && hv->kind == J_OBJ && hv->count > 0) {
                 Str h; str_init(&h);
@@ -104,6 +106,12 @@ int config_load(Config *c, char *note, size_t note_len)
     }
     if (!c->base_url) c->base_url = str_dup(default_base(c->provider));
 
+    {
+        char *sem = env_get("DELTA_NO_UPDATE_CHECK");
+        if (sem && *sem && !str_eq(sem, "0")) c->check_updates = 0;
+        free(sem);
+    }
+
     /* migra a chave antiga do config.json (nunca a do ambiente) para o auth.json */
     if (chave_do_arquivo && c->api_key && c->provider && !auth_has_key(c->provider))
         auth_set_key(c->provider, c->api_key);
@@ -136,6 +144,8 @@ int config_save(const Config *c)
                       strlen(c->thinking_level ? c->thinking_level : "off"));
     str_adds(&o, ",\n  \"maxTokens\": ");
     str_addf(&o, "%d", c->max_tokens);
+    str_adds(&o, ",\n  \"updateCheck\": ");
+    str_adds(&o, c->check_updates ? "true" : "false");
     if (c->headers && *c->headers) {
         str_adds(&o, ",\n  \"headers\": ");
         str_adds(&o, c->headers);
@@ -691,7 +701,17 @@ void agent_set_cwd(Agent *a, const char *cwd)
     if (!a || !cwd || !*cwd) return;
     free(a->cwd);
     a->cwd = str_dup(cwd);
+    agent_rebuild_prompt(a);
+}
+
+/* A lista de tools (e o indice de skills) entra no prompt; quando uma
+   extensao e' criada/ligada no meio da sessao, o prompt precisa ser
+   remontado para o modelo ver a ferramenta nova. */
+void agent_rebuild_prompt(Agent *a)
+{
+    if (!a) return;
     free(a->system_prompt);
+    a->system_prompt = NULL;
     build_system_prompt(a);
 }
 

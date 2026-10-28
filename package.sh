@@ -24,6 +24,8 @@ if [ "$BUILD" = "1" ]; then
 fi
 
 [ -x bin/delta ] || { echo "erro: bin/delta nao existe (rode ./build.sh)"; exit 1; }
+VER="$(./bin/delta --version 2>/dev/null | awk '{print $3}')"
+[ -n "$VER" ] || VER="0.0.0"
 mkdir -p dist
 
 README_TXT='Delta Agent
@@ -106,7 +108,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 osascript -e "tell application \"Terminal\" to do script \"'$HERE/delta-bin'\"" -e 'tell application "Terminal" to activate'
 LAUNCH
     chmod 755 "$APP/Contents/MacOS/Delta"
-    cat > "$APP/Contents/Info.plist" <<'PLIST'
+    cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -116,7 +118,7 @@ LAUNCH
   <key>CFBundleIdentifier</key><string>dev.delta.agent</string>
   <key>CFBundleExecutable</key><string>Delta</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0.0</string>
+  <key>CFBundleShortVersionString</key><string>$VER</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
 </dict>
 </plist>

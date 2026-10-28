@@ -71,8 +71,16 @@ int provider_run(const Provider *p, const MsgList *msgs, const char *system_prom
    e' abandonado e provider_run volta 0 com err "interrompido". */
 extern int provider_stream_abort;
 
+/* Chamado pela leitura do stream quando nao ha' byte novo (a cada ~100 ms).
+   Serve para a TUI animar o spinner e continuar lendo o teclado enquanto o
+   provedor "pensa" — antes a tela ficava congelada ate' o primeiro token. */
+void provider_set_wait_tick(void (*fn)(void *), void *ud);
+
 /* GET simples (usado para baixar o catalogo models.dev). */
 int http_get_text(const char *url, Str *out, Str *err);
+/* Igual, mas com teto de tempo (segundos) e seguindo redirecionamento
+   (GitHub manda o asset para outro host). */
+int http_get_text_to(const char *url, Str *out, Str *err, int timeout_sec);
 
 /* Monta o array de tools no formato do provedor. */
 void provider_tools_json(const char *provider, Str *out);

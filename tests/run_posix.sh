@@ -4,6 +4,9 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 ROOT="$(pwd)"
+# consulta de versao nova no boot: desligada na suite (a secao [12] religa
+# apontando para um release falso)
+export DELTA_NO_UPDATE_CHECK=1
 AR="$ROOT/.posix-tests"
 rm -rf "$AR"
 mkdir -p "$AR"
@@ -67,6 +70,14 @@ expect "$AR/term.log" "ola do delta" "comando roda e mostra a saida"
 expect "$AR/term.log" "saiu com 0"   "codigo de saida"
 
 echo
+echo "[3c2] copiar mensagem (bloco inteiro, sem moldura)"
+$BIN --replay tests/replay-copia.txt 56 24 > "$AR/copia.log" 2>&1
+sed -n '/--- copiado ---/,/--- fim ---/p' "$AR/copia.log" > "$AR/copia.txt"
+expect "$AR/copia.txt" "terminal echo alpha beta" "texto do bloco vai inteiro"
+reject "$AR/copia.txt" "│"                        "sem moldura de caixa"
+expect "$AR/copia.log" "  /help                              Mostra os comandos e atalhos" "linha longa nao chega quebrada"
+
+echo
 echo "[3d] /projects + ~/.deltaCore"
 mkdir -p build/proj-teste
 $BIN --replay tests/replay-projects.txt 100 24 > "$AR/proj.log" 2>&1
@@ -111,7 +122,7 @@ for _ in $(seq 1 40); do
 done
 if [ -n "$WIKI_PORT" ]; then
     pass "servidor subiu"
-    if curl -s "http://127.0.0.1:$WIKI_PORT/wiki" | grep -q "O que é o Delta"; then
+    if curl -s "http://127.0.0.1:$WIKI_PORT/wiki" | grep -q "What Delta is"; then
         pass "documentacao servida em /wiki"
     else fail "documentacao nao veio"; fi
     curl -s -X POST "http://127.0.0.1:$WIKI_PORT/api/quit" > /dev/null 2>&1
@@ -164,6 +175,38 @@ echo
 echo "[11] redimensionamento"
 $BIN --replay tests/replay-resize.txt 80 24 > "$AR/size.log" 2>&1
 expect "$AR/size.log" "chave de API" "transcript remontado na largura nova"
+
+echo
+echo "[12] delta update (release falso: .tar.gz)"
+UPD="$AR/upd"
+rm -rf "$UPD"
+mkdir -p "$UPD/pkg/delta-linux-x86_64"
+printf '#!/bin/sh\necho delta-novo-v99.9.9\n' > "$UPD/pkg/delta-linux-x86_64/delta"
+chmod +x "$UPD/pkg/delta-linux-x86_64/delta"
+# o pacote tem que passar do tamanho minimo: dados aleatorios (nao comprimem)
+head -c 60000 /dev/urandom > "$UPD/pkg/delta-linux-x86_64/pad"
+( cd "$UPD/pkg" && tar -czf "$UPD/pkg.tar.gz" delta-linux-x86_64 )
+cp "$BIN" "$UPD/delta"
+if [ -n "$PY" ]; then
+    ( $PY tests/update_fake.py $((PORT + 7)) v99.9.9 delta-linux-x86_64.tar.gz "$UPD/pkg.tar.gz" > /dev/null 2>&1 &
+      echo $! > "$UPD/upd.pid" )
+    sleep 2
+    DELTA_NO_UPDATE_CHECK=0 DELTA_UPDATE_URL="http://127.0.0.1:$((PORT + 7))/latest" DELTA_CORE="$UPD/core" \
+        "$UPD/delta" update > "$UPD/upd.log" 2>&1
+    expect "$UPD/upd.log" "atualizado para 99.9.9" "update: instala a versao nova"
+    if [ -x "$UPD/delta" ] && "$UPD/delta" 2>/dev/null | grep -q "delta-novo-v99.9.9"; then
+        pass "update: binario trocado e executavel"
+    else fail "update: binario nao trocado"; fi
+    # aviso na inicializacao (cache vazio)
+    rm -rf "$UPD/core2"
+    printf 'update-check\ndump aviso\n' > "$UPD/aviso.txt"
+    DELTA_NO_UPDATE_CHECK=0 DELTA_UPDATE_URL="http://127.0.0.1:$((PORT + 7))/latest" DELTA_CORE="$UPD/core2" \
+        "$BIN" --replay "$UPD/aviso.txt" 100 30 > "$UPD/aviso.log" 2>&1
+    expect "$UPD/aviso.log" "99.9.9" "update: aviso de versao nova na inicializacao"
+    kill "$(cat "$UPD/upd.pid")" 2>/dev/null
+else
+    echo "  (sem python: pulando o release falso)"
+fi
 
 # devolve config/auth/memoria do usuario
 [ -f "$AR/cfg.bak" ] && cp "$AR/cfg.bak" "$CFG" 2>/dev/null

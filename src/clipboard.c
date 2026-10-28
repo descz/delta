@@ -133,21 +133,40 @@ static char *wide_to_utf8(const WCHAR *w)
 
 int clipboard_available(void) { return 1; }
 
+/* Copia texto UTF-8 para o clipboard.
+ *  - normaliza para CRLF (Notepad e afins mostram tudo numa linha com LF);
+ *  - OpenClipboard pode falhar se outro processo estiver com o clipboard
+ *    aberto (acontece o tempo todo no Windows): tenta por ~300 ms.
+ *  - em caso de sucesso a memoria pertence ao clipboard (nao liberar). */
 int clipboard_write_text(const char *utf8)
 {
     if (!utf8) return 0;
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, NULL, 0);
-    if (wlen <= 0) return 0;
-    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)wlen * sizeof(WCHAR));
-    if (!h) return 0;
+
+    Str norm; str_init(&norm);
+    for (const char *p = utf8; *p; p++) {
+        if (*p == '\n' && (p == utf8 || p[-1] != '\r')) str_addc(&norm, '\r');
+        str_addc(&norm, *p);
+    }
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, norm.data, (int)norm.len, NULL, 0);
+    if (wlen == 0 && norm.len > 0) { str_free(&norm); return 0; }
+
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, ((SIZE_T)wlen + 1) * sizeof(WCHAR));
+    if (!h) { str_free(&norm); return 0; }
     WCHAR *w = (WCHAR *)GlobalLock(h);
-    if (!w) { GlobalFree(h); return 0; }
-    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, w, wlen);
+    if (!w) { GlobalFree(h); str_free(&norm); return 0; }
+    if (wlen > 0) MultiByteToWideChar(CP_UTF8, 0, norm.data, (int)norm.len, w, wlen);
+    w[wlen] = 0;
     GlobalUnlock(h);
-    if (!OpenClipboard(NULL)) { GlobalFree(h); return 0; }
-    EmptyClipboard();
-    int ok = SetClipboardData(CF_UNICODETEXT, h) != NULL;
-    CloseClipboard();
+    str_free(&norm);
+
+    int ok = 0;
+    for (int tentativa = 0; tentativa < 20; tentativa++) {
+        if (!OpenClipboard(NULL)) { msleep(15); continue; }
+        EmptyClipboard();
+        ok = SetClipboardData(CF_UNICODETEXT, h) != NULL;
+        CloseClipboard();
+        break;
+    }
     if (!ok) GlobalFree(h);
     return ok;
 }
@@ -363,12 +382,41 @@ int clipboard_read(Clip *c, const char *dir)
     return 0;
 }
 #else
-int clipboard_available(void) { return 0; }
+#include <signal.h>
+
+/* POSIX nao tem API comum de clipboard: usa o primeiro utilitario que
+   existir (mesma ideia do curl no provider — sem dependencia de build). */
+static int pipe_write_cmd(const char *cmd, const char *data, size_t len)
+{
+    /* se o utilitario nao existir, o sh sai antes da escrita e o pipe quebra:
+       sem ignorar SIGPIPE o processo morreria em /copy */
+    void (*sig_antigo)(int) = signal(SIGPIPE, SIG_IGN);
+
+    int ok = 0;
+    FILE *f = popen(cmd, "w");
+    if (f) {
+        size_t w = len ? fwrite(data, 1, len, f) : 0;
+        if (w == len && fflush(f) == 0) ok = pclose(f) == 0;
+        else pclose(f);
+    }
+
+    signal(SIGPIPE, sig_antigo);
+    return ok;
+}
+
+int clipboard_available(void) { return 1; }
+
 int clipboard_write_text(const char *utf8)
 {
-    (void)utf8;
+    if (!utf8) return 0;
+    size_t len = strlen(utf8);
+    if (pipe_write_cmd("wl-copy 2>/dev/null", utf8, len)) return 1;
+    if (pipe_write_cmd("xclip -selection clipboard 2>/dev/null", utf8, len)) return 1;
+    if (pipe_write_cmd("xsel --clipboard --input 2>/dev/null", utf8, len)) return 1;
+    if (pipe_write_cmd("pbcopy 2>/dev/null", utf8, len)) return 1;
     return 0;
 }
+
 int clipboard_read(Clip *c, const char *dir)
 {
     (void)dir;

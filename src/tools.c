@@ -961,6 +961,17 @@ static const Tool TOOLS[] = {
 static Tool g_todas[80];
 static int  g_todas_prontas = 0;
 
+/* Invalida o cache: a proxima chamada a tools_all() remonta a tabela.
+   Necessario quando extensions.c cria/remove/liga uma tool dinamica — antes
+   a tabela era montada uma vez no boot e a tool nova nunca chegava ao
+   modelo (e, pior, ext_reload() liberava as strings que ela referenciava). */
+void tools_invalidate(void)
+{
+    if (!g_todas_prontas) return;
+    memset(g_todas, 0, sizeof g_todas);
+    g_todas_prontas = 0;
+}
+
 const Tool *tools_all(void)
 {
     if (!g_todas_prontas) {

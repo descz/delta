@@ -1,0 +1,14 @@
+# Copiar mensagens: bloco inteiro tem que sair sem moldura de caixa e sem
+# as quebras de linha do wrap visual (o texto vem do bloco, nao da grade).
+size 56 24
+type /terminal echo alpha beta
+key enter
+dump terminal
+select-block 0
+copy-text
+
+# bloco longo: a linha de 56+ colunas tem que chegar inteira no clipboard
+type /help
+key enter
+select-block -1
+copy-text

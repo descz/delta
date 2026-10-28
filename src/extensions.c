@@ -285,6 +285,9 @@ void ext_reload(void)
     }
     g_ext_n = 0;
     g_ext_prontas = 0;
+    /* a tabela unificada de tools.c guarda copias destes ponteiros: se nao
+       for descartada, a tool nova fica invisivel e a antiga vira dangling. */
+    tools_invalidate();
 }
 
 /* --- tool "extensions" --- */

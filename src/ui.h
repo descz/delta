@@ -89,7 +89,8 @@ int ui_tool_box(Screen *s, int y, int width, const Theme *t, int state,
 /* Quantas linhas visiveis um texto ocupa no editor (quebra automatica). */
 int ui_input_rows(const char *text, size_t len, int width);
 
-/* Barra de status embutida na borda do editor. */
+/* Barra de status embutida na borda do editor.
+ * spin_frame < 0 desenha o rotulo sem spinner (aviso passageiro). */
 int ui_editor(Screen *s, int y, int width, const Theme *t,
               const char *text, size_t text_len, size_t cursor,
               int working, const char *work_msg, int spin_frame, int bash_mode,

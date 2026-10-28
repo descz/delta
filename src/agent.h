@@ -17,6 +17,7 @@ typedef struct {
     char  *thinking_level;
     char  *headers;       /* JSON com cabecalhos HTTP extras por provedor */
     int    supports_image; /* o modelo atual aceita imagem */
+    int    check_updates;  /* 1 = procura versao nova no boot (config: updateCheck) */
     char  *project_dir;   /* pasta do projeto escolhida com /projects */
 } Config;
 
@@ -59,6 +60,8 @@ void agent_set_tool_limit(int n);
 int  agent_tool_limit(void);
 /* Troca a pasta de trabalho e remonta o prompt de sistema (usado no /projects). */
 void agent_set_cwd(Agent *a, const char *cwd);
+/* Remonta o prompt de sistema (lista de tools/skills pode ter mudado). */
+void agent_rebuild_prompt(Agent *a);
 void agent_free(Agent *a);
 /* Executa um turno completo (com tool calls). 1 = ok. */
 int  agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err);
