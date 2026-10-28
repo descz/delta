@@ -3996,7 +3996,7 @@ int main(int argc, char **argv)
             const char *tjson = argv[++i];
             return run_tool_cli(tnome, tjson, opt_cwd);
         } else if (str_eq(a, "--setup")) {
-            return setup_wizard();
+            return setup_run();          /* popup HTML; sem navegador, tela nativa */
         } else if (str_eq(a, "--install") && i + 1 < argc) {
             return setup_install_cli(argv[++i]);
         } else if (str_eq(a, "--version") || str_eq(a, "-v")) {
@@ -4030,7 +4030,7 @@ int main(int argc, char **argv)
     /* duplo clique no .exe (sem argumentos, console so com ele): tela nativa
        do instalador. Rode `delta --setup` a qualquer momento para reabrir. */
     if (argc == 1 && started_from_explorer())
-        return setup_wizard();
+        return setup_run();
 
     char note[256] = { 0 };
     delta_bootstrap();                 /* ~/.deltaCore: skills, mcps, system, ... */

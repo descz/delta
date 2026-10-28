@@ -160,28 +160,46 @@ case "$OUT" in
     *)                  fail "nao verificou o binario instalado" ;;
 esac
 
-# tela nativa (sem servidor HTTP, sem navegador). Sem TTY ela nao abre a
-# tela: imprime as alternativas de CLI e sai.
-OUT2=$(./bin/delta.exe --setup 2>&1)
-case "$OUT2" in
-    *"delta --install"*) pass "--setup sem tty aponta o caminho de CLI" ;;
-    *)                   fail "--setup sem tty nao orientou ($OUT2)" ;;
-esac
-case "$OUT2" in
-    *127.0.0.1*) fail "--setup ainda sobe servidor HTTP" ;;
-    *)           pass "instalador nao abre servidor HTTP" ;;
-esac
-# delta wiki: so' o endereco (documentacao vive no site)
-OUT3=$(./bin/delta.exe wiki 2>&1)
-case "$OUT3" in
-    *"descz.github.io/delta"*) pass "delta wiki mostra o endereco da documentacao" ;;
-    *)                         fail "delta wiki nao mostrou o endereco ($OUT3)" ;;
-esac
-if pgrep -f "delta.exe --setup" >/dev/null 2>&1; then
-    fail "processo do instalador ficou rodando"
+# janela HTML do instalador: servidor loopback com token, pagina, logo e APIs.
+# (DELTA_SETUP_NOBROWSER=1 serve sem abrir janela — e' o que a suite usa)
+rm -rf build/inst-popup build/iso
+mkdir -p build/iso
+cp bin/delta.exe build/iso/Delta.exe
+(DELTA_SETUP_NOBROWSER=1 ./bin/delta.exe --setup > /tmp/delta_setup.log 2>&1 &
+ echo $! > build/iso/setup.pid)
+URL=""
+for _ in $(seq 1 40); do
+    URL=$(grep -o "http://127.0.0.1:[0-9]*/i/[a-f0-9]*/" /tmp/delta_setup.log 2>/dev/null | head -1)
+    [ -n "$URL" ] && break
+    sleep 0.25
+done
+if [ -n "$URL" ]; then
+    pass "instalador subiu o servidor local"
+    BASE="${URL%/}"
+    SETUP_PORT="${URL#http://127.0.0.1:}"; SETUP_PORT="${SETUP_PORT%%/*}"
+    # sem o token nada e' servido (nem a pagina, nem a API)
+    curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$SETUP_PORT/" > /tmp/delta_sem_token.txt 2>&1
+    expect /tmp/delta_sem_token.txt "403" "sem token: 403 (ninguem instala por engano)"
+    curl -s "$BASE/" > /tmp/delta_page.html 2>&1
+    expect /tmp/delta_page.html "Delta Agent" "pagina HTML servida"
+    curl -s "$BASE/api/state" > /tmp/delta_state.json 2>&1
+    expect /tmp/delta_state.json '"os"' "api/state responde"
+    CURLOGO=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/logo.png")
+    if [ "$CURLOGO" = "200" ]; then pass "logo embutida servida"; else fail "logo nao servida"; fi
+    curl -s -X POST -d '{"dir":"build/inst-popup"}' "$BASE/api/install" > /tmp/delta_inst.json 2>&1
+    expect /tmp/delta_inst.json '"ok":true' "api/install instala pela janela"
+    if [ -d build/inst-popup/skills ] && [ -d build/inst-popup/sessions ]; then
+        pass "arvore de dados criada na pasta escolhida (pela janela)"
+    else
+        fail "instalacao pela janela nao criou a arvore"
+    fi
+    curl -s -X POST "$BASE/api/quit" > /dev/null 2>&1
+    sleep 1
+    if grep -q "127.0.0.1" /tmp/delta_setup.log; then pass "servidor encerrou ao fechar"; fi
 else
-    pass "nada fica rodando em segundo plano"
+    fail "servidor do instalador nao subiu"
 fi
+rm -rf build/inst-popup build/iso
 rm -rf build/inst-cli build/inst-http build/iso
 
 echo

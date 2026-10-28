@@ -41,7 +41,7 @@ página do instalador e `LEIA-ME` estão em **inglês** por decisão do dono.
 | `codegraph.c` | grafo do projeto: varre o código uma vez, guarda arquivos/hash/símbolos/imports em `<core>/graphs/<slug>.graph` |
 | `tools.c` | ferramentas base: read/write/edit/bash/ls/grep/glob/diff + `graph` + `undo` |
 | `tools_ext.c` | famílias unificadas: `fs shell git web memory code assert agent extend skills mcp` |
-| `setup.c` | instalador: **tela nativa no terminal** (seletor de pasta do sistema, PATH, atalhos, pin) + `--install` sem interface. Sem servidor HTTP e sem navegador. |
+| `setup.c` | instalador: **janela HTML** (Edge/Chrome em modo app) servida por um servidor loopback com token (`/i/<token>/`), seletor de pasta do sistema, PATH, atalhos, pin; fallback em tela nativa do terminal; `--install` sem interface |
 | `update.c` | `delta update` / `/update`: consulta o release no GitHub, baixa o binário da plataforma e troca o executável em execução |
 | `ui.c` | grade de células, markdown, componentes, editor |
 | `term.c` | terminal: Win32 (ReadConsoleInput) / POSIX (termios) |
@@ -151,9 +151,13 @@ mesmo aviso de versão nova do boot da TUI).
     memória/lista/mensagem escopadas, não download menor. Como o filtro apaga o resto do catálogo em
     memória, `/login` e `/logout` recarregam a lista completa do cache (`catalog_filtrado`).
     Nos testes, `DELTA_NO_CATALOG_REFRESH=1` usa o cache (sem rede). `/model` é alias silencioso.
-19. **Instalador é tela nativa.** Não volte a subir servidor/página: `installer_html.h`, o
-    `tools/embed-installer.py` e o `delta wiki` (servidor) foram removidos. `delta wiki` só imprime
-    a URL do site (`docs/`, GitHub Pages). O logo embutido (`asset_logo.h`) não é mais servido.
+19. **Instalador = janela HTML.** A página (`installer/installer.html` → `src/installer_html.h` com
+    `make html`) é servida em `127.0.0.1/<porta>/i/<token>/` — **sem o token, 403**; a janela abre em
+    modo app (`msedge --app=`, `chrome --app=`), o que dá cara de popup. A página manda `api/ping` a
+    cada 2 s: fechou a janela, o servidor sai (15 s sem ping; 60 s se a página nunca carregou).
+    `DELTA_SETUP_NOBROWSER=1` serve sem abrir janela (usado nos testes). Sem navegador Chromium cai
+    no navegador padrão e, sem nenhum, na tela nativa (`setup_wizard`). `delta wiki` só imprime a URL
+    do site. Não remova o token: era o que impedia qualquer processo local de chamar `/api/install`.
 20. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
     plataforma: `Delta.exe` (Windows) e `delta-linux-x86_64.tar.gz` (Linux, com o binário `delta`
     na raiz ou um nível abaixo). Renomear o asset quebra o `delta update` sem quebrar o instalador.

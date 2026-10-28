@@ -7,6 +7,7 @@
  */
 #include "setup.h"
 #include "util.h"
+#include "installer_html.h"
 #include "json.h"
 #include "tools.h"
 #include "asset_logo.h"
@@ -31,6 +32,7 @@
 #else
 #  include <unistd.h>
 #  include <sys/socket.h>
+#  include <sys/select.h>
 #  include <netinet/in.h>
 #  include <arpa/inet.h>
 #  include <sys/stat.h>
@@ -38,7 +40,7 @@
 #endif
 
 #ifndef DELTA_VERSION
-#  define DELTA_VERSION "0.1.6"
+#  define DELTA_VERSION "0.1.7"
 #endif
 
 /* ================================================================== */
@@ -525,17 +527,377 @@ static char *pick_folder(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Tela nativa do instalador (sem servidor HTTP, sem navegador)        */
+/* Instalador: pagina HTML numa janela (popup) + servidor local        */
 /* ------------------------------------------------------------------ */
-/* Roda quando o exe e' aberto com duplo clique ou com --setup. Mostra a
-   pasta de dados detectada, a versao e duas acoes: instalar (escolhendo a
-   pasta no seletor nativo do sistema) e atualizar. Tudo dentro do terminal;
-   nao sobe socket, nao abre pagina. */
+/* A pagina e' servida em 127.0.0.1/<porta>/i/<token>/ — o token aleatorio
+   impede que outro processo local (ou uma aba qualquer) chame /api/install.
+   A janela e' aberta em modo "app" (Edge/Chrome), o que da' cara de popup:
+   sem abas, sem barra de endereco. Sem navegador Chromium, cai no navegador
+   padrao; sem navegador nenhum, cai na tela nativa do terminal. */
 
-#define WIZ_ITENS 3
+static int g_stop = 0;
+static int g_srv = -1;
+static char g_token[40];
+static uint64_t g_ultimo_ping = 0;
+static int g_teve_ping = 0;
 
-/* add_step guarda os passos em JSON com <b>...</b> (heranca da pagina HTML).
-   Aqui viram texto de terminal: sem tags, com marcador. */
+#ifdef _WIN32
+typedef SOCKET sock_t;
+typedef int sock_len_t;
+#  define SOCK_INVALID INVALID_SOCKET
+#  define sock_close closesocket
+#  define pid_local() ((uint64_t)GetCurrentProcessId())
+#else
+typedef int sock_t;
+typedef socklen_t sock_len_t;
+#  define SOCK_INVALID (-1)
+#  define sock_close close
+#  define pid_local() ((uint64_t)getpid())
+#endif
+
+static void token_gera(void)
+{
+    static const char hex[] = "0123456789abcdef";
+    uint64_t s = now_ms() ^ (pid_local() << 17) ^ 0x9E3779B97F4A7C15ULL;
+    for (int i = 0; i < 24; i++) {
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        g_token[i] = hex[(int)(s & 0xF)];
+    }
+    g_token[24] = 0;
+}
+
+/* Abre a URL numa janela sem abas (Edge/Chrome em modo app). 0 = nao achou. */
+static int url_open_popup(const char *url)
+{
+#ifdef _WIN32
+    static const char *const exes[] = {
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+        NULL
+    };
+    for (int i = 0; exes[i]; i++) {
+        if (!file_exists(exes[i])) continue;
+        Str args; str_init(&args);
+        str_addf(&args, "--app=%s --window-size=1000,760", url);
+        HINSTANCE r = ShellExecuteA(NULL, "open", exes[i], args.data, NULL, SW_SHOWNORMAL);
+        str_free(&args);
+        if ((INT_PTR)r > 32) return 1;
+    }
+    return 0;
+#else
+    static const char *const bins[] = {
+        "microsoft-edge", "google-chrome", "chromium", "chromium-browser", "brave-browser", NULL
+    };
+    for (int i = 0; bins[i]; i++) {
+        Str cmd; str_init(&cmd);
+        str_addf(&cmd, "command -v %s >/dev/null 2>&1", bins[i]);
+        int tem = system(cmd.data) == 0;
+        str_free(&cmd);
+        if (!tem) continue;
+        Str run; str_init(&run);
+        str_addf(&run, "%s --app='%s' --window-size=1000,760 >/dev/null 2>&1 &", bins[i], url);
+        system(run.data);
+        str_free(&run);
+        return 1;
+    }
+    return 0;
+#endif
+}
+
+static void http_send(sock_t fd, const char *status, const char *ctype,
+                      const char *body, size_t len)
+{
+    Str o; str_init(&o);
+    str_addf(&o, "HTTP/1.1 %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\n",
+             status, ctype, len);
+    str_adds(&o, "Cache-Control: no-store\r\nConnection: close\r\n\r\n");
+    str_add(&o, body, len);
+#ifdef _WIN32
+    send(fd, o.data, (int)o.len, 0);
+#else
+    size_t enviado = 0;
+    while (enviado < o.len) {
+        ssize_t n = write(fd, o.data + enviado, o.len - enviado);
+        if (n <= 0) break;
+        enviado += (size_t)n;
+    }
+#endif
+    str_free(&o);
+}
+
+static void json_reply(sock_t fd, Str *json)
+{
+    http_send(fd, "200 OK", "application/json; charset=utf-8",
+              json->data ? json->data : "{}", json->len);
+}
+
+static void state_json(Str *o)
+{
+    str_adds(o, "{\"os\":");
+#ifdef _WIN32
+    str_adds(o, "\"windows\"");
+#else
+    str_adds(o, "\"posix\"");
+#endif
+    str_adds(o, ",\"version\":");
+    json_write_string(o, DELTA_VERSION, strlen(DELTA_VERSION));
+    str_adds(o, ",\"core\":");
+    {
+        char *h = delta_home();
+        json_write_string(o, h, strlen(h));
+        free(h);
+    }
+    str_adds(o, ",\"exe\":");
+    {
+        char *e = self_exe();
+        json_write_string(o, e ? e : "", e ? strlen(e) : 0);
+        free(e);
+    }
+    str_adds(o, ",\"home\":");
+    {
+        char *h = home_get();
+        json_write_string(o, h, strlen(h));
+        free(h);
+    }
+    str_addc(o, '}');
+}
+
+/* Le o corpo de um POST (ate' 8 KB). */
+static void le_corpo(int fd, const char *req, const char *body, Str *out)
+{
+    (void)fd;
+    const char *cl = str_istarts(req, "") ? NULL : NULL;
+    (void)cl;
+    size_t n = body ? strlen(body) : 0;
+    /* o corpo veio junto na primeira leitura; se faltou, pede o resto */
+    const char *p = NULL;
+    for (const char *q = req; *q; q++) {
+        if ((q[0] == 'c' || q[0] == 'C') && str_istarts(q, "content-length:")) {
+            p = q + 15;
+            break;
+        }
+    }
+    long quer = p ? atol(p) : 0;
+    if ((long)n < quer) {
+        char buf[8192];
+        long falta = quer - (long)n;
+        if (falta > (long)sizeof buf) falta = (long)sizeof buf;
+#ifdef _WIN32
+        int got = recv(fd, buf, (int)falta, 0);
+#else
+        ssize_t got = read(fd, buf, (size_t)falta);
+#endif
+        if (got > 0) { str_add(out, body, n); str_add(out, buf, (size_t)got); return; }
+    }
+    if (body) str_add(out, body, n);
+}
+
+static void handle_request(sock_t fd, const char *method, const char *path,
+                           const char *body)
+{
+    /* todo caminho valido comeca pelo token: /i/<token>/... */
+    char alvo[512];
+    snprintf(alvo, sizeof alvo, "/i/%s/", g_token);
+    size_t tlen = strlen(alvo);
+    if (strncmp(path, alvo, tlen) != 0) {
+        http_send(fd, "403 Forbidden", "text/plain; charset=utf-8",
+                  "token invalido", 14);
+        return;
+    }
+    const char *resto = path + tlen;          /* "" | api/... | logo.png */
+
+    if (str_eq(resto, "") || str_eq(resto, "index.html")) {
+        http_send(fd, "200 OK", "text/html; charset=utf-8",
+                  INSTALLER_HTML, sizeof INSTALLER_HTML - 1);
+        return;
+    }
+    if (str_eq(resto, "logo.png")) {
+        http_send(fd, "200 OK", "image/png", (const char *)LOGO_PNG, sizeof LOGO_PNG);
+        return;
+    }
+    if (str_eq(resto, "api/ping")) {
+        g_ultimo_ping = now_ms();
+        g_teve_ping = 1;
+        Str j; str_init(&j);
+        str_adds(&j, "{\"ok\":true}");
+        json_reply(fd, &j);
+        str_free(&j);
+        return;
+    }
+    if (str_eq(resto, "api/state")) {
+        Str j; str_init(&j);
+        state_json(&j);
+        json_reply(fd, &j);
+        str_free(&j);
+        return;
+    }
+    if (str_eq(resto, "api/quit") && str_eq(method, "POST")) {
+        Str j; str_init(&j);
+        str_adds(&j, "{\"ok\":true}");
+        json_reply(fd, &j);
+        str_free(&j);
+        g_stop = 1;
+        return;
+    }
+    if (str_eq(resto, "api/pick") && str_eq(method, "POST")) {
+        Str j; str_init(&j);
+        char *pasta = pick_folder();
+        if (pasta) {
+            str_adds(&j, "{\"ok\":true,\"dir\":");
+            json_write_string(&j, pasta, strlen(pasta));
+            str_addc(&j, '}');
+            free(pasta);
+        } else {
+            str_adds(&j, "{\"ok\":false,\"dir\":\"\"}");
+        }
+        json_reply(fd, &j);
+        str_free(&j);
+        return;
+    }
+    if (str_eq(resto, "api/install") && str_eq(method, "POST")) {
+        Str corpo; str_init(&corpo);
+        le_corpo((int)fd, path, body, &corpo);
+        char alvo_dir[1024] = "";
+        JValue *v = json_parse_cstr(corpo.data ? corpo.data : "{}");
+        if (v) {
+            const char *d = json_str(json_get(v, "dir"));
+            if (*d) snprintf(alvo_dir, sizeof alvo_dir, "%s", d);
+            json_free(v);
+        }
+        str_free(&corpo);
+        if (!alvo_dir[0]) {
+            http_send(fd, "200 OK", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"sem pasta\"}", 30);
+            return;
+        }
+        Str passos; str_init(&passos);
+        Install in;
+        int ok = do_install(alvo_dir, &in, &passos);
+        int roda = ok ? verify_command(&in, &passos) : 0;
+        Str j; str_init(&j);
+        str_addf(&j, "{\"ok\":%s", (ok && roda) ? "true" : "false");
+        str_adds(&j, ",\"coreDir\":");
+        json_write_string(&j, in.core, strlen(in.core));
+        str_adds(&j, ",\"exePath\":");
+        json_write_string(&j, in.exe, strlen(in.exe));
+        str_adds(&j, ",\"resolved\":");
+        json_write_string(&j, in.resolved, strlen(in.resolved));
+        str_adds(&j, ",\"pinned\":");
+        json_write_string(&j, in.pinned, strlen(in.pinned));
+        str_adds(&j, ",\"steps\":[");
+        str_adds(&j, passos.data ? passos.data : "");
+        str_adds(&j, "]}");
+        json_reply(fd, &j);
+        str_free(&j);
+        str_free(&passos);
+        return;
+    }
+    http_send(fd, "404 Not Found", "text/plain; charset=utf-8", "404", 3);
+}
+
+static int servidor_sobe(int *porta)
+{
+#ifdef _WIN32
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return 0;
+#endif
+    sock_t srv = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (srv == SOCK_INVALID) return 0;
+    int yes = 1;
+    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, (const char *)&yes, sizeof yes);
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof addr);
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0;                        /* porta livre */
+    if (bind(srv, (struct sockaddr *)&addr, sizeof addr) != 0) { sock_close(srv); return 0; }
+    if (listen(srv, 8) != 0) { sock_close(srv); return 0; }
+    sock_len_t alen = sizeof addr;
+    getsockname(srv, (struct sockaddr *)&addr, &alen);
+    *porta = ntohs(addr.sin_port);
+    g_srv = (int)srv;
+    return 1;
+}
+
+int setup_run(void)
+{
+    delta_bootstrap();
+#ifdef _WIN32
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);   /* SHBrowseForFolder */
+#endif
+
+    int porta = 0;
+    if (!servidor_sobe(&porta)) {
+        fprintf(stderr, "delta: nao consegui abrir a porta do instalador\n");
+        return 1;
+    }
+    token_gera();
+
+    char url[200];
+    snprintf(url, sizeof url, "http://127.0.0.1:%d/i/%s/", porta, g_token);
+    printf("Delta instalador: %s\n", url);
+    fflush(stdout);
+
+    int abriu = 0;
+    if (getenv("DELTA_SETUP_NOBROWSER")) {
+        /* teste/headless: serve a pagina sem abrir janela nenhuma */
+        abriu = 1;
+    } else {
+        abriu = url_open_popup(url);
+        if (!abriu) abriu = url_open(url);    /* navegador padrao, em aba */
+    }
+    if (!abriu) {
+        /* sem navegador: a tela nativa do terminal faz o mesmo servico */
+        sock_close((sock_t)g_srv);
+        g_srv = -1;
+        return setup_wizard();
+    }
+
+    g_ultimo_ping = now_ms();
+    while (!g_stop) {
+        fd_set rf;
+        FD_ZERO(&rf);
+        FD_SET((sock_t)g_srv, &rf);
+        struct timeval tv = { 0, 250000 };
+        int r = select((int)g_srv + 1, &rf, NULL, NULL, &tv);
+        /* janela fechada sem avisar (X, crash): sem ping por 15 s -> sai.
+           Se a pagina nunca carregou (nenhum ping), nao espera para sempre. */
+        if (g_teve_ping && now_ms() - g_ultimo_ping > 15000) break;
+        if (!g_teve_ping && now_ms() - g_ultimo_ping > 60000) break;
+        if (r <= 0) continue;
+
+        sock_t cli = accept((sock_t)g_srv, NULL, NULL);
+        if (cli == SOCK_INVALID) continue;
+        char req[8192];
+        int got = 0;
+#ifdef _WIN32
+        got = recv(cli, req, (int)sizeof req - 1, 0);
+#else
+        got = (int)read(cli, req, sizeof req - 1);
+#endif
+        if (got <= 0) { sock_close(cli); continue; }
+        req[got] = 0;
+        char method[8] = "", path[512] = "";
+        sscanf(req, "%7s %511s", method, path);
+        const char *body = strstr(req, "\r\n\r\n");
+        body = body ? body + 4 : "";
+        handle_request(cli, method, path, body);
+        sock_close(cli);
+    }
+
+    sock_close((sock_t)g_srv);
+    g_srv = -1;
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Fallback: tela nativa no terminal (quando nao ha' navegador)        */
+/* ------------------------------------------------------------------ */
+/* Deliberadamente simples: so' screen_text/screen_para, sem componentes de
+   layout. Serve para instalar/atualizar sem navegador nenhum. */
+
 static void wizard_passos(const char *json_fragmento, Str *out)
 {
     if (!json_fragmento || !*json_fragmento) return;
@@ -552,137 +914,103 @@ static void wizard_passos(const char *json_fragmento, Str *out)
         const char *txt = json_str(json_get(it, "text"));
         Str limpo; str_init(&limpo);
         for (const char *c = txt; *c; c++) {
-            if (c[0] == '<') {                       /* pula a tag inteira */
+            if (c[0] == '<') {
                 const char *fim = strchr(c, '>');
                 if (fim) { c = fim; continue; }
             }
             str_addc(&limpo, *c);
         }
-        str_addf(out, "  %s %s\n", ok ? "\u2714" : "\u2716", limpo.data ? limpo.data : "");
+        str_addf(out, "   %s %s\n", ok ? "[ok]" : "[X]", limpo.data ? limpo.data : "");
         str_free(&limpo);
     }
     json_free(v);
 }
 
-static void wizard_draw(Screen *s, const Theme *t, int sel, const char *core,
-                        const char *versao, const char *novidade, const Str *detalhe)
+static void wizard_tela(Screen *s, const Theme *t, const char *core, const char *novidade,
+                        const Str *detalhe, const char *rodape)
 {
     screen_clear(s);
-    int y = ui_welcome(s, 0, s->cols, t, versao, core);
-    y += 1;
-
+    Style st_t   = { tcolor_hex(theme_tok(t, TK_ACCENT)), COL_DEFAULT, ATTR_BOLD };
     Style st_dim = { tcolor_hex(theme_tok(t, TK_DIM)), COL_DEFAULT, 0 };
-    Style st_ok  = { tcolor_hex(theme_tok(t, TK_SUCCESS)), COL_DEFAULT, 0 };
+    Style st_txt = { tcolor_hex(theme_tok(t, TK_TEXT)), COL_DEFAULT, 0 };
     Style st_war = { tcolor_hex(theme_tok(t, TK_WARNING)), COL_DEFAULT, ATTR_BOLD };
+    int w = s->cols > 4 ? s->cols - 4 : 1;
+    int y = 1;
 
     {
-        char linha[512];
-        snprintf(linha, sizeof linha, "pasta de dados : %s", core);
-        y += screen_text(s, 2, y, linha, strlen(linha), st_dim, s->cols - 3);
-        if (novidade && *novidade)
-            y += screen_text(s, 2, y, novidade, strlen(novidade), st_war, s->cols - 3);
-        else
-            y += screen_text(s, 2, y, "tudo em dia com a ultima versao", 31, st_ok, s->cols - 3);
+        char linha[256];
+        snprintf(linha, sizeof linha, "Delta Agent %s  \u00b7  instalador", DELTA_VERSION);
+        y += screen_text(s, 2, y, linha, strlen(linha), st_t, w);
     }
     y += 1;
-
     {
-        MenuItem itens[WIZ_ITENS] = {
-            { "Instalar nesta maquina", "escolhe a pasta de dados e copia o binario (PATH + atalho)" },
-            { "Atualizar o Delta",      "procura a versao nova no GitHub e troca este executavel" },
-            { "Sair",                   NULL },
-        };
-        y += ui_menu(s, y, s->cols, t, itens, WIZ_ITENS, sel, 0, WIZ_ITENS, 26, NULL);
+        char linha[1200];
+        snprintf(linha, sizeof linha, "pasta de dados: %s", core);
+        y += screen_para(s, 2, y, w, linha, strlen(linha), st_dim);
     }
+    if (novidade && *novidade) {
+        y += screen_para(s, 2, y, w, novidade, strlen(novidade), st_war);
+    }
+    y += 1;
+    y += screen_text(s, 2, y, "1  Instalar nesta maquina", 24, st_txt, w);
+    y += screen_text(s, 2, y, "2  Atualizar o Delta", 20, st_txt, w);
+    y += screen_text(s, 2, y, "3  Sair", 7, st_txt, w);
+    y += 1;
 
     if (detalhe && detalhe->len) {
-        y += 1;
-        Style st = { tcolor_hex(theme_tok(t, TK_TEXT)), COL_DEFAULT, 0 };
         int linhas = 0;
         const char *p = detalhe->data;
-        while (*p && linhas < 10) {
+        while (*p && linhas < 14 && y < s->rows - 2) {
             const char *eol = strchr(p, '\n');
             size_t n = eol ? (size_t)(eol - p) : strlen(p);
-            screen_para(s, 2, y, s->cols - 3, p, n, st);
-            y += 1;
+            int usado = screen_para(s, 2, y, w, p, n, st_txt);
+            y += usado > 0 ? usado : 1;
             linhas++;
             if (!eol) break;
             p = eol + 1;
         }
     }
 
-    y = s->rows - 1;
-    screen_text(s, 2, y, "\u2191\u2193 move \u00b7 Enter escolhe \u00b7 Esc sai",
-                40, st_dim, s->cols - 3);
+    if (rodape && *rodape)
+        screen_text(s, 2, s->rows - 1, rodape, strlen(rodape), st_dim, w);
 }
 
-/* Uma rodada de tela: 1 = escolheu (sel), 0 = saiu. */
-static int wizard_menu(Theme *t, int *sel, const char *core, const char *versao,
-                       const char *novidade, Str *detalhe)
+static int wizard_frame(Screen *s, const Theme *t, const char *core, const char *novidade,
+                        const Str *detalhe, int espera)
 {
     int cols = 0, rows = 0;
     term_size(&cols, &rows);
-    Screen s;
-    screen_init(&s, cols, rows);
-    int escolha = -1;
-    for (;;) {
-        term_size(&cols, &rows);
-        if (s.cols != cols || s.rows != rows) screen_resize(&s, cols, rows);
-        wizard_draw(&s, t, *sel, core, versao, novidade, detalhe);
-        term_present(&s);
-        Event ev;
-        if (!term_read(&ev, 200)) continue;
-        if (ev.type == EV_UP)   { *sel = (*sel + WIZ_ITENS - 1) % WIZ_ITENS; continue; }
-        if (ev.type == EV_DOWN) { *sel = (*sel + 1) % WIZ_ITENS; continue; }
-        if (ev.type == EV_ENTER) { escolha = *sel; break; }
-        if (ev.type == EV_ESC || (ev.type == EV_CTRL && ev.cp == 'c') ||
-            (ev.type == EV_CTRL && ev.cp == 'd')) break;
-        if (ev.type == EV_CHAR && (ev.cp == 'q' || ev.cp == 'Q')) break;
+    if (s->cols != cols || s->rows != rows) {
+        if (s->cols == 0) screen_init(s, cols, rows);
+        else screen_resize(s, cols, rows);
     }
-    screen_free(&s);
-    return escolha;
-}
-
-/* Persegue Enter para o usuario ler o resultado. */
-static void wizard_espera(Theme *t, int *sel, const char *core, const char *versao,
-                          const char *novidade, Str *detalhe)
-{
-    int cols = 0, rows = 0;
-    term_size(&cols, &rows);
-    Screen s;
-    screen_init(&s, cols, rows);
+    wizard_tela(s, t, core, novidade, detalhe,
+                espera ? "Enter para voltar" : "1/2/3 ou Enter \u00b7 Esc sai");
+    term_present(s);
     for (;;) {
-        term_size(&cols, &rows);
-        if (s.cols != cols || s.rows != rows) screen_resize(&s, cols, rows);
-        wizard_draw(&s, t, *sel, core, versao, novidade, detalhe);
-        Style st = { tcolor_hex(theme_tok(t, TK_ACCENT)), COL_DEFAULT, ATTR_BOLD };
-        screen_text(&s, 2, s.rows - 2, "Enter para voltar", 17, st, s.cols - 3);
-        term_present(&s);
         Event ev;
-        if (!term_read(&ev, 250)) continue;
-        if (ev.type == EV_ENTER || ev.type == EV_ESC ||
-            (ev.type == EV_CTRL && (ev.cp == 'c' || ev.cp == 'd'))) break;
+        if (!term_read(&ev, 250)) return -2;      /* timeout: redesenha */
+        if (ev.type == EV_ESC || (ev.type == EV_CTRL && (ev.cp == 'c' || ev.cp == 'd'))) return -1;
+        if (ev.type == EV_ENTER && espera) return 0;
+        if (ev.type == EV_CHAR) {
+            if (ev.cp == '1') return 1;
+            if (ev.cp == '2') return 2;
+            if (ev.cp == '3') return 3;
+            if (ev.cp == 'q' || ev.cp == 'Q') return -1;
+        }
     }
-    screen_free(&s);
 }
 
 int setup_wizard(void)
 {
     delta_bootstrap();
-#ifdef _WIN32
-    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);   /* SHBrowseForFolder */
-#endif
-
     char *core = delta_home();
-    char versao[64];
-    snprintf(versao, sizeof versao, "%s", DELTA_VERSION);
 
     if (!term_is_tty() || !term_init()) {
-        /* sem terminal (script, pipe): nao da' para abrir a tela */
         printf("Delta Agent %s\n\n", DELTA_VERSION);
         printf("Instalar : delta --install <pasta>\n");
         printf("Atualizar: delta update [--check]\n");
-        printf("Usuario  : %s\n", core);
+        printf("Dados    : %s\n", core);
         free(core);
         return 1;
     }
@@ -692,77 +1020,68 @@ int setup_wizard(void)
     term_alt_enter();
     term_set_title("Delta Agent - instalador");
 
-    /* versao nova? usa o cache (24 h) para nao travar a abertura */
     char novidade[256] = "";
     {
         UpdateInfo u;
         if (update_cached(&u) && u.available)
-            snprintf(novidade, sizeof novidade,
-                     "versao nova     : %s disponivel (voce tem %s) \u00b7 use Atualizar",
+            snprintf(novidade, sizeof novidade, "versao nova: %s (voce tem %s)",
                      u.latest, u.current);
     }
 
+    Screen s;
+    memset(&s, 0, sizeof s);
     Str detalhe; str_init(&detalhe);
-    int sel = 0;
-    if (novidade[0]) sel = 1;      /* se ha' versao nova, sugere atualizar */
-
-    for (;;) {
-        int escolha = wizard_menu(&t, &sel, core, versao, novidade, &detalhe);
-        if (escolha < 0 || escolha == 2) break;     /* saiu */
+    int saiu = 0;
+    while (!saiu) {
+        int escolha = 0;
+        while (escolha == 0 || escolha == -2)
+            escolha = wizard_frame(&s, &t, core, novidade, &detalhe, 0);
+        if (escolha < 0 || escolha == 3) break;
 
         str_clear(&detalhe);
-        if (escolha == 0) {
+        if (escolha == 1) {
             char *pasta = pick_folder();
             if (!pasta) {
-                str_adds(&detalhe, "  nenhuma pasta escolhida \u00b7 nada foi alterado\n");
-                wizard_espera(&t, &sel, core, versao, novidade, &detalhe);
-                continue;
+                str_adds(&detalhe, "   nenhuma pasta escolhida; nada foi alterado\n");
+            } else {
+                Str passos; str_init(&passos);
+                Install in;
+                int ok = do_install(pasta, &in, &passos);
+                int roda = ok ? verify_command(&in, &passos) : 0;
+                if (in.core[0]) { free(core); core = str_dup(in.core); }
+                str_addf(&detalhe, "   %s\n\n", (ok && roda) ? "instalado" : "instalacao incompleta");
+                wizard_passos(passos.data ? passos.data : "", &detalhe);
+                str_free(&passos);
+                free(pasta);
             }
-            Str passos; str_init(&passos);
-            Install in;
-            int ok = do_install(pasta, &in, &passos);
-            int roda = ok ? verify_command(&in, &passos) : 0;
-            if (in.core[0]) {
-                free(core);
-                core = str_dup(in.core);
-            }
-            str_adds(&detalhe, ok ? "" : "");
-            str_addf(&detalhe, "  %s\n", (ok && roda) ? "instalado" : "instalacao incompleta");
-            wizard_passos(passos.data ? passos.data : "", &detalhe);
-            str_free(&passos);
-            free(pasta);
-            wizard_espera(&t, &sel, core, versao, novidade, &detalhe);
-            continue;
-        }
-
-        /* escolha == 1: atualizar */
-        {
-            str_adds(&detalhe, "  consultando os releases no GitHub...\n");
-            wizard_espera(&t, &sel, core, versao, novidade, &detalhe);
+        } else if (escolha == 2) {
+            str_adds(&detalhe, "   consultando os releases no GitHub...\n");
+            wizard_frame(&s, &t, core, novidade, &detalhe, 1);
             str_clear(&detalhe);
             UpdateInfo u;
             int ok = update_check(&u, 0);
-            if (!ok) {
-                str_addf(&detalhe, "  nao consegui consultar: %s\n",
+            if (!ok)
+                str_addf(&detalhe, "   nao consegui consultar: %s\n",
                          u.err[0] ? u.err : "sem conexao");
-                str_adds(&detalhe, "  (o cache de 24 h evita repetir a consulta a cada abertura)\n");
-            } else if (!u.available) {
-                str_addf(&detalhe, "  voce ja esta na versao mais nova (%s)\n", u.current);
-            } else {
+            else if (!u.available)
+                str_addf(&detalhe, "   voce ja esta na versao mais nova (%s)\n", u.current);
+            else {
                 Str msg; str_init(&msg);
                 int trocou = update_apply(&u, &msg);
-                str_addf(&detalhe, "  %s\n", msg.len ? msg.data : (trocou ? "atualizado" : "falhou"));
+                str_addf(&detalhe, "   %s\n", msg.len ? msg.data : (trocou ? "atualizado" : "falhou"));
                 str_free(&msg);
-                if (trocou) {
-                    snprintf(novidade, sizeof novidade, "%s", "");
-                    str_adds(&detalhe, "  feche esta tela e abra o delta de novo para usar a versao nova\n");
-                }
+                if (trocou) novidade[0] = 0;
             }
-            wizard_espera(&t, &sel, core, versao, novidade, &detalhe);
         }
+        /* le o resultado antes de voltar ao menu */
+        int r = 0;
+        while (r == 0 || r == -2)
+            r = wizard_frame(&s, &t, core, novidade, &detalhe, 1);
+        if (r < 0) break;
     }
 
     str_free(&detalhe);
+    screen_free(&s);
     term_alt_leave();
     term_shutdown();
     theme_free(&t);

@@ -69,7 +69,7 @@ that already is the installer:
 
 | system | file | how |
 |---|---|---|
-| **Windows 10/11 x64** | `Delta-windows-x64.zip` (or `Delta.exe`) | double click → install screen in the terminal |
+| **Windows 10/11 x64** | `Delta-windows-x64.zip` (or `Delta.exe`) | double click → install window (HTML popup, native folder picker) |
 | **Linux x86_64** | `delta-linux-x86_64.run` | `chmod +x delta-linux-x86_64.run && ./delta-linux-x86_64.run` |
 | **macOS 11+** | `delta-macos-source.zip` | unzip and double click `INSTALAR-MAC.command` |
 
@@ -116,8 +116,9 @@ Inside the app, `/new` starts a fresh session and `/clear` wipes the screen.
 | `/new` `/clear` `/reload` `/quit` | new session, clear, reload, quit |
 | `/help` | all of it on screen |
 
-`delta --setup` reopens the installer screen (native, in the terminal — no browser, no local server);
-`delta wiki` just prints the documentation address.
+`delta --setup` reopens the installer: a small **HTML window** (Edge/Chrome app mode, no tabs) served by the
+executable on `127.0.0.1` with a random token — it closes with the window and never leaves a server behind.
+Without a Chromium browser it falls back to a native terminal screen. `delta wiki` just prints the docs address.
 `delta update` does the same job without opening the app: `delta update --check` only reports, and
 the command replaces the running executable in place (on Windows it is renamed, so the file can be
 swapped while it runs). The TUI checks for a new release once a day and shows a notice at startup;
