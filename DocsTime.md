@@ -15,12 +15,12 @@ MCP, memória e um grafo do projeto.
 
 - Repositório público: <https://github.com/descz/delta> (branch `main`)
 - Site (GitHub Pages, em inglês): <https://descz.github.io/delta/> (`docs/`)
-- Releases: <https://github.com/descz/delta/releases> — publicado até agora: `v1.0.0`
-  (o código passou a se identificar como **`0.1.0`** por decisão do dono, recomeçando a numeração).
+- Releases: <https://github.com/descz/delta/releases> — **`v0.1.0` é o *latest***; o `v1.0.0`
+  ficou marcado como **pre-release** (a numeração recomeçou por decisão do dono).
   **Atenção:** `version_cmp` compara números, então `1.0.0 > 0.1.0` — quem já tem o `1.0.0`
-  não é avisado do `0.1.0`, e um `delta update` rodando `0.1.0` oferece o `1.0.0` de volta.
-  Publicar o `0.1.0` como release "latest" resolve o lado de quem instala do zero, não o de quem
-  já está no `1.0.0`: nesse caso apague ou marque o `v1.0.0` como *pre-release*.
+  instalado **não** é avisado do `0.1.0` (e `delta update` nele continuaria vendo o `0.1.0` como
+  "mais antigo"). Para esses, reinstalar pelo instalador ou `delta --setup`. O `1.0.0` precisa
+  continuar como *pre-release*: como release normal ele voltaria a ser o "latest" da API.
 - Licença: **source-available, não comercial** — proíbe venda e clone, exige crédito. Ver `LICENSE`.
   **Não troque por MIT.**
 - Plataformas: Windows 10/11 x64 (testado), Linux x86_64 (testado no WSL, gcc + clang), macOS 11+
@@ -224,6 +224,8 @@ Notas do release: escreva em `build/RELEASE.md` (não versionado) — o modelo a
 | `delta update` baixava 0 bytes / falhava no redirect | o GitHub manda o asset para `objects.githubusercontent.com`; `http_get_text_to` agora liga `WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS` (POSIX já usava `curl -L`) e tem teto de tempo. |
 | a TUI fica lenta para abrir | a consulta de release no boot pode custar uma requisição. O cache (`update.json`, 24 h) evita isso depois da primeira vez; `DELTA_NO_UPDATE_CHECK=1` desliga de vez. |
 | suíte vermelha só nas seções de rede/console | a TUI de verdade consultaria o GitHub no boot: `run_all.sh`/`run_posix.sh` exportam `DELTA_NO_UPDATE_CHECK=1` e as seções de update religam com `DELTA_UPDATE_URL` para o release falso. |
+| `gh release create` falhou com `open build/RELEASE.md: no such file` | `mingw32-make clean` apaga `build/` inteiro — e as notas do release (`build/RELEASE.md`) moram lá, fora do git. Escreva as notas **depois** do build/clean. |
+| release publicado com tag antiga no "latest" | o GitHub chama de *latest* o release **não-prerelease mais recente por data**, não o de número maior. Ao recomeçar a numeração, marque o release antigo como *pre-release* (`gh release edit v1.0.0 --prerelease`). |
 | lag de 78 ms/frame | transcript remontava tudo; use `tr_touch`/`tr_fast_from` |
 | lag de 140 ms com `/models` aberto | `auth.json` era lido do disco por provedor; agora tem cache (`auth_forget` invalida) |
 | `Ctrl+C` fechava o app | removido: `Ctrl+C` interrompe/limpa, nunca sai |
