@@ -18,6 +18,7 @@ typedef struct {
     char  *headers;       /* JSON com cabecalhos HTTP extras por provedor */
     int    supports_image; /* o modelo atual aceita imagem */
     int    check_updates;  /* 1 = procura versao nova no boot (config: updateCheck) */
+    char  *subagent_model; /* modelo dos subagentes (config: subagentModel) */
     char  *project_dir;   /* pasta do projeto escolhida com /projects */
 } Config;
 

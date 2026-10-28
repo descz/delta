@@ -452,7 +452,7 @@ echo
 echo "[7] menu de comandos (digitar /)"
 ./bin/delta.exe --replay tests/replay-menu.txt 100 30 > /tmp/delta_menu.log 2>&1
 expect /tmp/delta_menu.log "→ help"   "marcador -> no item selecionado"
-expect /tmp/delta_menu.log "(1/18)"            "contador de itens"
+expect /tmp/delta_menu.log "(1/19)"            "contador de itens"
 expect /tmp/delta_menu.log "/models "         "Tab completa o comando"
 expect /tmp/delta_menu.log "Todos os modelos"    "descricao do comando aparece"
 
@@ -810,12 +810,12 @@ cp "$HOME/.deltaCore/config.json" "$AR/cfg.bak" 2>/dev/null
 cp "$HOME/.deltaCore/auth.json" "$AR/auth.bak" 2>/dev/null
 printf '{"provider":"openai","model":"gpt-4o","baseUrl":"http://127.0.0.1:%s/v1"}' "$PORT" > "$HOME/.deltaCore/config.json"
 printf '{"openai":"sk-teste"}' > "$HOME/.deltaCore/auth.json"
-./bin/delta.exe --tool agent '{"op":"subagent","task":"subagente-teste"}' > "$AR/sub.log" 2>&1
+./bin/delta.exe --tool agent '{"op":"subagent","task":"subagente-teste","model":"gpt-4o"}' > "$AR/sub.log" 2>&1
 expect "$AR/sub.log" "subagente ok" "agent: subagent"
-./bin/delta.exe --tool agent '{"op":"subagent","task":"leia tests/mock-target.txt e diga o numero"}' > "$AR/sub2.log" 2>&1
+./bin/delta.exe --tool agent '{"op":"subagent","task":"leia tests/mock-target.txt e diga o numero","model":"gpt-4o"}' > "$AR/sub2.log" 2>&1
 expect "$AR/sub2.log" "eco: leia tests/mock-target.txt" "agent: subagent usa tools"
 # fan-out: 4 tarefas em paralelo, cada uma com resposta propria
-./bin/delta.exe --tool agent '{"op":"subagents","tasks":["subagente-teste a","subagente-teste b","subagente-teste c"]}' > "$AR/subm.log" 2>&1
+./bin/delta.exe --tool agent '{"op":"subagents","tasks":["subagente-teste a","subagente-teste b","subagente-teste c"],"model":"gpt-4o"}' > "$AR/subm.log" 2>&1
 expect "$AR/subm.log" "=== tarefa 3"  "agent: subagents roda em paralelo"
 if [ "$(grep -c 'subagente ok' "$AR/subm.log")" -ge 3 ]; then
     pass "agent: as tres tarefas do fan-out responderam"
@@ -823,8 +823,13 @@ else
     fail "agent: tarefa do fan-out sem resposta"
 fi
 # o filho nao pode poluir a lista de sessoes da pasta
+# sem modelo escolhido e sem TUI: recusa ANTES de criar (nunca chuta o modelo)
+rm -f build/mock-last-request.json
+./bin/delta.exe --tool agent '{"op":"subagent","task":"subagente-teste"}' > "$AR/sub0.log" 2>&1
+expect "$AR/sub0.log" "escolha o modelo dos subagentes" "agent: exige a escolha do modelo"
+if [ -f build/mock-last-request.json ]; then fail "agent: subagente rodou sem modelo escolhido"; else pass "agent: nada roda sem modelo escolhido"; fi
 rm -rf build/noses && mkdir -p build/noses
-(cd build/noses && ../../bin/delta.exe --tool agent '{"op":"subagent","task":"subagente-teste"}' > /dev/null 2>&1)
+(cd build/noses && ../../bin/delta.exe --tool agent '{"op":"subagent","task":"subagente-teste","model":"gpt-4o"}' > /dev/null 2>&1)
 if ls "$HOME/.deltaCore/sessions" 2>/dev/null | grep -q "noses"; then
     fail "agent: subagente criou sessao na pasta"
 else
@@ -880,6 +885,22 @@ if grep -q "teste-prompt" build/mock-last-request.json 2>/dev/null; then
 else fail "skills fora do prompt de sistema"; fi
 ./bin/delta.exe --tool skills '{"op":"delete","name":"teste-prompt"}' > /dev/null 2>&1
 
+echo "--- /subagentmodel: escolha do modelo dos subagentes ---"
+printf 'type /subagentmodel
+key enter
+dump aberto
+key down
+key enter
+dump escolhido
+' > "$AR/sm.txt"
+./bin/delta.exe --replay "$AR/sm.txt" 100 30 > "$AR/sm.log" 2>&1
+expect "$AR/sm.log" "modelo dos subagentes"  "/subagentmodel abre o seletor"
+if grep -q '"subagentModel": "[^"]' "$HOME/.deltaCore/config.json" 2>/dev/null; then
+    pass "/subagentmodel salva a escolha no config"
+else
+    fail "/subagentmodel nao salvou a escolha"
+fi
+
 echo "--- skills embutidas (nascem no ambiente novo) ---"
 rm -rf "$AR/core-skills"
 DELTA_CORE="$AR/core-skills" ./bin/delta.exe --tool skills '{"op":"list"}' > "$AR/skseed.log" 2>&1
@@ -888,6 +909,11 @@ expect "$AR/skseed.log" "planilhas-e-pdf"   "skills embutidas: planilhas e PDF"
 expect "$AR/skseed.log" "automacao"         "skills embutidas: automacao"
 DELTA_CORE="$AR/core-skills" ./bin/delta.exe --tool skills '{"op":"read","name":"design-de-codigo"}' > "$AR/skread.log" 2>&1
 expect "$AR/skread.log" "Teste da deleção"   "skills embutidas: texto completo no disco"
+DELTA_CORE="$AR/core-skills" ./bin/delta.exe --tool skills '{"op":"read","name":"planilhas-e-pdf"}' > "$AR/skplan.log" 2>&1
+expect "$AR/skplan.log" "congel"            "planilhas: layout (cabecalho congelado)"
+expect "$AR/skplan.log" "paleta fechada"    "planilhas: paleta de cores definida"
+expect "$AR/skplan.log" "uma aba por tópico" "planilhas: organizacao por topico"
+expect "$AR/skplan.log" "Conferência obrigatória" "planilhas: conferencia dos numeros"
 rm -rf "$AR/core-skills"
 
 # --- mcp: add / list / tools / call / remove (servidor falso)

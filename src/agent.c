@@ -56,6 +56,7 @@ int config_load(Config *c, char *note, size_t note_len)
             if ((s = json_str(json_get(v, "language")))[0]) c->language = str_dup(s);
             if ((s = json_str(json_get(v, "projectDir")))[0]) c->project_dir = str_dup(s);
             if ((s = json_str(json_get(v, "thinkingLevel")))[0]) { free(c->thinking_level); c->thinking_level = str_dup(s); }
+            if ((s = json_str(json_get(v, "subagentModel")))[0]) { free(c->subagent_model); c->subagent_model = str_dup(s); }
             if (json_get(v, "updateCheck")) c->check_updates = json_bool(json_get(v, "updateCheck"), 1);
             JValue *hv = json_get(v, "headers");
             if (hv && hv->kind == J_OBJ && hv->count > 0) {
@@ -144,6 +145,9 @@ int config_save(const Config *c)
                       strlen(c->thinking_level ? c->thinking_level : "off"));
     str_adds(&o, ",\n  \"maxTokens\": ");
     str_addf(&o, "%d", c->max_tokens);
+    str_adds(&o, ",\n  \"subagentModel\": ");
+    json_write_string(&o, c->subagent_model ? c->subagent_model : "",
+                      strlen(c->subagent_model ? c->subagent_model : ""));
     str_adds(&o, ",\n  \"updateCheck\": ");
     str_adds(&o, c->check_updates ? "true" : "false");
     if (c->headers && *c->headers) {
@@ -167,6 +171,7 @@ void config_free(Config *c)
     free(c->system_extra);
     free(c->language);
     free(c->thinking_level);
+    free(c->subagent_model);
     free(c->headers);
     free(c->project_dir);
     memset(c, 0, sizeof(*c));

@@ -26,10 +26,26 @@
 static void (*g_tick)(void *) = NULL;
 static void *g_tick_ud = NULL;
 
+static int (*g_ask_subagent)(void *, char *, size_t) = NULL;
+static void *g_ask_subagent_ud = NULL;
+
 void tools_set_tick(void (*fn)(void *), void *ud)
 {
     g_tick = fn;
     g_tick_ud = ud;
+}
+
+void tools_set_subagent_ask(int (*fn)(void *ud, char *out, size_t n), void *ud)
+{
+    g_ask_subagent = fn;
+    g_ask_subagent_ud = ud;
+}
+
+/* Pergunta o modelo dos subagentes (a TUI instala o gancho). 1 = escolhido. */
+int tools_ask_subagent_model(char *out, size_t n)
+{
+    if (!g_ask_subagent) return 0;
+    return g_ask_subagent(g_ask_subagent_ud, out, n);
 }
 
 static void tools_tick(void)

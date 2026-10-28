@@ -30,6 +30,12 @@ void        tool_result_free(ToolResult *r);
    o tempo decorrido. Pode ser NULL. */
 void        tools_set_tick(void (*fn)(void *), void *ud);
 
+/* Pergunta (na TUI) qual modelo usar nos subagentes. Devolve 1 e escreve o
+   nome em `out`. Sem TUI/em -p, devolve o padrao configurado (ou 0). */
+void        tools_set_subagent_ask(int (*fn)(void *ud, char *out, size_t n), void *ud);
+/* Usado pelas tools de subagente: pergunta o modelo. 1 = escolhido. */
+int         tools_ask_subagent_model(char *out, size_t n);
+
 /* Lista terminada por um Tool com name == NULL. */
 const Tool *tools_all(void);
 const Tool *tool_find(const char *name);

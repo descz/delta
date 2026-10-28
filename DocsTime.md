@@ -138,11 +138,14 @@ mesmo aviso de versão nova do boot da TUI).
     `src/skills_seed.h` (embutido no exe). `delta_bootstrap()` grava o que faltar em
     `<core>/skills` e **nunca sobrescreve** o que o usuário editou. O prompt só lista
     nome + descrição (2400 chars) — o texto completo é lido com `skills op=read`.
-16. **Subagentes:** `agent op=subagent` (um) e `op=subagents` (até 4 em paralelo, saída em
+16. **Subagentes pedem o modelo.** Sem `model` na chamada, o Delta abre o seletor
+    (`/subagentmodel` faz o mesmo) e só depois cria; em `-p`/`--tool` (sem TUI) usa
+    `subagentModel` do config e, se não houver, **recusa** — nunca chuta o modelo.
+17. **Subagentes:** `agent op=subagent` (um) e `op=subagents` (até 4 em paralelo, saída em
     `<core>/jobs/*.out`). O filho roda com `--no-session` (não polui as sessões da pasta) e
     `DELTA_SUBAGENT=1` (impede recursão). Timeout padrão 900 s; `model`/`cwd`/`max_output`
     configuráveis.
-17. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
+18. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
     plataforma: `Delta.exe` (Windows) e `delta-linux-x86_64.tar.gz` (Linux, com o binário `delta`
     na raiz ou um nível abaixo). Renomear o asset quebra o `delta update` sem quebrar o instalador.
 15. **`delta update` troca o executável em uso.** Windows: renomeia o exe para `.old`, grava o

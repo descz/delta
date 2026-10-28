@@ -127,7 +127,7 @@ static const char *const CMD_KEYS[] = {
     "cmd.help", "cmd.login", "cmd.logout", "cmd.models", "cmd.thinking",
     "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new",
     "cmd.clear", "cmd.skills", "cmd.extensions", "cmd.translator",
-    "cmd.reload", "cmd.quit", "cmd.undo", "cmd.update"
+    "cmd.reload", "cmd.quit", "cmd.subagentmodel", "cmd.undo", "cmd.update"
 };
 
 
@@ -148,6 +148,7 @@ static const Cmd COMMANDS[] = {
     { "translator","Troca o idioma da interface",                      "pt-BR|pt|en|es|zh|ja", 1 },
     { "reload",    "Recarrega config e tema do disco",                NULL,                 0 },
     { "quit",      "Sai do Delta Agent",                              NULL,                 0 },
+    { "subagentmodel", "Modelo que os subagentes usam",                NULL,                 0 },
     { "undo",      "Restaura o conteudo anterior de um arquivo",       "[arquivo]",          1 },
     { "update",    "Instala a versao mais nova do GitHub",              "[--check]",          1 },
 };
@@ -333,6 +334,7 @@ static void expand_paste(Str *text);
 static void inserir_colagem(const Clip *c);
 static void input_insert_text(const char *t, size_t n);
 static void sel_clear(void);
+static void open_picker(int kind);
 /* Rola a conversa: +1 = roda para cima (conteudo mais antigo). */
 static void scroll_wheel(int shift);
 
@@ -526,7 +528,8 @@ static int menu_prepare(void)
     /* seletor fechado: a proxima abertura remonta a lista (modelo/provedor
        atual pode ter mudado) */
     if (!app.picker) g_items_owner = 0;
-    if (app.picker == 1) {
+    if (app.picker == 1 || app.picker == 6) {
+        /* 1 = modelo do chat, 6 = modelo dos subagentes: mesma lista */
         const char *f = app.picker_filter.data ? app.picker_filter.data : "";
         if (g_items_owner == 'm' && str_eq(g_items_key, f)) return (int)g_items_n;
         long n = fill_models(f);
@@ -591,6 +594,13 @@ static const char *menu_title(void)
         return buf;
     }
     if (app.picker == 5) return "Select provider to disconnect:";
+    if (app.picker == 6) {
+        static char buf[220];
+        snprintf(buf, sizeof buf, "modelo dos subagentes · Enter confirma, Esc cancela%s%s",
+                 app.cfg.subagent_model && *app.cfg.subagent_model ? " · atual: " : "",
+                 app.cfg.subagent_model ? app.cfg.subagent_model : "");
+        return buf;
+    }
     if (app.picker == 3) {
         static char buf[160];
         const MdProvider *p = catalog_provider(&app.catalog, app.login_provider);
@@ -762,6 +772,58 @@ static void notify_status(const char *fmt, ...)
     str_clear(&app.status);
     if (*buf) str_adds(&app.status, buf);
     app.status_until = now_ms() + 3000;
+}
+
+/* ================================================================== */
+/* Modelo dos subagentes: o Delta PERGUNTA antes de criar              */
+/* ================================================================== */
+/* Chamado de dentro da tool de subagente (no meio do turno). Abre o
+   seletor de modelos, roda um mini laco de eventos ate' a escolha (ou Esc)
+   e devolve. Em -p/--replay nao ha' terminal: usa o padrao ja' salvo. */
+static int  g_tui_ativa = 0;
+static char g_subagent_escolhido[128];
+
+static int ask_subagent_model(void *ud, char *out, size_t n)
+{
+    (void)ud;
+    if (!g_tui_ativa) {
+        if (app.cfg.subagent_model && *app.cfg.subagent_model) {
+            snprintf(out, n, "%s", app.cfg.subagent_model);
+            return 1;
+        }
+        return 0;
+    }
+
+    g_subagent_escolhido[0] = 0;
+    app.menu_suppressed = 0;
+    open_picker(6);
+    if (app.cfg.subagent_model && *app.cfg.subagent_model) {
+        for (size_t i = 0; i < g_items_n; i++) {
+            Item *it = &g_items[i];
+            if (it->model && str_eq(it->model->id, app.cfg.subagent_model)) {
+                app.menu_sel = (int)i;
+                break;
+            }
+        }
+    }
+
+    while (app.picker == 6 && !app.quit) {
+        Event ev;
+        render();
+        if (!term_read(&ev, 250)) continue;
+        handle_event(&ev);
+    }
+    if (app.picker == 6) app.picker = 0;
+    app.menu_suppressed = 0;
+    app.tr_dirty = 1;
+    render();
+
+    if (!g_subagent_escolhido[0]) {
+        notify_status("subagente cancelado: nenhum modelo escolhido");
+        return 0;
+    }
+    snprintf(out, n, "%s", g_subagent_escolhido);
+    return 1;
 }
 
 /* Indice do quadro do spinner. Vem do RELOGIO, nao de um contador de frames:
@@ -1058,7 +1120,7 @@ static void render(void)
         app.menu_sel = 0;
     }
     int menu_h = app.menu_visible ? max_rows + 1
-                                 : ((app.picker == 1 || app.picker == 2 || app.picker == 5) ? 1 : 0);
+                                 : ((app.picker == 1 || app.picker == 2 || app.picker == 5 || app.picker == 6) ? 1 : 0);
     if (!app.menu_visible) { app.menu_y0 = 0; app.menu_rows = 0; }
 
     /* altura do rodape */
@@ -1171,7 +1233,7 @@ static void render(void)
         app.menu_rows = win;
         ui_menu(&app.screen, ey + editor_h, cols, &app.theme, mitens, win,
                 app.menu_sel - app.menu_scroll, 0, win, name_col, counter);
-    } else if (app.picker == 1 || app.picker == 2) {
+    } else if (app.picker == 1 || app.picker == 2 || app.picker == 6) {
         /* filtro sem resultado: mostra a dica e deixa o Esc fechar */
         Style st_vazio = { tcolor_hex(theme_tok(&app.theme, TK_DIM)), COL_DEFAULT, 0 };
         static const char vazio[] = "(nada encontrado - esc cancela)";
@@ -1930,6 +1992,18 @@ static void menu_apply(void)
         return;
     }
 
+    if (app.picker == 6 && it->model) {
+        /* escolha do modelo dos SUBAGENTES (nao troca o modelo do chat) */
+        free(app.cfg.subagent_model);
+        app.cfg.subagent_model = str_dup(it->model->id);
+        config_save(&app.cfg);
+        snprintf(g_subagent_escolhido, sizeof g_subagent_escolhido, "%s", it->model->id);
+        app.picker = 0;
+        str_clear(&app.picker_filter);
+        app.tr_dirty = 1;
+        return;
+    }
+
     if (app.picker == 1 && it->model) {
         free(app.cfg.model);
         app.cfg.model = str_dup(it->model->id);
@@ -2068,6 +2142,13 @@ static void handle_command(const char *raw)
         notify("projeto: %s", path);
         free(path);
         render();
+        return;
+    }
+
+    /* /subagentmodel: escolhe o modelo dos subagentes (o Delta tambem
+       pergunta sozinho antes de criar um, se ainda nao houver escolha) */
+    if (str_eq(cmd, "/subagentmodel") || str_eq(cmd, "/subagent")) {
+        open_picker(6);
         return;
     }
 
@@ -3837,6 +3918,8 @@ int main(int argc, char **argv)
     char note[256] = { 0 };
     delta_bootstrap();                 /* ~/.deltaCore: skills, mcps, system, ... */
     config_load(&app.cfg, note, sizeof note);
+    /* modelos dos subagentes: na TUI pergunta; em -p/--tool usa o padrao salvo */
+    tools_set_subagent_ask(ask_subagent_model, NULL);
 
     /* catalogo local (sem rede): da os nomes das envs, endpoints e limites */
     if (catalog_load_cached(&app.catalog)) app.catalog_loaded = 1;
@@ -3942,6 +4025,7 @@ int main(int argc, char **argv)
         term_set_title(title);
     }
     tools_set_tick(tools_tick_ui, NULL);
+    g_tui_ativa = 1;                            /* agora pode perguntar (picker) */
     provider_set_wait_tick(provider_tick_ui, NULL);
     if (app.cfg.api_key) notify("pronto (%s/%s)", app.cfg.provider, app.cfg.model);
     else notify("sem API key: use /login <chave>");

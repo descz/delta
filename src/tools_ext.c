@@ -2500,6 +2500,17 @@ static char *job_dir(void)
     return jobs;
 }
 
+/* Modelo dos subagentes: o parametro manda; sem ele o Delta PERGUNTA (TUI)
+   ou usa o padrao salvo (subagentModel); nunca chuta silenciosamente. */
+static int subagent_model(const char *param, char *out, size_t n, ToolResult *res)
+{
+    if (param && *param) { snprintf(out, n, "%s", param); return 1; }
+    if (tools_ask_subagent_model(out, n) && out[0]) return 1;
+    err_out(res, "Erro: escolha o modelo dos subagentes antes de criar. Rode dentro da "
+                 "TUI (o Delta pergunta) ou passe \"model\" na chamada.");
+    return 0;
+}
+
 static int subagent_run(const char *cwd, const char *task, const char *model,
                         int timeout_sec, size_t max_chars, const char *child_cwd,
                         Str *out, ToolResult *res)
@@ -2513,10 +2524,12 @@ static int subagent_run(const char *cwd, const char *task, const char *model,
     if (!exe) { err_out(res, "Erro: nao consegui localizar o proprio executavel."); return 0; }
     if (timeout_sec <= 0) timeout_sec = 900;
     if (max_chars == 0) max_chars = 20000;
+    char modelo[128] = "";
+    if (!subagent_model(model, modelo, sizeof modelo, res)) return 0;
 
     char *jobs = job_dir();
     Child c;
-    if (!child_start(&c, exe, task, 0, model, child_cwd ? child_cwd : cwd, jobs)) {
+    if (!child_start(&c, exe, task, 0, modelo, child_cwd ? child_cwd : cwd, jobs)) {
         child_free(&c);
         free(jobs);
         err_out(res, "Erro: falha ao iniciar o subagente.");
@@ -2560,6 +2573,9 @@ static int subagent_many(const char *cwd, JValue *tasks, const char *model, int 
         str_addf(&res->output, "(%lu tarefas pedidas; rodando as %d primeiras)\n",
                  (unsigned long)tasks->count, SUBAGENT_MAX);
 
+    char modelo[128] = "";
+    if (!subagent_model(model, modelo, sizeof modelo, res)) return 0;
+
     char *jobs = job_dir();
     Child cs[SUBAGENT_MAX];
     memset(cs, 0, sizeof cs);
@@ -2567,7 +2583,7 @@ static int subagent_many(const char *cwd, JValue *tasks, const char *model, int 
     for (size_t i = 0; i < n; i++) {
         const char *task = json_str(json_at(tasks, i));
         if (!*task) continue;
-        if (!child_start(&cs[i], exe, task, i + 1, model,
+        if (!child_start(&cs[i], exe, task, i + 1, modelo,
                          child_cwd ? child_cwd : cwd, jobs))
             continue;
         iniciados++;
