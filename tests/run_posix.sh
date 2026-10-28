@@ -60,7 +60,6 @@ echo "[3] comandos da TUI (replay)"
 $BIN --replay tests/replay-commands.txt 110 36 > "$AR/cmds.log" 2>&1
 expect "$AR/cmds.log" "Mostra os comandos e atalhos" "/help renderiza a tabela"
 expect "$AR/cmds.log" "provedor :"                   "/status renderiza"
-expect "$AR/cmds.log" "read - Read file"             "/tools lista as ferramentas"
 expect "$AR/cmds.log" "comando desconhecido"         "comando invalido avisa"
 
 echo
@@ -70,12 +69,19 @@ expect "$AR/term.log" "ola do delta" "comando roda e mostra a saida"
 expect "$AR/term.log" "saiu com 0"   "codigo de saida"
 
 echo
-echo "[3c2] copiar mensagem (bloco inteiro, sem moldura)"
-$BIN --replay tests/replay-copia.txt 56 24 > "$AR/copia.log" 2>&1
-sed -n '/--- copiado ---/,/--- fim ---/p' "$AR/copia.log" > "$AR/copia.txt"
-expect "$AR/copia.txt" "terminal echo alpha beta" "texto do bloco vai inteiro"
-reject "$AR/copia.txt" "│"                        "sem moldura de caixa"
-expect "$AR/copia.log" "  /help                              Mostra os comandos e atalhos" "linha longa nao chega quebrada"
+echo "[3c2] comandos removidos nesta versao"
+printf 'type /copy
+key enter
+dump copy_removido
+' > "$AR/rem.txt"
+$BIN --replay "$AR/rem.txt" 80 24 > "$AR/rem.log" 2>&1
+expect "$AR/rem.log" "comando desconhecido"  "/copy nao existe mais"
+printf 'type /forlimit 3
+key enter
+dump fl_removido
+' > "$AR/rem2.txt"
+$BIN --replay "$AR/rem2.txt" 80 24 > "$AR/rem2.log" 2>&1
+expect "$AR/rem2.log" "comando desconhecido"  "/forlimit nao existe mais"
 
 echo
 echo "[3c3] scroll durante o stream (topo ancorado)"

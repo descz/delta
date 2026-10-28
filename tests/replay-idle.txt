@@ -1,0 +1,11 @@
+# Modo maratona: a TUI tem que continuar viva depois de minutos sem input
+size 80 24
+type /status
+key enter
+dump inicio
+idle 3000
+dump depois_de_3s
+idle 3000
+dump depois_de_6s
+type continua viva
+dump fim

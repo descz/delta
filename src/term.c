@@ -25,6 +25,7 @@
 static int   g_inited = 0;
 static int   g_cols = 80, g_rows = 24;
 static int   g_dirty_all = 1;
+static volatile int g_resized = 0;   /* comum: resize E recuperacao de console */
 
 /* Buffer de saida (linhas ja convertidas para ANSI) */
 static char **g_prev_lines = NULL;
@@ -40,7 +41,6 @@ static WCHAR *g_wbuf = NULL;
 static size_t g_wcap = 0;
 #else
 static struct termios g_old_termios;
-static volatile sig_atomic_t g_resized = 0;
 static int g_old_flags = 0;
 #endif
 
@@ -189,12 +189,50 @@ void term_set_size(int cols, int rows)
     if (rows > 0) g_rows = rows;
 }
 
+/* Reabre o console depois de o host cair/PC dormir. 1 = de volta. */
+static int term_recover_console(void)
+{
+    static uint64_t ultima = 0;
+    uint64_t agora = now_ms();
+    if (agora - ultima < 2000) return 0;   /* no maximo uma tentativa a cada 2 s */
+    ultima = agora;
+
+    HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+    HANDLE hout = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hin == INVALID_HANDLE_VALUE || hout == INVALID_HANDLE_VALUE) return 0;
+    DWORD im = 0;
+    if (!GetConsoleMode(hin, &im)) return 0;   /* nao voltou a ser console */
+
+    /* recha o modo cru (o modo antigo se perdeu com o host) e o estado da UI */
+    im &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT | ENABLE_QUICK_EDIT_MODE);
+    im |= ENABLE_WINDOW_INPUT | ENABLE_EXTENDED_FLAGS | ENABLE_MOUSE_INPUT;
+    SetConsoleMode(hin, im);
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    /* redesenha do zero: o buffer do host novo esta' vazio e as celulas que
+       o Delta achava que estavam la' nao existem mais */
+    {
+        static const char seq[] = "\x1b[2J\x1b[H";
+        DWORD esc = 0;
+        WriteConsoleA(hout, seq, (DWORD)(sizeof seq - 1), &esc, NULL);
+    }
+    free_prev_lines();        /* limpa o cache de linhas do term_present */
+    g_dirty_all = 1;
+    g_resized = 1;            /* forca term_size e um render completo */
+    return 1;
+}
+
 int term_has_input(void)
 {
     DWORD n = 0;
-    if (!GetNumberOfConsoleInputEvents(g_hin, &n)) return 0;
+    if (!GetNumberOfConsoleInputEvents(g_hin, &n)) {
+        /* console desconectado (PC dormiu, host saiu): tenta voltar */
+        if (term_recover_console()) return GetNumberOfConsoleInputEvents(g_hin, &n) && n > 0;
+        return 0;
+    }
     return n > 0;
 }
+
 
 /* Log de eventos para diagnostico (DELTA_EVENT_LOG=<arquivo>). */
 static void event_log(const char *fmt, ...)
@@ -281,11 +319,19 @@ int term_read(Event *ev, int timeout_ms)
         }
         DWORD r = WaitForSingleObject(g_hin, wait);
         if (r == WAIT_TIMEOUT) return 0;
-        if (r != WAIT_OBJECT_0) return 0;
+        if (r != WAIT_OBJECT_0) {
+            /* console se desconectou (PC dormiu, host reiniciou): nao encerra
+               o Delta — tenta reabrir o console e segue vivo */
+            if (!term_recover_console()) return 0;
+            continue;
+        }
 
         INPUT_RECORD rec;
         DWORD read = 0;
-        if (!ReadConsoleInputW(g_hin, &rec, 1, &read) || read == 0) return 0;
+        if (!ReadConsoleInputW(g_hin, &rec, 1, &read) || read == 0) {
+            if (!term_recover_console()) return 0;
+            continue;
+        }
         if (rec.EventType == WINDOW_BUFFER_SIZE_EVENT) {
             term_size(&g_cols, &g_rows);
             ev->type = EV_RESIZE;

@@ -103,12 +103,7 @@ typedef struct {
     int      tr_fast;           /* 1 = so' repintar a partir de tr_fast_from */
     size_t   tr_fast_from;
 
-    /* selecao no transcript (coords = celulas do app.tr) */
-    int      sel_active;
-    int      sel_ax, sel_ay;    /* ancora */
-    int      sel_hx, sel_hy;    /* cabeca */
-    int      sel_drag;          /* 1 = arrasto livre; 0 = mensagem clicada */
-    int      sel_click_x, sel_click_y;   /* onde o clique comecou */
+    /* selecao no transcript: desativada nesta versao (sem copiar mensagens) */
     int      tr_start;          /* linha do transcript que aparece na linha 0 da tela */
     int      tr_view;           /* linhas visiveis do transcript */
     int      tr_total_prev;     /* linhas do transcript no frame anterior (ancora do scroll) */
@@ -129,10 +124,10 @@ typedef struct {
 
 /* chave i18n de cada comando, na mesma ordem da tabela */
 static const char *const CMD_KEYS[] = {
-    "cmd.help", "cmd.login", "cmd.logout", "cmd.models", "cmd.thinking", "cmd.theme",
-    "cmd.tools", "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new",
-    "cmd.clear", "cmd.stop", "cmd.skills", "cmd.copy", "cmd.extensions", "cmd.translator",
-    "cmd.reload", "cmd.quit", "cmd.forlimit", "cmd.undo", "cmd.update"
+    "cmd.help", "cmd.login", "cmd.logout", "cmd.models", "cmd.thinking",
+    "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new",
+    "cmd.clear", "cmd.skills", "cmd.extensions", "cmd.translator",
+    "cmd.reload", "cmd.quit", "cmd.undo", "cmd.update"
 };
 
 
@@ -142,22 +137,17 @@ static const Cmd COMMANDS[] = {
     { "logout",    "Remove a chave do provedor atual",                NULL,                 0 },
     { "models",    "Todos os modelos de todos os provedores",         "<filtro>",           1 },
     { "thinking",  "Nível de raciocínio",                             "off|low|medium|high", 1 },
-    { "theme",     "Troca o tema",                                    "dark|light|arquivo", 1 },
-    { "tools",     "Lista as ferramentas",                            NULL,                 0 },
     { "projects",  "Define a pasta onde o Delta trabalha",             "<pasta>",           1 },
     { "terminal",  "Executa um comando no shell e mostra a saida",     "<comando>",          1 },
     { "status",    "Mostra a configuração e o uso",                    NULL,                 0 },
     { "session",   "Informações da sessão",                           NULL,                 0 },
     { "new",       "Começa uma sessão nova",                          NULL,                 0 },
     { "clear",     "Limpa a conversa",                                NULL,                 0 },
-    { "stop",      "Interrompe a geração em andamento",               NULL,                 0 },
     { "skills",    "Lista as skills disponiveis",                      NULL,                 0 },
-    { "copy",      "Copia a última resposta para a área de transferência", NULL,             0 },
     { "extensions","Painel de extensões (ou /extensions <pedido> cria)", NULL,               1 },
     { "translator","Troca o idioma da interface",                      "pt-BR|pt|en|es|zh|ja", 1 },
     { "reload",    "Recarrega config e tema do disco",                NULL,                 0 },
     { "quit",      "Sai do Delta Agent",                              NULL,                 0 },
-    { "forlimit", "Liga/desliga o teto de ferramentas por turno",     "[n]",                1 },
     { "undo",      "Restaura o conteudo anterior de um arquivo",       "[arquivo]",          1 },
     { "update",    "Instala a versao mais nova do GitHub",              "[--check]",          1 },
 };
@@ -342,9 +332,7 @@ static char *paste_dir(void);
 static void expand_paste(Str *text);
 static void inserir_colagem(const Clip *c);
 static void input_insert_text(const char *t, size_t n);
-static void copy_last_response(void);
 static void sel_clear(void);
-static void render_selection(void);
 /* Rola a conversa: +1 = roda para cima (conteudo mais antigo). */
 static void scroll_wheel(int shift);
 
@@ -1109,7 +1097,7 @@ static void render(void)
     screen_blit(&app.screen, &app.tr, start, 0, tr_view);
     app.tr_start = start;
     app.tr_view = tr_view;
-    render_selection();
+    /* selecao/copiar desativados nesta versao */
 
     /* editor */
     int ey = rows - footer_h - editor_h - menu_h;
@@ -1684,8 +1672,8 @@ static int cb_has_steer(void *ud)
 
 static int fila_count(void) { return g_fila_n; }
 
-/* Enter com o agente trabalhando: /stop interrompe; texto comum entra na
-   fila (o submit real so roda fora do agent_run). */
+/* Enter com o agente trabalhando: texto comum entra na fila (o submit real
+   so roda fora do agent_run). */
 static void enqueue_input(void)
 {
     if (app.input.len == 0) return;
@@ -1696,11 +1684,7 @@ static void enqueue_input(void)
     app.cursor = 0;
 
     if (text.data[0] == '/') {
-        if (str_eq(text.data, "/stop")) {
-            handle_command(text.data);
-        } else {
-            notify("comando aguardando o fim do turno (use /stop para interromper)");
-        }
+        notify("comando aguardando o fim do turno");
         str_free(&text);
         render();
         return;
@@ -2030,22 +2014,10 @@ static void handle_command(const char *raw)
             "Ctrl+D sai (Ctrl+C nunca fecha o app). Digite enquanto ele trabalha: a\n"
             "mensagem aparece no chat marcada \"na fila\" e o agente corta a resposta\n"
             "no meio para le-la (Ctrl+Q devolve).\n"
-            "Copiar: Ctrl+X ou /copy, ou arraste o mouse na conversa (copia ao soltar).\n"
             "Editor: Ctrl+U/K (linha), Ctrl+W (palavra), Ctrl+Y (colar), Ctrl+Z (undo).\n"
             "Up/Down, PgUp/PgDn e a roda do mouse rolam a conversa; Esc volta para o\n"
             "fim (e limpa a seleção). Tab completa o comando, Esc fecha o menu.\n");
         app.tr_dirty = 1;
-        render();
-        return;
-    }
-
-    if (str_eq(cmd, "/stop")) {
-        if (app.working) {
-            app.abort_requested = 1;
-            notify("interrompendo...");
-        } else {
-            notify("nada rodando");
-        }
         render();
         return;
     }
@@ -2094,22 +2066,6 @@ static void handle_command(const char *raw)
         return;
     }
 
-    /* /forlimit [n]: teto de ferramentas por turno (liga/desliga) */
-    if (str_eq(cmd, "/forlimit")) {
-        int cur = agent_tool_limit();
-        if (cur > 0) {
-            agent_set_tool_limit(0);
-            notify("teto de ferramentas por turno: desligado");
-        } else {
-            int n = *rest ? atoi(rest) : 8;
-            if (n <= 0) n = 8;
-            agent_set_tool_limit(n);
-            notify("teto de ferramentas por turno: %d (use /forlimit de novo para desligar)", n);
-        }
-        render();
-        return;
-    }
-
     /* /undo [arquivo]: restaura o conteudo anterior a ultima edicao */
     if (str_eq(cmd, "/undo")) {
         const char *alvo = rest && *rest ? rest : NULL;
@@ -2121,12 +2077,6 @@ static void handle_command(const char *raw)
         } else {
             notify("nada para desfazer");
         }
-        render();
-        return;
-    }
-
-    if (str_eq(cmd, "/copy")) {
-        copy_last_response();
         render();
         return;
     }
@@ -2381,32 +2331,6 @@ static void handle_command(const char *raw)
             }
         }
         open_picker(4);
-        return;
-    }
-
-    if (str_eq(cmd, "/theme")) {
-        if (*rest) {
-            Theme t;
-            int achou = load_theme_named(rest, &t);
-            theme_free(&app.theme);
-            app.theme = t;
-            free(app.theme_name);
-            app.theme_name = str_dup(rest);
-            app.tr_dirty = 1;
-            notify(achou ? "tema: %s" : "tema '%s' nao encontrado; usando mono", rest);
-        } else {
-            notify("tema atual: %s  (mono | dark | light)", app.theme_name ? app.theme_name : "mono");
-        }
-        render();
-        return;
-    }
-
-    if (str_eq(cmd, "/tools")) {
-        Block *b = block_add(B_INFO);
-        for (const Tool *t = tools_all(); t->name; t++)
-            str_addf(&b->text, "%s - %s\n", t->name, t->description);
-        app.tr_dirty = 1;
-        render();
         return;
     }
 
@@ -2731,10 +2655,14 @@ static void input_yank(void)
 /* ================================================================== */
 /* Selecao no transcript + copia                                       */
 /* ================================================================== */
+/* ================================================================== */
+/* Copia da conversa — DESATIVADA nesta versao                          */
+/* ================================================================== */
+/* O mouse nao seleciona nem copia: clique e arrasto nao fazem nada no
+   transcript. Reativar requer repor a selecao (sel_*), o copy_payload e o
+   Ctrl+X que ficaram no historico do git (commit "copiar mensagens"). */
 static void sel_clear(void)
 {
-    app.sel_active = 0;
-    app.sel_drag = 0;
 }
 
 /* Roda do mouse. Um degrau por evento, igual com o agente trabalhando ou
@@ -2743,244 +2671,6 @@ static void scroll_wheel(int shift)
 {
     app.scroll += (shift > 0) ? 3 : -3;
     if (app.scroll < 0) app.scroll = 0;
-}
-
-static void sel_normalize(int *y0, int *x0, int *y1, int *x1)
-{
-    if (app.sel_ay > app.sel_hy ||
-        (app.sel_ay == app.sel_hy && app.sel_ax > app.sel_hx)) {
-        *y0 = app.sel_hy; *x0 = app.sel_hx; *y1 = app.sel_ay; *x1 = app.sel_ax;
-    } else {
-        *y0 = app.sel_ay; *x0 = app.sel_ax; *y1 = app.sel_hy; *x1 = app.sel_hx;
-    }
-}
-
-static int sel_has_text(void)
-{
-    int y0, x0, y1, x1;
-    sel_normalize(&y0, &x0, &y1, &x1);
-    return y0 != y1 || x0 != x1;
-}
-
-/* Ultima linha (exclusiva) do bloco i no transcript. */
-static int block_row_end(size_t i)
-{
-    int inicio = app.blocks[i].tr_y;
-    if (i + 1 < app.n_blocks) {
-        int fim = app.blocks[i + 1].tr_y;
-        if (fim > inicio) return fim;
-    }
-    return app.tr_end_y > inicio ? app.tr_end_y : inicio + 1;
-}
-
-/* Bloco que ocupa a linha `row` (1 = achou). */
-static int sel_block_at(int row, int *out_ini, int *out_fim)
-{
-    for (size_t i = 0; i < app.n_blocks; i++) {
-        int ini = app.blocks[i].tr_y;
-        int fim = block_row_end(i);
-        if (row >= ini && row < fim) {
-            *out_ini = ini;
-            *out_fim = fim;
-            return 1;
-        }
-    }
-    return 0;
-}
-
-/* Texto "de verdade" de um bloco: sem moldura, sem wrap visual, sem o
-   rodape de tokens. E' o que o usuario espera ao copiar uma mensagem. */
-static void block_plain_text(const Block *b, Str *out)
-{
-    if (b->kind == B_TOOL) {
-        if (b->tool_name && *b->tool_name) {
-            str_adds(out, b->tool_name);
-            if (b->tool_args && *b->tool_args) {
-                str_addc(out, ' ');
-                str_adds(out, b->tool_args);
-            }
-            if (b->tool_output.len) str_addc(out, '\n');
-        }
-        if (b->tool_output.len) str_add(out, b->tool_output.data, b->tool_output.len);
-        return;
-    }
-    if (b->text.len) str_add(out, b->text.data, b->text.len);
-}
-
-static int eh_sem_conteudo(uint32_t cp)
-{
-    /* espaco, celula nunca escrita ou desenho de caixa (╭─│╰ etc.) */
-    return cp == 0 || cp == ' ' || cp == '\t' || (cp >= 0x2500 && cp <= 0x257F);
-}
-
-static void sel_push_line(Str *out, const char *s, size_t n)
-{
-    if (n == 0) {
-        if (out->len && out->data[out->len - 1] != '\n') str_addc(out, '\n');
-        return;
-    }
-    if (out->len && out->data[out->len - 1] != '\n') str_addc(out, '\n');
-    str_add(out, s, n);
-    str_addc(out, '\n');
-}
-
-/* Trecho cru da grade (usado so' quando a selecao pega meia mensagem):
-   tira a moldura e os espacos das pontas de cada linha. */
-static void sel_grid_range(Str *out, int ya, int yb, int xa, int xb)
-{
-    int rows = app.tr.rows, cols = app.tr.cols;
-    if (ya < 0) ya = 0;
-    if (yb >= rows) yb = rows - 1;
-    if (cols <= 0) return;
-    for (int y = ya; y <= yb; y++) {
-        int xs = (y == ya) ? xa : 0;
-        int xe = (y == yb) ? xb : cols - 1;
-        if (xs < 0) xs = 0;
-        if (xe > cols - 1) xe = cols - 1;
-        int first = -1, last = -1;
-        for (int x = xs; x <= xe; x++) {
-            uint32_t cp = app.tr.cp[(size_t)y * (size_t)cols + (size_t)x];
-            if (!eh_sem_conteudo(cp)) {
-                if (first < 0) first = x;
-                last = x;
-            }
-        }
-        if (first < 0) { sel_push_line(out, "", 0); continue; }
-        Str line; str_init(&line);
-        for (int x = first; x <= last; x++) {
-            uint32_t cp = app.tr.cp[(size_t)y * (size_t)cols + (size_t)x];
-            if (cp == 0) cp = ' ';
-            char buf[4];
-            int n = utf8_encode(cp, buf);
-            str_add(&line, buf, (size_t)n);
-        }
-        sel_push_line(out, line.data, line.len);
-        str_free(&line);
-    }
-}
-
-/* Texto da selecao. Regra: mensagem inteira sai do modelo de blocos (texto
-   original, sem quebras do wrap nem moldura de caixa); o que estiver cortado
-   no meio sai da grade, limpo. */
-static void selection_text(Str *out)
-{
-    int y0, x0, y1, x1;
-    sel_normalize(&y0, &x0, &y1, &x1);
-    if (app.tr.rows <= 0) return;
-    if (y0 < 0) y0 = 0;
-    if (y1 >= app.tr.rows) y1 = app.tr.rows - 1;
-    if (y0 > y1) return;
-    const int cols = app.tr.cols;
-
-    size_t i = 0;
-    int y = y0;
-    while (y <= y1) {
-        while (i < app.n_blocks && block_row_end(i) <= y) i++;
-        if (i >= app.n_blocks) {          /* fim: cabecalho/linhas soltas */
-            sel_grid_range(out, y, y1, (y == y0) ? x0 : 0, x1);
-            break;
-        }
-        int bs = app.blocks[i].tr_y;
-        int be = block_row_end(i);
-        if (bs > y) {                     /* linhas antes do bloco */
-            int ate = (bs - 1 > y1) ? y1 : bs - 1;
-            sel_grid_range(out, y, ate, (y == y0) ? x0 : 0, (ate == y1) ? x1 : cols - 1);
-            y = ate + 1;
-            continue;
-        }
-        int cobre_tudo = (y <= bs) && (y1 >= be - 1) &&
-                         (y > y0 || x0 == 0) &&
-                         (y1 > be - 1 || x1 >= cols - 1);
-        if (cobre_tudo) {
-            Str t; str_init(&t);
-            block_plain_text(&app.blocks[i], &t);
-            if (t.len) {
-                if (out->len && out->data[out->len - 1] != '\n') str_addc(out, '\n');
-                str_add(out, t.data, t.len);
-                if (out->data[out->len - 1] != '\n') str_addc(out, '\n');
-            }
-            str_free(&t);
-            y = be;
-            i++;
-            continue;
-        }
-        int ate = (be - 1 > y1) ? y1 : be - 1;
-        if (ate < y) { i++; continue; }
-        sel_grid_range(out, y, ate, (y == y0) ? x0 : 0, (ate == y1) ? x1 : cols - 1);
-        y = ate + 1;
-    }
-
-    /* sem linhas em branco nas pontas */
-    while (out->len && (out->data[out->len - 1] == '\n' || out->data[out->len - 1] == ' '))
-        str_truncate(out, out->len - 1);
-    size_t ini = 0;
-    while (ini < out->len && out->data[ini] == '\n') ini++;
-    if (ini) {
-        memmove(out->data, out->data + ini, out->len - ini);
-        out->len -= ini;
-        out->data[out->len] = 0;
-    }
-}
-
-/* Pinta a selecao (inverte fg/bg) na area do transcript da tela. */
-static void render_selection(void)
-{
-    if (!app.sel_active || !sel_has_text()) return;
-    int y0, x0, y1, x1;
-    sel_normalize(&y0, &x0, &y1, &x1);
-    int cols = app.screen.cols;
-    for (int sy = 0; sy < app.tr_view; sy++) {
-        int ty = app.tr_start + sy;
-        if (ty < y0 || ty > y1 || ty >= app.tr.rows) continue;
-        int xs = (ty == y0) ? x0 : 0;
-        int xe = (ty == y1) ? x1 : cols - 1;
-        if (xs > xe) continue;
-        for (int x = xs; x <= xe && x < cols; x++) {
-            size_t i = (size_t)sy * (size_t)cols + (size_t)x;
-            uint32_t t = app.screen.fg[i];
-            app.screen.fg[i] = app.screen.bg[i];
-            app.screen.bg[i] = t;
-            app.screen.at[i] |= ATTR_INVERSE;
-        }
-    }
-}
-
-/* Copia para o clipboard e avisa na borda do editor (sem entrar no chat). */
-static int copy_text(const char *rotulo, Str *t)
-{
-    if (!t || !t->len) {
-        notify_status("nada para copiar ainda");
-        return 0;
-    }
-    int ok = clipboard_write_text(t->data);
-    if (ok) notify_status("%s (%d caracteres)", rotulo, (int)utf8_len(t->data));
-    else    notify_status("nao deu para copiar (clipboard ocupado?)");
-    return ok;
-}
-
-/* O que o Ctrl+X levaria agora: a selecao, ou a ultima resposta. */
-static void copy_payload(Str *out)
-{
-    if (app.sel_active && sel_has_text()) {
-        selection_text(out);
-        return;
-    }
-    Block *last = NULL;
-    for (size_t i = 0; i < app.n_blocks; i++)
-        if (app.blocks[i].kind == B_ASSISTANT && app.blocks[i].text.len) last = &app.blocks[i];
-    if (last) str_add(out, last->text.data, last->text.len);
-    while (out->len && (out->data[out->len - 1] == '\n' || out->data[out->len - 1] == ' '))
-        str_truncate(out, out->len - 1);
-}
-
-/* Ctrl+X / /copy: com selecao ativa copia ela; senao a ultima resposta. */
-static void copy_last_response(void)
-{
-    int selecao = app.sel_active && sel_has_text();
-    Str t; str_init(&t);
-    copy_payload(&t);
-    copy_text(selecao ? "selecao copiada" : "ultima resposta copiada", &t);
-    str_free(&t);
 }
 
 /* ================================================================== */
@@ -3243,50 +2933,8 @@ static void handle_event(const Event *ev)
     int n_items = (int)g_items_n;
     if (ev->type != EV_CTRL_KEY && ev->type != EV_RESIZE) app.ctrl_key_ms = 0;
 
-    /* -------- mouse: clique seleciona a mensagem; arrasto seleciona texto -------- */
-    if (ev->type == EV_DRAG) {
-        if (app.menu_visible || app.picker) return;
-        if (ev->my < 0 || ev->my >= app.tr_view) return;
-        int ty = app.tr_start + ev->my;
-        if (ty >= app.tr.rows) return;
-        int tx = ev->mx >= app.tr.cols ? app.tr.cols - 1 : ev->mx;
-        if (app.sel_active && !app.sel_drag) {
-            /* veio de um clique (mensagem inteira): recomeca no ponto clicado */
-            app.sel_drag = 1;
-            app.sel_ax = app.sel_click_x;
-            app.sel_ay = app.sel_click_y;
-            app.sel_hx = tx;
-            app.sel_hy = ty;
-            render();
-            return;
-        }
-        if (!app.sel_active) {
-            app.sel_active = 1;
-            app.sel_drag = 1;
-            app.sel_ax = app.sel_hx = tx;
-            app.sel_ay = app.sel_hy = ty;
-            render();
-            return;
-        }
-        if (tx != app.sel_hx || ty != app.sel_hy) {
-            app.sel_hx = tx;
-            app.sel_hy = ty;
-            render();
-        }
-        return;
-    }
-    if (ev->type == EV_RELEASE) {
-        if (app.sel_active && app.sel_drag && sel_has_text()) {
-            Str t; str_init(&t);
-            selection_text(&t);
-            if (t.len) copy_text("selecao copiada", &t);
-            str_free(&t);
-        } else if (app.sel_active && !app.sel_drag) {
-            notify_status("mensagem selecionada \u00b7 Ctrl+X copia");
-        }
-        render();
-        return;   /* mantem o destaque; Esc ou novo clique limpa */
-    }
+    /* -------- mouse: roda do mouse rola a conversa (selecao/copiar desativados) -------- */
+    if (ev->type == EV_DRAG || ev->type == EV_RELEASE) return;
     if (ev->type == EV_WHEEL) {
         int n = (int)g_items_n;
         if ((app.menu_visible || app.picker) && n > 0) {
@@ -3310,29 +2958,6 @@ static void handle_event(const Event *ev)
             }
             render();
             return;
-        }
-        if (!app.menu_visible && !app.picker && ev->my >= 0 && ev->my < app.tr_view) {
-            int ty = app.tr_start + ev->my;
-            if (ty < app.tr.rows) {
-                int tx = ev->mx >= app.tr.cols ? app.tr.cols - 1 : ev->mx;
-                int ini = 0, fim = 0;
-                /* clique = seleciona a mensagem inteira (Ctrl+X copia limpo);
-                   arrastar a partir daqui vira selecao livre de texto. */
-                app.sel_click_x = tx;
-                app.sel_click_y = ty;
-                app.sel_drag = 0;
-                app.sel_active = 1;
-                if (sel_block_at(ty, &ini, &fim)) {
-                    app.sel_ax = 0;
-                    app.sel_ay = ini;
-                    app.sel_hx = app.tr.cols - 1;
-                    app.sel_hy = fim - 1;
-                } else {
-                    app.sel_ax = app.sel_hx = tx;
-                    app.sel_ay = app.sel_hy = ty;
-                }
-            }
-            render();
         }
         return;
     }
@@ -3512,10 +3137,9 @@ static void handle_event(const Event *ev)
                 render();
                 break;
             case EV_ESC:
-                /* cascata: primeiro a selecao, depois a rolagem, e so' no fim o
-                   texto do editor (antes o ESC fazia as tres coisas de uma vez
-                   e apagava o que estava sendo digitado) */
-                if (app.sel_active) { sel_clear(); render(); break; }
+                /* cascata: primeiro a rolagem, depois o texto do editor (antes
+                   o ESC fazia as duas coisas de uma vez e apagava o que estava
+                   sendo digitado) */
                 if (app.scroll > 0) { app.scroll = 0; render(); break; }
                 if (app.input.len) { str_clear(&app.input); app.cursor = 0; }
                 app.menu_suppressed = 0;
@@ -3566,7 +3190,6 @@ static void handle_event(const Event *ev)
                 else if (ev->cp == 'w') { input_delete_word_backward(); render(); }
                 else if (ev->cp == 'y') { input_yank(); render(); }
                 else if (ev->cp == 'z') { undo_pop(); render(); }
-                else if (ev->cp == 'x') { copy_last_response(); render(); }
                 else if (ev->cp == 'q') {
                     /* devolve a ultima mensagem da fila para o editor */
                     if (g_fila_n > 0) {
@@ -3881,6 +3504,12 @@ static int run_replay(const char *path, int cols, int rows, int force_offline)
             /* intervalo entre steps: o agente le a fila (cb_on_interval) */
             cb_on_interval(NULL);
             render();
+        } else if (str_eq(line, "idle")) {
+            /* idle <ms> - espera sem mandar input nenhum (a TUI tem que
+               continuar viva depois de ficar parada) */
+            int ms = arg ? atoi(arg) : 1000;
+            if (ms <= 0) ms = 1000;
+            msleep(ms);
         } else if (str_eq(line, "benchmd")) {
             /* benchmd <n> <bytes> - custo do layout de markdown isolado */
             int rep = 50, bytes = 4096;
@@ -3957,28 +3586,6 @@ static int run_replay(const char *path, int cols, int rows, int force_offline)
             render();
             dump_screen_plain(&app.screen, stdout);
             printf("\n");
-        } else if (str_eq(line, "select-block")) {
-            /* teste: seleciona a mensagem inteira (sem depender de coordenada) */
-            int idx = arg ? atoi(arg) : 0;
-            render();
-            if (idx < 0) idx = (int)app.n_blocks + idx;   /* -1 = ultima */
-            if (idx >= 0 && (size_t)idx < app.n_blocks) {
-                int ini = app.blocks[idx].tr_y;
-                int fim = block_row_end((size_t)idx);
-                app.sel_active = 1;
-                app.sel_drag = 1;
-                app.sel_ax = 0;
-                app.sel_ay = ini;
-                app.sel_hx = app.tr.cols > 0 ? app.tr.cols - 1 : 0;
-                app.sel_hy = fim - 1;
-                render();
-            }
-        } else if (str_eq(line, "copy-text")) {
-            /* teste: imprime o que o Ctrl+X copiaria (sem passar pelo clipboard) */
-            Str t; str_init(&t);
-            copy_payload(&t);
-            printf("--- copiado ---\n%.*s\n--- fim ---\n\n", (int)t.len, t.data ? t.data : "");
-            str_free(&t);
         } else if (str_eq(line, "update-check")) {
             /* teste: mesmo caminho do aviso de versao nova da inicializacao */
             update_boot_notice();

@@ -71,19 +71,9 @@ echo "[3] comandos da TUI (replay, sem terminal)"
 expect /tmp/delta_cmds.log "Mostra os comandos e atalhos" "/help renderiza a tabela de comandos"
 expect /tmp/delta_cmds.log "salva a chave"         "/help nao corta o ultimo caractere"
 expect /tmp/delta_cmds.log "provedor :"            "/status renderiza"
-expect /tmp/delta_cmds.log "read - Read file"      "/tools lista as ferramentas"
 expect /tmp/delta_cmds.log "comando desconhecido"  "comando invalido avisa no rodape"
 expect /tmp/delta_cmds.log "Limpa a conversa"      "bloco multilinha quebra linha"
 reject /tmp/delta_cmds.log "esta ajud$"            "nenhuma linha perde o ultimo caractere"
-
-# copiar mensagem (selecao por clique) tem que sair limpa: sem a moldura das
-# caixas de ferramenta e sem as quebras do wrap visual
-./bin/delta.exe --replay tests/replay-copia.txt 56 24 > /tmp/delta_copia.log 2>&1
-sed -n '/--- copiado ---/,/--- fim ---/p' /tmp/delta_copia.log > /tmp/delta_copia.txt
-expect /tmp/delta_copia.txt "terminal echo alpha beta"  "copiar: texto do bloco vai inteiro"
-reject /tmp/delta_copia.txt "│"                         "copiar: sem moldura de caixa"
-reject /tmp/delta_copia.txt "^  terminal \$"             "copiar: sem o titulo decorado da caixa"
-expect /tmp/delta_copia.log "  /help                              Mostra os comandos e atalhos" "copiar: linha longa nao chega quebrada"
 
 echo
 echo "[3b] fila enquanto o agente trabalha (replay)"
@@ -287,7 +277,7 @@ wait $FRESH_MOCK 2>/dev/null
 rm -rf build/freshcore
 
 echo
-echo "[3j] grafo do projeto, undo, /forlimit e MCP stdio"
+echo "[3j] grafo do projeto, undo e MCP stdio"
 ./bin/delta.exe --tool graph '{"op":"find","name":"tool_graph"}' > /tmp/delta_g1.log 2>&1
 expect /tmp/delta_g1.log "tool_graph" "graph: find acha o símbolo"
 ./bin/delta.exe --tool graph '{"op":"file","path":"src/codegraph.c"}' > /tmp/delta_g2.log 2>&1
@@ -302,24 +292,6 @@ printf 'antes
 ./bin/delta.exe --tool undo '{"op":"restore","path":"build/undo-test.txt"}' > /dev/null 2>&1
 if grep -q "antes" build/undo-test.txt; then pass "undo: restaura o conteúdo anterior"; else fail "undo nao restaurou"; fi
 rm -f build/undo-test.txt
-
-# tela alta: o dump mostra o fim do transcript e o aviso do /forlimit precisa
-# continuar visivel depois dos blocos do /status
-printf 'size 100 30
-type /forlimit 3
-key enter
-type /status
-key enter
-dump a
-type /forlimit
-key enter
-type /status
-key enter
-dump b
-' > /tmp/delta_fl.txt
-./bin/delta.exe --replay /tmp/delta_fl.txt 100 30 > /tmp/delta_fl.log 2>&1
-expect /tmp/delta_fl.log "teto de ferramentas por turno: 3" "/forlimit liga com teto"
-expect /tmp/delta_fl.log "teto de ferramentas por turno: desligado" "/forlimit desliga no segundo uso"
 
 if command -v python >/dev/null 2>&1; then
     rm -rf build/mcpstd
@@ -471,7 +443,7 @@ echo
 echo "[7] menu de comandos (digitar /)"
 ./bin/delta.exe --replay tests/replay-menu.txt 100 30 > /tmp/delta_menu.log 2>&1
 expect /tmp/delta_menu.log "→ help"   "marcador -> no item selecionado"
-expect /tmp/delta_menu.log "(1/23)"            "contador de itens"
+expect /tmp/delta_menu.log "(1/18)"            "contador de itens"
 expect /tmp/delta_menu.log "/models "         "Tab completa o comando"
 expect /tmp/delta_menu.log "Todos os modelos"    "descricao do comando aparece"
 
@@ -548,7 +520,6 @@ if grep -qE "^\|│.*│$" /tmp/delta_size.log 2>/dev/null || grep -q "│" /tmp
 else
     fail "editor sem bordas laterais"
 fi
-expect /tmp/delta_size.log "tema: dark"              "troca de tema pelo /theme"
 
 
 echo
