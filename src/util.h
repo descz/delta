@@ -3,7 +3,9 @@
 #ifndef DELTA_UTIL_H
 #define DELTA_UTIL_H
 
-#define DELTA_VERSION "0.1.4"
+#define DELTA_VERSION "0.1.5"
+/* Grupo de usuarios do Delta (Telegram). */
+#define DELTA_TELEGRAM "https://t.me/+NeaMf4VfXaY2MjIx"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -100,6 +102,8 @@ void     msleep(int ms);
 void     short_id(char out[9]);
 void     uuid_v4(char out[37]);
 void     iso_now(char out[32]);
+/* Abre uma URL no navegador padrao (melhor esforco). 1 = pedido enviado. */
+int      url_open(const char *url);
 /* Codifica em base64 (usado para anexar imagens). */
 void     base64_encode(Str *out, const unsigned char *data, size_t n);
 /* Isola a string para JSON (sem as aspas). */

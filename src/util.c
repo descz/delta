@@ -704,6 +704,25 @@ void iso_now(char out[32])
     strftime(out, 32, "%Y-%m-%dT%H:%M:%SZ", &tmv);
 }
 
+/* Abre a URL no navegador do sistema (ShellExecute no Windows, xdg-open/open
+   no POSIX). Melhor esforco: quem chama avisa o usuario se nao deu. */
+int url_open(const char *url)
+{
+    if (!url || !*url) return 0;
+#ifdef _WIN32
+    HINSTANCE r = ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+    return (INT_PTR)r > 32;
+#elif defined(__APPLE__)
+    char cmd[1200];
+    snprintf(cmd, sizeof cmd, "open '%s' >/dev/null 2>&1 &", url);
+    return system(cmd) == 0;
+#else
+    char cmd[1200];
+    snprintf(cmd, sizeof cmd, "xdg-open '%s' >/dev/null 2>&1 &", url);
+    return system(cmd) == 0;
+#endif
+}
+
 void base64_encode(Str *out, const unsigned char *data, size_t n)
 {
     static const char T[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

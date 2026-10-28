@@ -1,24 +1,19 @@
-/* setup.c - instalador do Delta com tela HTML (sem dependencias)
+/* setup.c - instalador do Delta.
  *
- * `delta --setup` sobe um servidor local em 127.0.0.1:<porta livre>, abre o
- * navegador na pagina embutida (src/installer_html.h), e expoe:
- *
- *   GET  /                 pagina do instalador
- *   GET  /logo.png         a logo (deltalogo.png ao lado do exe)
- *   GET  /api/state        {os, version, defaultDir, exe, logo}
- *   POST /api/pick         abre o seletor de pasta do sistema -> {dir}
- *   POST /api/install      {dir} -> cria a arvore, instala o binario, poe
- *                          `delta` no PATH, cria atalho e tenta fixar
- *   POST /api/quit         encerra o servidor
- *
- * `delta --install <dir>` faz o mesmo sem interface (usado nos testes).
+ * Sem servidor HTTP e sem navegador: a instalacao acontece numa tela nativa
+ * do proprio terminal (setup_wizard) — escolher a pasta de dados no seletor
+ * do sistema, copiar o binario, PATH, atalho e/ou atualizar pelo GitHub.
+ * `delta --install <pasta>` instala sem interface (imprime JSON).
  */
 #include "setup.h"
 #include "util.h"
 #include "json.h"
 #include "tools.h"
-#include "installer_html.h"
 #include "asset_logo.h"
+#include "ui.h"
+#include "term.h"
+#include "theme.h"
+#include "update.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,7 +38,7 @@
 #endif
 
 #ifndef DELTA_VERSION
-#  define DELTA_VERSION "0.1.4"
+#  define DELTA_VERSION "0.1.5"
 #endif
 
 /* ================================================================== */
@@ -77,28 +72,6 @@ static char *self_exe(void)
 #endif
 }
 
-static char *exe_dir(void)
-{
-    char *exe = self_exe();
-    char *dir = path_dirname(exe);
-    free(exe);
-    return dir;
-}
-
-/* Procura a logo: ao lado do exe, no cwd e um nivel acima. */
-static char *find_logo(void)
-{
-    char *dir = exe_dir();
-    char *p = path_join(dir, "deltalogo.png");
-    free(dir);
-    if (file_exists(p)) return p;
-    free(p);
-    if (file_exists("deltalogo.png")) return str_dup("deltalogo.png");
-    if (file_exists("../deltalogo.png")) return str_dup("../deltalogo.png");
-    return NULL;   /* sem arquivo: usa a logo embutida */
-}
-
-/* Roda um comando escondido e descarta a saida. */
 static void run_cmd(const char *cmd)
 {
     int code = 1;
@@ -507,65 +480,6 @@ static int verify_command(Install *in, Str *steps)
 /* ================================================================== */
 /* Servidor HTTP                                                       */
 /* ================================================================== */
-static int g_stop = 0;
-static int g_srv = -1;          /* socket de escuta (fechado no /api/quit) */
-
-static void http_send(int fd, const char *status, const char *ctype,
-                      const char *body, size_t len)
-{
-    Str h; str_init(&h);
-    str_adds(&h, "HTTP/1.1 ");
-    str_adds(&h, status);
-    str_adds(&h, "\r\nContent-Type: ");
-    str_adds(&h, ctype);
-    str_adds(&h, "\r\nContent-Length: ");
-    str_addf(&h, "%zu", len);
-    str_adds(&h, "\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n");
-#ifdef _WIN32
-    send(fd, h.data, (int)h.len, 0);
-    if (len) send(fd, body, (int)len, 0);
-#else
-    (void)!write(fd, h.data, h.len);
-    if (len) (void)!write(fd, body, len);
-#endif
-    str_free(&h);
-}
-
-static void json_reply(int fd, Str *json)
-{
-    http_send(fd, "200 OK", "application/json; charset=utf-8", json->data, json->len);
-}
-
-static void state_json(Str *o)
-{
-    char *exe = self_exe();
-    char *home = home_get();
-    char *core = path_join(home, ".deltaCore");
-#ifdef _WIN32
-    for (char *q = core; *q; q++) if (*q == '/') *q = '\\';
-#endif
-    str_adds(o, "{\"ok\":true,\"version\":\"");
-    str_adds(o, DELTA_VERSION);
-    str_adds(o, "\",\"os\":");
-#ifdef _WIN32
-    str_adds(o, "\"Windows\"");
-#elif defined(__APPLE__)
-    str_adds(o, "\"macOS\"");
-#else
-    str_adds(o, "\"Linux\"");
-#endif
-    str_adds(o, ",\"defaultDir\":");
-    json_write_string(o, core, strlen(core));
-    str_adds(o, ",\"exe\":");
-    json_write_string(o, exe, strlen(exe));
-    str_adds(o, ",\"logo\":");
-    str_adds(o, "true");       /* embutida no exe */
-    str_addc(o, '}');
-    free(core);
-    free(home);
-    free(exe);
-}
-
 static char *pick_folder(void)
 {
 #ifdef _WIN32
@@ -610,240 +524,252 @@ static char *pick_folder(void)
 #endif
 }
 
-static void handle_request(int fd, const char *method, const char *path,
-                           const char *body)
+/* ------------------------------------------------------------------ */
+/* Tela nativa do instalador (sem servidor HTTP, sem navegador)        */
+/* ------------------------------------------------------------------ */
+/* Roda quando o exe e' aberto com duplo clique ou com --setup. Mostra a
+   pasta de dados detectada, a versao e duas acoes: instalar (escolhendo a
+   pasta no seletor nativo do sistema) e atualizar. Tudo dentro do terminal;
+   nao sobe socket, nao abre pagina. */
+
+#define WIZ_ITENS 3
+
+/* add_step guarda os passos em JSON com <b>...</b> (heranca da pagina HTML).
+   Aqui viram texto de terminal: sem tags, com marcador. */
+static void wizard_passos(const char *json_fragmento, Str *out)
 {
-    if (str_eq(path, "/") || str_eq(path, "/index.html") ||
-        str_eq(path, "/wiki") || str_eq(path, "/docs")) {
-        http_send(fd, "200 OK", "text/html; charset=utf-8",
-                  INSTALLER_HTML, sizeof INSTALLER_HTML - 1);
-        return;
-    }
-    if (str_eq(path, "/logo.png")) {
-        char *logo = find_logo();
-        if (logo) {
-            size_t n = 0;
-            char *data = file_read(logo, &n);
-            free(logo);
-            if (data) {
-                http_send(fd, "200 OK", "image/png", data, n);
-                free(data);
-                return;
+    if (!json_fragmento || !*json_fragmento) return;
+    Str j; str_init(&j);
+    str_addc(&j, '[');
+    str_adds(&j, json_fragmento);
+    str_addc(&j, ']');
+    JValue *v = json_parse_cstr(j.data);
+    str_free(&j);
+    if (!v) return;
+    for (size_t i = 0; i < json_count(v); i++) {
+        JValue *it = json_at(v, i);
+        int ok = json_bool(json_get(it, "ok"), 0);
+        const char *txt = json_str(json_get(it, "text"));
+        Str limpo; str_init(&limpo);
+        for (const char *c = txt; *c; c++) {
+            if (c[0] == '<') {                       /* pula a tag inteira */
+                const char *fim = strchr(c, '>');
+                if (fim) { c = fim; continue; }
             }
+            str_addc(&limpo, *c);
         }
-        /* embutida no executavel: o exe e' autossuficiente */
-        http_send(fd, "200 OK", "image/png", (const char *)LOGO_PNG, LOGO_PNG_LEN);
-        return;
+        str_addf(out, "  %s %s\n", ok ? "\u2714" : "\u2716", limpo.data ? limpo.data : "");
+        str_free(&limpo);
     }
-    if (str_eq(path, "/api/state")) {
-        Str o; str_init(&o);
-        state_json(&o);
-        json_reply(fd, &o);
-        str_free(&o);
-        return;
-    }
-    if (str_eq(path, "/api/pick") && str_eq(method, "POST")) {
-        char *dir = pick_folder();
-        Str o; str_init(&o);
-        str_adds(&o, "{\"ok\":true,\"dir\":");
-        json_write_string(&o, dir ? dir : "", dir ? strlen(dir) : 0);
-        str_addc(&o, '}');
-        json_reply(fd, &o);
-        str_free(&o);
-        free(dir);
-        return;
-    }
-    if (str_eq(path, "/api/install") && str_eq(method, "POST")) {
-        const char *dir = "";
-        JValue *v = json_parse_cstr(body ? body : "{}");
-        if (v) {
-            dir = json_str(json_get(v, "dir"));
-            if (!*dir) dir = "";
-        }
-        Str steps; str_init(&steps);
-        Install in;
-        int ok = *dir ? do_install(dir, &in, &steps) : 0;
-        Str o; str_init(&o);
-        if (!ok) {
-            str_adds(&o, "{\"ok\":false,\"error\":");
-            const char *msg = *dir ? "falhou ao instalar" : "escolha uma pasta";
-            json_write_string(&o, msg, strlen(msg));
-            str_adds(&o, ",\"steps\":[");
-            str_adds(&o, steps.data ? steps.data : "");
-            str_adds(&o, "]}");
-        } else {
-            int roda = verify_command(&in, &steps);
-            str_adds(&o, "{\"ok\":");
-            str_adds(&o, roda ? "true" : "false");
-            str_adds(&o, ",\"coreDir\":");
-            json_write_string(&o, in.core, strlen(in.core));
-            str_adds(&o, ",\"exePath\":");
-            json_write_string(&o, in.exe, strlen(in.exe));
-            str_adds(&o, ",\"resolved\":");
-            json_write_string(&o, in.resolved, strlen(in.resolved));
-            str_adds(&o, ",\"pinned\":");
-            json_write_string(&o, in.pinned, strlen(in.pinned));
-            str_adds(&o, ",\"steps\":[");
-            str_adds(&o, steps.data ? steps.data : "");
-            str_adds(&o, "]}");
-        }
-        json_reply(fd, &o);
-        str_free(&o);
-        str_free(&steps);
-        if (v) json_free(v);
-        return;
-    }
-    if (str_eq(path, "/api/quit") && str_eq(method, "POST")) {
-        http_send(fd, "200 OK", "application/json", "{\"ok\":true}", 11);
-        g_stop = 1;
-        /* fecha a escuta: o accept() volta com erro e o loop termina na hora */
-        if (g_srv >= 0) {
-#ifdef _WIN32
-            closesocket((SOCKET)g_srv);
-#else
-            close(g_srv);
-#endif
-            g_srv = -1;
-        }
-        return;
-    }
-    http_send(fd, "404 Not Found", "text/plain", "404", 3);
+    json_free(v);
 }
 
-static void open_browser(const char *url)
+static void wizard_draw(Screen *s, const Theme *t, int sel, const char *core,
+                        const char *versao, const char *novidade, const Str *detalhe)
 {
-#ifdef _WIN32
-    ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
-#elif defined(__APPLE__)
-    Str c; str_init(&c); str_adds(&c, "open '"); str_adds(&c, url); str_adds(&c, "'");
-    run_cmd(c.data); str_free(&c);
-#else
-    Str c; str_init(&c); str_adds(&c, "xdg-open '"); str_adds(&c, url); str_adds(&c, "' &");
-    int rc = system(c.data);
-    (void)rc;
-    str_free(&c);
-#endif
+    screen_clear(s);
+    int y = ui_welcome(s, 0, s->cols, t, versao, core);
+    y += 1;
+
+    Style st_dim = { tcolor_hex(theme_tok(t, TK_DIM)), COL_DEFAULT, 0 };
+    Style st_ok  = { tcolor_hex(theme_tok(t, TK_SUCCESS)), COL_DEFAULT, 0 };
+    Style st_war = { tcolor_hex(theme_tok(t, TK_WARNING)), COL_DEFAULT, ATTR_BOLD };
+
+    {
+        char linha[512];
+        snprintf(linha, sizeof linha, "pasta de dados : %s", core);
+        y += screen_text(s, 2, y, linha, strlen(linha), st_dim, s->cols - 3);
+        if (novidade && *novidade)
+            y += screen_text(s, 2, y, novidade, strlen(novidade), st_war, s->cols - 3);
+        else
+            y += screen_text(s, 2, y, "tudo em dia com a ultima versao", 31, st_ok, s->cols - 3);
+    }
+    y += 1;
+
+    {
+        MenuItem itens[WIZ_ITENS] = {
+            { "Instalar nesta maquina", "escolhe a pasta de dados e copia o binario (PATH + atalho)" },
+            { "Atualizar o Delta",      "procura a versao nova no GitHub e troca este executavel" },
+            { "Sair",                   NULL },
+        };
+        y += ui_menu(s, y, s->cols, t, itens, WIZ_ITENS, sel, 0, WIZ_ITENS, 26, NULL);
+    }
+
+    if (detalhe && detalhe->len) {
+        y += 1;
+        Style st = { tcolor_hex(theme_tok(t, TK_TEXT)), COL_DEFAULT, 0 };
+        int linhas = 0;
+        const char *p = detalhe->data;
+        while (*p && linhas < 10) {
+            const char *eol = strchr(p, '\n');
+            size_t n = eol ? (size_t)(eol - p) : strlen(p);
+            screen_para(s, 2, y, s->cols - 3, p, n, st);
+            y += 1;
+            linhas++;
+            if (!eol) break;
+            p = eol + 1;
+        }
+    }
+
+    y = s->rows - 1;
+    screen_text(s, 2, y, "\u2191\u2193 move \u00b7 Enter escolhe \u00b7 Esc sai",
+                40, st_dim, s->cols - 3);
 }
 
-int setup_run(int wiki)
+/* Uma rodada de tela: 1 = escolheu (sel), 0 = saiu. */
+static int wizard_menu(Theme *t, int *sel, const char *core, const char *versao,
+                       const char *novidade, Str *detalhe)
+{
+    int cols = 0, rows = 0;
+    term_size(&cols, &rows);
+    Screen s;
+    screen_init(&s, cols, rows);
+    int escolha = -1;
+    for (;;) {
+        term_size(&cols, &rows);
+        if (s.cols != cols || s.rows != rows) screen_resize(&s, cols, rows);
+        wizard_draw(&s, t, *sel, core, versao, novidade, detalhe);
+        term_present(&s);
+        Event ev;
+        if (!term_read(&ev, 200)) continue;
+        if (ev.type == EV_UP)   { *sel = (*sel + WIZ_ITENS - 1) % WIZ_ITENS; continue; }
+        if (ev.type == EV_DOWN) { *sel = (*sel + 1) % WIZ_ITENS; continue; }
+        if (ev.type == EV_ENTER) { escolha = *sel; break; }
+        if (ev.type == EV_ESC || (ev.type == EV_CTRL && ev.cp == 'c') ||
+            (ev.type == EV_CTRL && ev.cp == 'd')) break;
+        if (ev.type == EV_CHAR && (ev.cp == 'q' || ev.cp == 'Q')) break;
+    }
+    screen_free(&s);
+    return escolha;
+}
+
+/* Persegue Enter para o usuario ler o resultado. */
+static void wizard_espera(Theme *t, int *sel, const char *core, const char *versao,
+                          const char *novidade, Str *detalhe)
+{
+    int cols = 0, rows = 0;
+    term_size(&cols, &rows);
+    Screen s;
+    screen_init(&s, cols, rows);
+    for (;;) {
+        term_size(&cols, &rows);
+        if (s.cols != cols || s.rows != rows) screen_resize(&s, cols, rows);
+        wizard_draw(&s, t, *sel, core, versao, novidade, detalhe);
+        Style st = { tcolor_hex(theme_tok(t, TK_ACCENT)), COL_DEFAULT, ATTR_BOLD };
+        screen_text(&s, 2, s.rows - 2, "Enter para voltar", 17, st, s.cols - 3);
+        term_present(&s);
+        Event ev;
+        if (!term_read(&ev, 250)) continue;
+        if (ev.type == EV_ENTER || ev.type == EV_ESC ||
+            (ev.type == EV_CTRL && (ev.cp == 'c' || ev.cp == 'd'))) break;
+    }
+    screen_free(&s);
+}
+
+int setup_wizard(void)
 {
     delta_bootstrap();
 #ifdef _WIN32
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);   /* SHBrowseForFolder */
 #endif
 
-#ifdef _WIN32
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        fprintf(stderr, "delta: falha no winsock\n");
+    char *core = delta_home();
+    char versao[64];
+    snprintf(versao, sizeof versao, "%s", DELTA_VERSION);
+
+    if (!term_is_tty() || !term_init()) {
+        /* sem terminal (script, pipe): nao da' para abrir a tela */
+        printf("Delta Agent %s\n\n", DELTA_VERSION);
+        printf("Instalar : delta --install <pasta>\n");
+        printf("Atualizar: delta update [--check]\n");
+        printf("Usuario  : %s\n", core);
+        free(core);
         return 1;
     }
-    SOCKET srv = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (srv == INVALID_SOCKET) return 1;
-    int yes = 1;
-    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, (const char *)&yes, sizeof yes);
 
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof addr);
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = 0;                       /* porta livre */
-    if (bind(srv, (struct sockaddr *)&addr, sizeof addr) != 0) return 1;
-    if (listen(srv, 8) != 0) return 1;
-    int alen = sizeof addr;
-    getsockname(srv, (struct sockaddr *)&addr, &alen);
-    int port = ntohs(addr.sin_port);
-#else
-    int srv = socket(AF_INET, SOCK_STREAM, 0);
-    if (srv < 0) return 1;
-    int yes = 1;
-    setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof addr);
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = 0;
-    if (bind(srv, (struct sockaddr *)&addr, sizeof addr) != 0) return 1;
-    if (listen(srv, 8) != 0) return 1;
-    socklen_t alen = sizeof addr;
-    getsockname(srv, (struct sockaddr *)&addr, &alen);
-    int port = ntohs(addr.sin_port);
-#endif
+    Theme t;
+    theme_load_builtin_dark(&t);
+    term_alt_enter();
+    term_set_title("Delta Agent - instalador");
 
-    g_srv = srv;
-
-    char url[160];
-    snprintf(url, sizeof url, "http://127.0.0.1:%d%s", port, wiki ? "/wiki" : "/");
-    printf("Delta instalador: %s\n", url);
-    printf("(feche esta janela ou use 'Fechar instalador' na pagina para sair)\n");
-    fflush(stdout);
-    if (!getenv("DELTA_SETUP_NOBROWSER")) open_browser(url);
-
-    while (!g_stop) {
-#ifdef _WIN32
-        SOCKET cli = accept(srv, NULL, NULL);
-        if (cli == INVALID_SOCKET) break;
-        int cfd = (int)cli;
-#else
-        int cfd = accept(srv, NULL, NULL);
-        if (cfd < 0) break;
-#endif
-        char req[65536];
-        int got = 0;
-#ifdef _WIN32
-        got = recv(cfd, req, (int)sizeof req - 1, 0);
-#else
-        got = (int)read(cfd, req, sizeof req - 1);
-#endif
-#ifdef _WIN32
-        if (got <= 0) { closesocket(cfd); continue; }
-#else
-        if (got <= 0) { close(cfd); continue; }
-#endif
-        req[got] = 0;
-
-        char method[8] = "", path[512] = "";
-        sscanf(req, "%7s %511s", method, path);
-        const char *body = "";
-        char *hdr = strstr(req, "\r\n\r\n");
-        if (hdr) {
-            body = hdr + 4;
-            /* corpo pode ter vindo no mesmo pacote; se nao, le o resto */
-            int want = 0;
-            const char *cl = strstr(req, "Content-Length:");
-            if (cl) want = atoi(cl + 15);
-            int have = (int)strlen(body);
-            while (have < want && got < (int)sizeof req - 1) {
-#ifdef _WIN32
-                int n = recv(cfd, req + got, (int)sizeof req - 1 - got, 0);
-#else
-                int n = (int)read(cfd, req + got, sizeof req - 1 - (size_t)got);
-#endif
-                if (n <= 0) break;
-                got += n;
-                req[got] = 0;
-                hdr = strstr(req, "\r\n\r\n");
-                body = hdr ? hdr + 4 : "";
-                have = (int)strlen(body);
-            }
-        }
-        handle_request(cfd, method, path, body);
-#ifdef _WIN32
-        closesocket(cfd);
-#else
-        close(cfd);
-#endif
+    /* versao nova? usa o cache (24 h) para nao travar a abertura */
+    char novidade[256] = "";
+    {
+        UpdateInfo u;
+        if (update_cached(&u) && u.available)
+            snprintf(novidade, sizeof novidade,
+                     "versao nova     : %s disponivel (voce tem %s) \u00b7 use Atualizar",
+                     u.latest, u.current);
     }
-#ifdef _WIN32
-    closesocket(srv);
-    WSACleanup();
-#else
-    close(srv);
-#endif
+
+    Str detalhe; str_init(&detalhe);
+    int sel = 0;
+    if (novidade[0]) sel = 1;      /* se ha' versao nova, sugere atualizar */
+
+    for (;;) {
+        int escolha = wizard_menu(&t, &sel, core, versao, novidade, &detalhe);
+        if (escolha < 0 || escolha == 2) break;     /* saiu */
+
+        str_clear(&detalhe);
+        if (escolha == 0) {
+            char *pasta = pick_folder();
+            if (!pasta) {
+                str_adds(&detalhe, "  nenhuma pasta escolhida \u00b7 nada foi alterado\n");
+                wizard_espera(&t, &sel, core, versao, novidade, &detalhe);
+                continue;
+            }
+            Str passos; str_init(&passos);
+            Install in;
+            int ok = do_install(pasta, &in, &passos);
+            int roda = ok ? verify_command(&in, &passos) : 0;
+            if (in.core[0]) {
+                free(core);
+                core = str_dup(in.core);
+            }
+            str_adds(&detalhe, ok ? "" : "");
+            str_addf(&detalhe, "  %s\n", (ok && roda) ? "instalado" : "instalacao incompleta");
+            wizard_passos(passos.data ? passos.data : "", &detalhe);
+            str_free(&passos);
+            free(pasta);
+            wizard_espera(&t, &sel, core, versao, novidade, &detalhe);
+            continue;
+        }
+
+        /* escolha == 1: atualizar */
+        {
+            str_adds(&detalhe, "  consultando os releases no GitHub...\n");
+            wizard_espera(&t, &sel, core, versao, novidade, &detalhe);
+            str_clear(&detalhe);
+            UpdateInfo u;
+            int ok = update_check(&u, 0);
+            if (!ok) {
+                str_addf(&detalhe, "  nao consegui consultar: %s\n",
+                         u.err[0] ? u.err : "sem conexao");
+                str_adds(&detalhe, "  (o cache de 24 h evita repetir a consulta a cada abertura)\n");
+            } else if (!u.available) {
+                str_addf(&detalhe, "  voce ja esta na versao mais nova (%s)\n", u.current);
+            } else {
+                Str msg; str_init(&msg);
+                int trocou = update_apply(&u, &msg);
+                str_addf(&detalhe, "  %s\n", msg.len ? msg.data : (trocou ? "atualizado" : "falhou"));
+                str_free(&msg);
+                if (trocou) {
+                    snprintf(novidade, sizeof novidade, "%s", "");
+                    str_adds(&detalhe, "  feche esta tela e abra o delta de novo para usar a versao nova\n");
+                }
+            }
+            wizard_espera(&t, &sel, core, versao, novidade, &detalhe);
+        }
+    }
+
+    str_free(&detalhe);
+    term_alt_leave();
+    term_shutdown();
+    theme_free(&t);
+    free(core);
     return 0;
 }
 
-/* Modo sem interface: delta --install <pasta> (usado nos testes) */
 int setup_install_cli(const char *dir)
 {
     delta_bootstrap();

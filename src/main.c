@@ -127,7 +127,7 @@ static const char *const CMD_KEYS[] = {
     "cmd.help", "cmd.login", "cmd.logout", "cmd.models", "cmd.thinking",
     "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new",
     "cmd.clear", "cmd.skills", "cmd.extensions", "cmd.translator",
-    "cmd.reload", "cmd.quit", "cmd.subagentmodel", "cmd.undo", "cmd.update"
+    "cmd.reload", "cmd.quit", "cmd.subagentmodel", "cmd.deltagroup", "cmd.undo", "cmd.update"
 };
 
 
@@ -149,6 +149,7 @@ static const Cmd COMMANDS[] = {
     { "reload",    "Recarrega config e tema do disco",                NULL,                 0 },
     { "quit",      "Sai do Delta Agent",                              NULL,                 0 },
     { "subagentmodel", "Modelo que os subagentes usam",                NULL,                 0 },
+    { "deltagroup", "Grupo do Delta no Telegram (link de convite)",    NULL,                 0 },
     { "undo",      "Restaura o conteudo anterior de um arquivo",       "[arquivo]",          1 },
     { "update",    "Instala a versao mais nova do GitHub",              "[--check]",          1 },
 };
@@ -333,7 +334,6 @@ static char *paste_dir(void);
 static void expand_paste(Str *text);
 static void inserir_colagem(const Clip *c);
 static void input_insert_text(const char *t, size_t n);
-static void sel_clear(void);
 static void open_picker(int kind);
 /* Rola a conversa: +1 = roda para cima (conteudo mais antigo). */
 static void scroll_wheel(int shift);
@@ -2167,6 +2167,30 @@ static void handle_command(const char *raw)
         return;
     }
 
+    /* /deltagroup: link de convite do grupo do Delta no Telegram */
+    if (str_eq(cmd, "/deltagroup") || str_eq(cmd, "/group") || str_eq(cmd, "/telegram")) {
+        Block *b = block_add(B_INFO);
+        str_adds(&b->text, "Grupo do Delta no Telegram\n\n");
+        str_addf(&b->text, "  %s\n\n", DELTA_TELEGRAM);
+        str_adds(&b->text,
+                 "  - duvidas, ideias e o que cada um esta' construindo com o Delta\n"
+                 "  - avisos de release (a mesma versao que o `delta update` instala)\n"
+                 "  - skills e automacoes que o pessoal publica\n\n"
+                 "  O link e' publico: nao muda o que o Delta faz nem libera rede.\n"
+                 "  Modelo e rede continuam sendo os seus (provedor + chave).\n");
+        if (term_is_tty()) {
+            if (url_open(DELTA_TELEGRAM))
+                str_adds(&b->text, "  abrindo no navegador...\n");
+            else
+                str_adds(&b->text, "  nao consegui abrir o navegador: copie o link acima\n");
+        }
+        if (clipboard_write_text(DELTA_TELEGRAM))
+            str_adds(&b->text, "  link copiado para a area de transferencia\n");
+        app.tr_dirty = 1;
+        render();
+        return;
+    }
+
     /* /update [--check]: consulta os releases do GitHub e troca o binario */
     if (str_eq(cmd, "/update") || str_eq(cmd, "/atualizar")) {
         Block *b = block_add(B_INFO);
@@ -2278,6 +2302,47 @@ static void handle_command(const char *raw)
     }
 
     if (str_eq(cmd, "/models") || str_eq(cmd, "/model")) {
+        /* recarrega o catalogo a cada /models: modelo novo pode ter saido no
+           meio da sessao e o usuario quer poder escolher agora. O cache tem
+           TTL de 7 dias, entao sem isto a lista ficava velha ate' reiniciar. */
+        {
+            int forcado = getenv("DELTA_NO_CATALOG_REFRESH") ? 0 : 1;
+            Block *b = block_add(B_INFO);
+            if (!forcado && app.catalog_loaded) {
+                /* ambiente de teste: usa o cache, sem rede */
+                str_addf(&b->text, "catalogo do cache: %zu provedores, %ld modelos\n",
+                         app.catalog.n_providers, catalog_model_count());
+            } else {
+                str_adds(&b->text, "atualizando o catalogo do models.dev...");
+                app.tr_dirty = 1;
+                render();
+                Str e; str_init(&e);
+                long antes = app.catalog_loaded ? catalog_model_count() : 0;
+                int ok = catalog_load(&app.catalog, 1, &e);
+                str_clear(&b->text);
+                if (ok) {
+                    app.catalog_loaded = 1;
+                    long agora = catalog_model_count();
+                    str_addf(&b->text, "catalogo atualizado: %zu provedores, %ld modelos",
+                             app.catalog.n_providers, agora);
+                    if (antes > 0 && agora != antes)
+                        str_addf(&b->text, " (%+ld desde o inicio da sessao)", agora - antes);
+                    str_adds(&b->text, "\n");
+                } else {
+                    str_addf(&b->text, "nao consegui atualizar (%s)",
+                             e.len ? e.data : "sem conexao");
+                    if (catalog_load_cached(&app.catalog)) {
+                        app.catalog_loaded = 1;
+                        str_adds(&b->text, " \u00b7 usando o cache local");
+                    }
+                    str_adds(&b->text, "\n");
+                }
+                str_free(&e);
+            }
+            app.tr_dirty = 1;
+            render();
+            if (!app.catalog_loaded) return;
+        }
         if (!*rest) {
             if (!catalog_ensure()) return;
             if (catalog_provedores_conectados() == 0) {
@@ -2747,9 +2812,6 @@ static void input_yank(void)
 /* O mouse nao seleciona nem copia: clique e arrasto nao fazem nada no
    transcript. Reativar requer repor a selecao (sel_*), o copy_payload e o
    Ctrl+X que ficaram no historico do git (commit "copiar mensagens"). */
-static void sel_clear(void)
-{
-}
 
 /* Roda do mouse. Um degrau por evento, igual com o agente trabalhando ou
    parado (antes a versao do "working" andava 1 linha e invertia o sentido). */
@@ -3880,9 +3942,7 @@ int main(int argc, char **argv)
             const char *tjson = argv[++i];
             return run_tool_cli(tnome, tjson, opt_cwd);
         } else if (str_eq(a, "--setup")) {
-            return setup_run(0);
-        } else if (str_eq(a, "--wiki")) {
-            return setup_run(1);
+            return setup_wizard();
         } else if (str_eq(a, "--install") && i + 1 < argc) {
             return setup_install_cli(argv[++i]);
         } else if (str_eq(a, "--version") || str_eq(a, "-v")) {
@@ -3904,16 +3964,19 @@ int main(int argc, char **argv)
         } else if (str_eq(a, "update")) {
             return update_cli(argc - i, argv + i);   /* aceita --check */
         } else if (str_eq(a, "wiki") || str_eq(a, "docs")) {
-            return setup_run(1);          /* delta wiki -> documentacao */
+            /* a documentacao agora vive so' no site (nao abre mais navegador
+               nem servidor local) */
+            printf("Documentacao: https://descz.github.io/delta/\n");
+            return 0;
         } else if (a[0] != '-') {
             prompt = a;
         }
     }
 
-    /* duplo clique no .exe (sem argumentos, console so com ele): instalador.
-       Rode `delta --setup` a qualquer momento para abrir de novo. */
+    /* duplo clique no .exe (sem argumentos, console so com ele): tela nativa
+       do instalador. Rode `delta --setup` a qualquer momento para reabrir. */
     if (argc == 1 && started_from_explorer())
-        return setup_run(0);
+        return setup_wizard();
 
     char note[256] = { 0 };
     delta_bootstrap();                 /* ~/.deltaCore: skills, mcps, system, ... */

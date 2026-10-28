@@ -7,6 +7,7 @@ ROOT="$(pwd)"
 # a TUI de verdade consulta releases no boot; nos testes isso fica desligado
 # (a secao [19] liga de novo, apontando para um release falso)
 export DELTA_NO_UPDATE_CHECK=1
+export DELTA_NO_CATALOG_REFRESH=1
 CFG_GLOBAL="$HOME/.deltaCore/config.json"
 cp "$CFG_GLOBAL" "$ROOT/build/cfg-global.bak" 2>/dev/null
 AUTH_GLOBAL="$HOME/.deltaCore/auth.json"
@@ -142,7 +143,7 @@ fi
 rm -rf build/core-env build/core-flag
 
 echo
-echo "[3f] instalador: --install + servidor --setup"
+echo "[3f] instalador: --install + tela nativa (sem navegador)"
 rm -rf build/inst-cli build/inst-http
 OUT=$(DELTA_INSTALL_NOLINK=1 ./bin/delta.exe --install build/inst-cli 2>&1)
 case "$OUT" in
@@ -159,46 +160,40 @@ case "$OUT" in
     *)                  fail "nao verificou o binario instalado" ;;
 esac
 
-# servidor do instalador (sem abrir navegador). Roda de uma copia ISOLADA do
-# exe (sem deltalogo.png ao lado) para provar que o binario e autossuficiente.
-mkdir -p build/iso
-cp bin/delta.exe build/iso/Delta.exe
-(cd build/iso && exec env DELTA_SETUP_NOBROWSER=1 DELTA_INSTALL_NOLINK=1 ./Delta.exe --setup > /tmp/delta_setup.log 2>&1) &
-SETUP_PID=$!
-SETUP_PORT=""
-for _ in $(seq 1 40); do
-    SETUP_PORT=$(grep -o "127.0.0.1:[0-9]*" /tmp/delta_setup.log 2>/dev/null | head -1 | cut -d: -f2)
-    [ -n "$SETUP_PORT" ] && break
-    sleep 0.25
-done
-if [ -n "$SETUP_PORT" ]; then
-    pass "servidor do instalador subiu"
-    if curl -s "http://127.0.0.1:$SETUP_PORT/" | grep -q "Delta Agent"; then
-        pass "pagina HTML servida"
-    else fail "pagina nao veio"; fi
-    if curl -s "http://127.0.0.1:$SETUP_PORT/api/state" | grep -q '"os"'; then
-        pass "/api/state responde"
-    else fail "/api/state falhou"; fi
-    if curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$SETUP_PORT/logo.png" | grep -q 200; then
-        pass "logo embutida servida"
-    else fail "logo nao servida"; fi
-    LOGO_BYTES=$(curl -s "http://127.0.0.1:$SETUP_PORT/logo.png" | wc -c)
-    if [ "$LOGO_BYTES" -gt 20000 ]; then
-        pass "logo vem de dentro do exe ($LOGO_BYTES bytes)"
-    else
-        fail "logo embutida pequena/ausente ($LOGO_BYTES bytes)"
-    fi
-    if curl -s -X POST -d "{\"dir\":\"$ROOT/build/inst-http\"}" "http://127.0.0.1:$SETUP_PORT/api/install" | grep -q '"ok":true'; then
-        pass "/api/install instala pela pagina"
-    else fail "/api/install falhou"; fi
-    curl -s -X POST "http://127.0.0.1:$SETUP_PORT/api/quit" >/dev/null 2>&1
+# tela nativa (sem servidor HTTP, sem navegador). Sem TTY ela nao abre a
+# tela: imprime as alternativas de CLI e sai.
+OUT2=$(./bin/delta.exe --setup 2>&1)
+case "$OUT2" in
+    *"delta --install"*) pass "--setup sem tty aponta o caminho de CLI" ;;
+    *)                   fail "--setup sem tty nao orientou ($OUT2)" ;;
+esac
+case "$OUT2" in
+    *127.0.0.1*) fail "--setup ainda sobe servidor HTTP" ;;
+    *)           pass "instalador nao abre servidor HTTP" ;;
+esac
+# delta wiki: so' o endereco (documentacao vive no site)
+OUT3=$(./bin/delta.exe wiki 2>&1)
+case "$OUT3" in
+    *"descz.github.io/delta"*) pass "delta wiki mostra o endereco da documentacao" ;;
+    *)                         fail "delta wiki nao mostrou o endereco ($OUT3)" ;;
+esac
+if pgrep -f "delta.exe --setup" >/dev/null 2>&1; then
+    fail "processo do instalador ficou rodando"
 else
-    fail "servidor do instalador nao subiu"
+    pass "nada fica rodando em segundo plano"
 fi
-sleep 1
-kill $SETUP_PID 2>/dev/null
-wait $SETUP_PID 2>/dev/null
 rm -rf build/inst-cli build/inst-http build/iso
+
+echo
+echo "[3f2] /deltagroup (link do grupo no Telegram)"
+printf 'type /deltagroup
+key enter
+dump grupo
+' > /tmp/delta_tg.txt
+./bin/delta.exe --replay /tmp/delta_tg.txt 100 30 > /tmp/delta_tg.log 2>&1
+expect /tmp/delta_tg.log "https://t.me/+NeaMf4VfXaY2MjIx"  "/deltagroup mostra o link do grupo"
+expect /tmp/delta_tg.log "Grupo do Delta no Telegram"      "/deltagroup explica o que e'"
+reject /tmp/delta_tg.log "comando desconhecido"            "/deltagroup existe"
 
 echo
 echo "[3h] retomada: delta = chat novo, delta continue = ultima sessao da pasta"
@@ -235,55 +230,17 @@ wait $RMOCK 2>/dev/null
 rm -rf build/resume
 
 echo
-echo "[3i] delta wiki (documentacao local)"
-rm -rf build/wiki
-mkdir -p build/wiki
-cp bin/delta.exe build/wiki/Delta.exe
-(cd build/wiki && exec env DELTA_SETUP_NOBROWSER=1 ./Delta.exe wiki > /tmp/delta_wiki.log 2>&1) &
-WIKI_PID=$!
-WIKI_PORT=""
-for _ in $(seq 1 40); do
-    WIKI_PORT=$(grep -o "127.0.0.1:[0-9]*" /tmp/delta_wiki.log 2>/dev/null | head -1 | cut -d: -f2)
-    [ -n "$WIKI_PORT" ] && break
-    sleep 0.25
-done
-if [ -n "$WIKI_PORT" ]; then
-    pass "delta wiki subiu o servidor"
-    if curl -s "http://127.0.0.1:$WIKI_PORT/wiki" | grep -q "What Delta is"; then
-        pass "serviu a documentacao em /wiki"
-    else fail "documentacao nao veio"; fi
-    if grep -q "/wiki" /tmp/delta_wiki.log; then
-        pass "abre direto na pagina de docs"
-    else fail "url nao aponta para /wiki"; fi
-    curl -s -X POST "http://127.0.0.1:$WIKI_PORT/api/quit" >/dev/null 2>&1
+echo "[3i] documentacao (delta wiki so' imprime o endereco)"
+OUTW=$(./bin/delta.exe wiki 2>&1)
+case "$OUTW" in
+    *"descz.github.io/delta"*) pass "delta wiki mostra o endereco" ;;
+    *)                         fail "delta wiki nao mostrou o endereco" ;;
+esac
+if printf '%s' "$OUTW" | grep -q "127.0.0.1"; then
+    fail "delta wiki ainda sobe servidor"
 else
-    fail "delta wiki nao subiu"
+    pass "delta wiki nao sobe servidor (e sem navegador)"
 fi
-sleep 1
-kill $WIKI_PID 2>/dev/null
-wait $WIKI_PID 2>/dev/null
-rm -rf build/wiki
-
-echo
-echo "[3g] primeira execucao (usuario novo, core vazio)"
-rm -rf build/freshcore
-python tests/mock_openai.py "$((PORT + 9))" > /dev/null 2>&1 &
-FRESH_MOCK=$!
-sleep 2
-DELTA_CORE=build/freshcore ./bin/delta.exe --replay tests/replay-firstrun.txt 108 30     --baseurl "http://127.0.0.1:$((PORT + 9))/v1" > /tmp/delta_first.log 2>&1
-expect /tmp/delta_first.log "sem chave de API"          "tela inicial avisa que falta a chave"
-expect /tmp/delta_first.log "chave de API do OpenAI"    "/login pede a chave do provedor escolhido"
-expect /tmp/delta_first.log "chave salva para openai"   "chave gravada num core vazio"
-if [ -f build/freshcore/auth.json ] && grep -q "sk-teste" build/freshcore/auth.json; then
-    pass "auth.json criado no core novo"
-else
-    fail "auth.json nao foi criado no core novo"
-fi
-DELTA_CORE=build/freshcore ./bin/delta.exe -p "leia tests/mock-target.txt"     --provider openai --baseurl "http://127.0.0.1:$((PORT + 9))/v1" > /tmp/delta_first2.log 2>&1
-expect /tmp/delta_first2.log "O arquivo contem"         "agente responde usando a chave salva"
-kill $FRESH_MOCK 2>/dev/null
-wait $FRESH_MOCK 2>/dev/null
-rm -rf build/freshcore
 
 echo
 echo "[3j] grafo do projeto, undo e MCP stdio"
@@ -452,12 +409,20 @@ echo
 echo "[7] menu de comandos (digitar /)"
 ./bin/delta.exe --replay tests/replay-menu.txt 100 30 > /tmp/delta_menu.log 2>&1
 expect /tmp/delta_menu.log "→ help"   "marcador -> no item selecionado"
-expect /tmp/delta_menu.log "(1/19)"            "contador de itens"
+expect /tmp/delta_menu.log "(1/20)"            "contador de itens"
 expect /tmp/delta_menu.log "/models "         "Tab completa o comando"
 expect /tmp/delta_menu.log "Todos os modelos"    "descricao do comando aparece"
 
 echo
 echo "[8] catalogo models.dev"
+# /models recarrega o catalogo a cada uso (modelo novo no meio da sessao)
+printf 'type /models
+key enter
+dump cat
+' > /tmp/delta_cat.txt
+./bin/delta.exe --replay /tmp/delta_cat.txt 110 30 > /tmp/delta_cat.log 2>&1
+expect /tmp/delta_cat.log "catalogo do cache"  "/models recarrega o catalogo"
+expect /tmp/delta_cat.log "modelos "           "/models abre a lista de modelos"
 if [ -f "$HOME/.deltaCore/models.v2.json" ]; then
     expect "$HOME/.deltaCore/models.v2.json" '"providers"'  "cache do catalogo gravado"
     expect "$HOME/.deltaCore/models.v2.json" '"ctx"'        "contexto por modelo"

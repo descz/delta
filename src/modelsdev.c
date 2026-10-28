@@ -778,7 +778,7 @@ int catalog_load(Catalog *c, int force_refresh, Str *err)
 
     Str body; str_init(&body);
     Str e; str_init(&e);
-    if (http_get_text(MODELSDEV_URL, &body, &e)) {
+    if (http_get_text_to(MODELSDEV_URL, &body, &e, 20)) {   /* 20 s: e' comando de TUI */
         catalog_free(c);
         catalog_init(c);
         if (catalog_parse(c, body.data ? body.data : "", body.len) && c->n_providers > 0) {

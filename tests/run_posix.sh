@@ -7,6 +7,7 @@ ROOT="$(pwd)"
 # consulta de versao nova no boot: desligada na suite (a secao [12] religa
 # apontando para um release falso)
 export DELTA_NO_UPDATE_CHECK=1
+export DELTA_NO_CATALOG_REFRESH=1
 AR="$ROOT/.posix-tests"
 rm -rf "$AR"
 mkdir -p "$AR"
@@ -125,32 +126,19 @@ if [ -x build/inst-posix/bin/delta ]; then pass "binario instalado e executavel"
 rm -rf build/inst-posix
 
 echo
-echo "[3i] delta wiki"
-rm -rf build/wiki-posix
-mkdir -p build/wiki-posix
-cp bin/delta build/wiki-posix/Delta
-(cd build/wiki-posix && exec env DELTA_SETUP_NOBROWSER=1 ./Delta wiki > "$AR/wiki-server.log" 2>&1) &
-WIKI_PID=$!
-WIKI_PORT=""
-for _ in $(seq 1 40); do
-    WIKI_PORT=$(grep -o "127.0.0.1:[0-9]*" "$AR/wiki-server.log" 2>/dev/null | head -1 | cut -d: -f2)
-    [ -n "$WIKI_PORT" ] && break
-    sleep 0.25
-done
-if [ -n "$WIKI_PORT" ]; then
-    pass "servidor subiu"
-    if curl -s "http://127.0.0.1:$WIKI_PORT/wiki" | grep -q "What Delta is"; then
-        pass "documentacao servida em /wiki"
-    else fail "documentacao nao veio"; fi
-    curl -s -X POST "http://127.0.0.1:$WIKI_PORT/api/quit" > /dev/null 2>&1
+echo "[3i] documentacao (delta wiki agora so' imprime o endereco)"
+OUTW=$($BIN wiki 2>&1)
+case "$OUTW" in
+    *"descz.github.io/delta"*) pass "delta wiki mostra o endereco" ;;
+    *)                         fail "delta wiki nao mostrou o endereco" ;;
+esac
+if printf '%s' "$OUTW" | grep -q "127.0.0.1"; then
+    fail "delta wiki ainda sobe servidor"
 else
-    fail "servidor nao subiu"
+    pass "delta wiki nao sobe servidor"
 fi
-sleep 1; kill "$WIKI_PID" 2>/dev/null; wait "$WIKI_PID" 2>/dev/null
-rm -rf build/wiki-posix
 
 if [ -n "$PY" ]; then
-    echo
     echo "[4] conversa real (servidor falso)"
     "$PY" tests/mock_openai.py "$PORT" > /dev/null 2>&1 &
     MOCK=$!

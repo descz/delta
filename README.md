@@ -69,7 +69,7 @@ that already is the installer:
 
 | system | file | how |
 |---|---|---|
-| **Windows 10/11 x64** | `Delta-windows-x64.zip` (or `Delta.exe`) | double click → install screen in the browser |
+| **Windows 10/11 x64** | `Delta-windows-x64.zip` (or `Delta.exe`) | double click → install screen in the terminal |
 | **Linux x86_64** | `delta-linux-x86_64.run` | `chmod +x delta-linux-x86_64.run && ./delta-linux-x86_64.run` |
 | **macOS 11+** | `delta-macos-source.zip` | unzip and double click `INSTALAR-MAC.command` |
 
@@ -103,19 +103,21 @@ Inside the app, `/new` starts a fresh session and `/clear` wipes the screen.
 | command | what it does |
 |---|---|
 | `/login` `/logout` | connect/disconnect providers (one key per provider) |
-| `/models` | models from connected providers |
+| `/models` | models from connected providers — **the catalog is re-downloaded on every run**, so a model released mid-session shows up |
 | `/thinking` | reasoning effort (off → max, depending on the model) |
 | `/projects <folder>` | set the working folder (saved in config) |
 | `/terminal <cmd>` | runs in your shell and shows the output in the chat |
 | `/copy` | copies the last reply |
 | `/undo [file]` | restores a file to its content before the last edit |
 | `/update` | installs the newest version from GitHub (the app warns at startup when one exists) |
+| `/deltagroup` | Delta group on Telegram (invite link, copied to the clipboard) |
 | `/forlimit [n]` | toggles a tools-per-turn cap (run again to turn it off) |
 | `/status` `/session` | configuration, usage and session |
 | `/new` `/clear` `/reload` `/quit` | new session, clear, reload, quit |
 | `/help` | all of it on screen |
 
-`delta wiki` opens the documentation in the browser; `delta --setup` reopens the installer.
+`delta --setup` reopens the installer screen (native, in the terminal — no browser, no local server);
+`delta wiki` just prints the documentation address.
 `delta update` does the same job without opening the app: `delta update --check` only reports, and
 the command replaces the running executable in place (on Windows it is renamed, so the file can be
 swapped while it runs). The TUI checks for a new release once a day and shows a notice at startup;

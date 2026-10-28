@@ -76,9 +76,8 @@ dist: $(BIN)
 	cp $(BIN) $(DIST)
 	@printf "==> %s %s bytes (arquivo unico)\n" "$(DIST)" "$$(stat -c%s $(DIST) 2>/dev/null || stat -f%z $(DIST))"
 
-# regenera a pagina do instalador embutida (precisa de python)
+# regenera o logo embutido (precisa de python)
 html:
-	python tools/embed-installer.py > src/installer_html.h
 	python tools/embed-logo.py > src/asset_logo.h
 
 # regenera as skills embutidas (edite skills/<nome>/SKILL.md e rode isto)

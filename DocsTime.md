@@ -41,7 +41,7 @@ página do instalador e `LEIA-ME` estão em **inglês** por decisão do dono.
 | `codegraph.c` | grafo do projeto: varre o código uma vez, guarda arquivos/hash/símbolos/imports em `<core>/graphs/<slug>.graph` |
 | `tools.c` | ferramentas base: read/write/edit/bash/ls/grep/glob/diff + `graph` + `undo` |
 | `tools_ext.c` | famílias unificadas: `fs shell git web memory code assert agent extend skills mcp` |
-| `setup.c` | instalador: servidor HTTP local, página embutida, seletor de pasta, PATH, atalhos, pin |
+| `setup.c` | instalador: **tela nativa no terminal** (seletor de pasta do sistema, PATH, atalhos, pin) + `--install` sem interface. Sem servidor HTTP e sem navegador. |
 | `update.c` | `delta update` / `/update`: consulta o release no GitHub, baixa o binário da plataforma e troca o executável em execução |
 | `ui.c` | grade de células, markdown, componentes, editor |
 | `term.c` | terminal: Win32 (ReadConsoleInput) / POSIX (termios) |
@@ -145,7 +145,13 @@ mesmo aviso de versão nova do boot da TUI).
     `<core>/jobs/*.out`). O filho roda com `--no-session` (não polui as sessões da pasta) e
     `DELTA_SUBAGENT=1` (impede recursão). Timeout padrão 900 s; `model`/`cwd`/`max_output`
     configuráveis.
-18. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
+18. **`/models` recarrega o catálogo sempre** (`catalog_load(&c, 1, ...)`): o TTL do cache é de
+    7 dias, então sem isso a lista ficava velha até reiniciar. Nos testes, `DELTA_NO_CATALOG_REFRESH=1`
+    usa o cache (sem rede). `/model` continua como alias silencioso.
+19. **Instalador é tela nativa.** Não volte a subir servidor/página: `installer_html.h`, o
+    `tools/embed-installer.py` e o `delta wiki` (servidor) foram removidos. `delta wiki` só imprime
+    a URL do site (`docs/`, GitHub Pages). O logo embutido (`asset_logo.h`) não é mais servido.
+20. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
     plataforma: `Delta.exe` (Windows) e `delta-linux-x86_64.tar.gz` (Linux, com o binário `delta`
     na raiz ou um nível abaixo). Renomear o asset quebra o `delta update` sem quebrar o instalador.
 15. **`delta update` troca o executável em uso.** Windows: renomeia o exe para `.old`, grava o

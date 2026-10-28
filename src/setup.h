@@ -2,9 +2,9 @@
 #ifndef DELTA_SETUP_H
 #define DELTA_SETUP_H
 
-/* Sobe o servidor local (instalador ou docs), abre o navegador e atende ate
-   fechar. wiki=0 -> instalador; wiki=1 -> documentacao (/wiki). */
-int setup_run(int wiki);
+/* Tela nativa do instalador (terminal): escolher pasta de dados e/ou
+   atualizar o Delta. Sem servidor HTTP e sem navegador. */
+int setup_wizard(void);
 /* Instala sem interface (delta --install <pasta>); imprime JSON. */
 int setup_install_cli(const char *dir);
 
