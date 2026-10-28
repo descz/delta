@@ -43,7 +43,7 @@
 #endif
 
 #ifndef DELTA_VERSION
-#  define DELTA_VERSION "0.1.0"
+#  define DELTA_VERSION "0.1.1"
 #endif
 
 /* ================================================================== */
