@@ -2638,12 +2638,6 @@ static void handle_command(const char *raw)
                  app.cfg.supports_image ? "sim (Ctrl+V cola imagem)" : "nao",
                  app.catalog_loaded ? "models.dev carregado" : "nao carregado",
                  app.agent.cwd, session_id());
-        {
-            char lb[32];
-            if (agent_tool_limit() > 0) snprintf(lb, sizeof lb, "%d por turno", agent_tool_limit());
-            else snprintf(lb, sizeof lb, "sem limite");
-            str_addf(&b->text, "ferramentas : %s\n", lb);
-        }
         app.tr_dirty = 1;
         render();
         return;

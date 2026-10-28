@@ -158,7 +158,13 @@ mesmo aviso de versão nova do boot da TUI).
     `DELTA_SETUP_NOBROWSER=1` serve sem abrir janela (usado nos testes). Sem navegador Chromium cai
     no navegador padrão e, sem nenhum, na tela nativa (`setup_wizard`). `delta wiki` só imprime a URL
     do site. Não remova o token: era o que impedia qualquer processo local de chamar `/api/install`.
-20. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
+    **A página é conteúdo do produto**: ao mexer em comando/atalho, atualize
+    `installer/installer.html` e rode `make html` — ela ficou desatualizada uma vez (documentava
+    `/copy`, `/forlimit`, `delta wiki` abrindo navegador e `delta` retomando sessão).
+20. **O teto de ferramentas por turno foi removido inteiro** (comando `/forlimit`, `g_tool_limit` e a
+    mensagem que mandava o modelo pedir `/forlimit` ao usuário). Não reintroduza o limite sem o
+    comando: sobra código morto e conselho errado na boca do modelo.
+21. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
     plataforma: `Delta.exe` (Windows) e `delta-linux-x86_64.tar.gz` (Linux, com o binário `delta`
     na raiz ou um nível abaixo). Renomear o asset quebra o `delta update` sem quebrar o instalador.
 15. **`delta update` troca o executável em uso.** Windows: renomeia o exe para `.old`, grava o

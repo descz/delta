@@ -211,7 +211,8 @@
         <div class="tile">
           <h3>How to use</h3>
           <ul>
-            <li><span class="cmd">delta</span> resumes this folder's last chat</li>
+            <li><span class="cmd">delta</span> starts a new chat here</li>
+            <li><span class="cmd">delta continue</span> reopens this folder's last one</li>
             <li><span class="cmd">/login</span> paste your provider key</li>
             <li><span class="cmd">/projects &lt;folder&gt;</span> set where it works</li>
             <li><span class="cmd">/help</span> show everything</li>
@@ -220,9 +221,10 @@
       </div>
 
       <div class="cmdblock">
-        <div><b>delta</b> <span class="c"># open the CLI (resumes this folder's last chat)</span></div>
-        <div><b>delta --new</b> <span class="c"># start a new session</span></div>
-        <div><b>delta wiki</b> <span class="c"># open this documentation in the browser</span></div>
+        <div><b>delta</b> <span class="c"># open the CLI (always a new chat)</span></div>
+        <div><b>delta continue</b> <span class="c"># reopen this folder's last chat</span></div>
+        <div><b>delta update</b> <span class="c"># install the newest release</span></div>
+        <div><b>delta wiki</b> <span class="c"># print the documentation address</span></div>
         <div><b>/login</b> <span class="c"># pick the provider and paste the key (once)</span></div>
         <div><b>/projects</b> D:\dev\app <span class="c"># where it works (saved)</span></div>
         <div><b>/terminal</b> git status <span class="c"># run a command and show the output</span></div>
@@ -301,9 +303,9 @@
       </div>
 
       <h3>Resume your work</h3>
-      <p><code>delta</code> <b>opens the last chat of that folder</b>: you continue where you stopped,
-         with history and context. <code>delta --new</code> starts fresh, and <code>/new</code> does the
-         same from inside the session.</p>
+      <p><code>delta</code> always starts a <b>new chat</b> in that folder. To continue where you
+         stopped — messages, tool calls and the model's thinking included — run
+         <code>delta continue</code>. Inside the session, <code>/new</code> starts fresh.</p>
 
       <h3>Commands</h3>
       <div class="kv">
@@ -312,9 +314,10 @@
         <b>/thinking</b><span>reasoning effort</span>
         <b>/projects</b><span>folder where it works</span>
         <b>/terminal</b><span>run a shell command and show the output</span>
-        <b>/copy</b><span>copy the last reply</span>
         <b>/undo</b><span>restore the previous content of a file</span>
-        <b>/forlimit</b><span>toggle a tools-per-turn cap</span>
+        <b>/subagentmodel</b><span>model the subagents run on (it asks before creating one)</span>
+        <b>/deltagroup</b><span>Delta group on Telegram (invite link)</span>
+        <b>/update</b><span>install the newest release from GitHub</span>
         <b>/status</b><span>configuration and usage</span>
         <b>/help</b><span>all commands and shortcuts</span>
       </div>
@@ -324,10 +327,10 @@
         <b>Enter</b><span>send (while working: it joins the queue and it reads it mid-turn)</span>
         <b>Shift+Enter</b><span>new line</span>
         <b>Ctrl+C</b><span>stop the generation (never closes the app)</span>
-        <b>Ctrl+X</b><span>copy the last reply</span>
+        <b>Ctrl+V</b><span>paste text, image or file</span>
         <b>Ctrl+Q</b><span>return the last queued message to the editor</span>
-        <b>mouse</b><span>drag selects and copies; wheel scrolls the conversation</span>
-        <b>Esc</b><span>clear the selection and jump to the end</span>
+        <b>mouse</b><span>wheel scrolls the conversation</span>
+        <b>Esc</b><span>go back to the end of the conversation</span>
       </div>
 
       <h3>Your system</h3>
@@ -401,11 +404,6 @@ async function boot() {
   if (state.defaultDir) $('#dir').value = state.defaultDir;
   if (state.exe) $('#exeHint').textContent = state.exe;
 
-  /* `delta wiki` opens /wiki: go straight to the docs */
-  if (!location.hash && /^\/(wiki|docs)/.test(location.pathname)) {
-    location.replace(location.pathname.replace(/\/$/, '') + '#/what');
-    return;
-  }
   route();
 }
 
