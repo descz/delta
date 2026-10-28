@@ -736,6 +736,33 @@ void catalog_free(Catalog *c)
     memset(c, 0, sizeof(*c));
 }
 
+/* Mantem so' os provedores aprovados: libera os outros e compacta o vetor.
+   O cache em disco continua completo (o /login precisa de todos). */
+int catalog_keep(Catalog *c, int (*keep)(const char *id, void *ud), void *ud)
+{
+    if (!c) return 0;
+    size_t j = 0;
+    for (size_t i = 0; i < c->n_providers; i++) {
+        MdProvider *p = &c->providers[i];
+        if (keep && !keep(p->id, ud)) {
+            provider_free(p);
+            continue;
+        }
+        if (j != i) c->providers[j] = *p;
+        j++;
+    }
+    c->n_providers = j;
+    return (int)j;
+}
+
+size_t catalog_models_total(const Catalog *c)
+{
+    if (!c) return 0;
+    size_t n = 0;
+    for (size_t i = 0; i < c->n_providers; i++) n += c->providers[i].n_models;
+    return n;
+}
+
 /* Carrega somente do cache local, sem rede. */
 int catalog_load_cached(Catalog *c)
 {

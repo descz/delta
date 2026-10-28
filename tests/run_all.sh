@@ -422,7 +422,18 @@ dump cat
 ' > /tmp/delta_cat.txt
 ./bin/delta.exe --replay /tmp/delta_cat.txt 110 30 > /tmp/delta_cat.log 2>&1
 expect /tmp/delta_cat.log "catalogo do cache"  "/models recarrega o catalogo"
-expect /tmp/delta_cat.log "modelos "           "/models abre a lista de modelos"
+expect /tmp/delta_cat.log "conectado"          "/models conta so' os provedores conectados"
+reject /tmp/delta_cat.log "8882 modelos"       "/models nao despeja o catalogo inteiro"
+# depois do /models (que filtra), /login tem que voltar com a lista completa
+printf 'type /models
+key enter
+key esc
+type /login 
+key enter
+dump login
+' > /tmp/delta_cat2.txt
+./bin/delta.exe --replay /tmp/delta_cat2.txt 110 34 > /tmp/delta_cat2.log 2>&1
+expect /tmp/delta_cat2.log "Select provider to configure:" "/login volta com todos os provedores"
 if [ -f "$HOME/.deltaCore/models.v2.json" ]; then
     expect "$HOME/.deltaCore/models.v2.json" '"providers"'  "cache do catalogo gravado"
     expect "$HOME/.deltaCore/models.v2.json" '"ctx"'        "contexto por modelo"

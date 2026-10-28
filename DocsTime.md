@@ -145,9 +145,12 @@ mesmo aviso de versão nova do boot da TUI).
     `<core>/jobs/*.out`). O filho roda com `--no-session` (não polui as sessões da pasta) e
     `DELTA_SUBAGENT=1` (impede recursão). Timeout padrão 900 s; `model`/`cwd`/`max_output`
     configuráveis.
-18. **`/models` recarrega o catálogo sempre** (`catalog_load(&c, 1, ...)`): o TTL do cache é de
-    7 dias, então sem isso a lista ficava velha até reiniciar. Nos testes, `DELTA_NO_CATALOG_REFRESH=1`
-    usa o cache (sem rede). `/model` continua como alias silencioso.
+18. **`/models` recarrega o catálogo sempre** (`catalog_load(&c, 1, ...)`) e **guarda só os
+    provedores conectados** (`catalog_keep` + `keep_provider_conectado`): o `api.json` do models.dev
+    é **um arquivo só** (5,9 MB, 233 provedores), não há endpoint por provedor — o que se ganha é
+    memória/lista/mensagem escopadas, não download menor. Como o filtro apaga o resto do catálogo em
+    memória, `/login` e `/logout` recarregam a lista completa do cache (`catalog_filtrado`).
+    Nos testes, `DELTA_NO_CATALOG_REFRESH=1` usa o cache (sem rede). `/model` é alias silencioso.
 19. **Instalador é tela nativa.** Não volte a subir servidor/página: `installer_html.h`, o
     `tools/embed-installer.py` e o `delta wiki` (servidor) foram removidos. `delta wiki` só imprime
     a URL do site (`docs/`, GitHub Pages). O logo embutido (`asset_logo.h`) não é mais servido.

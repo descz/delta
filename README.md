@@ -103,7 +103,7 @@ Inside the app, `/new` starts a fresh session and `/clear` wipes the screen.
 | command | what it does |
 |---|---|
 | `/login` `/logout` | connect/disconnect providers (one key per provider) |
-| `/models` | models from connected providers — **the catalog is re-downloaded on every run**, so a model released mid-session shows up |
+| `/models` | models from connected providers — the catalog is re-downloaded on every run (a model released mid-session shows up) and **only the providers you connected are kept**; `/login` still sees the full list |
 | `/thinking` | reasoning effort (off → max, depending on the model) |
 | `/projects <folder>` | set the working folder (saved in config) |
 | `/terminal <cmd>` | runs in your shell and shows the output in the chat |

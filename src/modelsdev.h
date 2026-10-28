@@ -64,6 +64,13 @@ int  catalog_load(Catalog *c, int force_refresh, Str *err);
 /* Somente do cache local (sem rede) — usado na inicializacao. */
 int  catalog_load_cached(Catalog *c);
 
+/* Mantem so' os provedores aprovados por `keep` (libera o resto e os
+   modelos deles). Retorna quantos sobraram. Usado para o /models trabalhar
+   apenas com os provedores que o usuario conectou. */
+int  catalog_keep(Catalog *c, int (*keep)(const char *id, void *ud), void *ud);
+/* Total de modelos no catalogo (soma de todos os provedores). */
+size_t catalog_models_total(const Catalog *c);
+
 const MdProvider *catalog_provider(const Catalog *c, const char *id);
 const MdModel    *catalog_model(const Catalog *c, const char *provider, const char *model);
 /* Base URL do provedor: campo `api` do models.dev ou o mapa embutido. */

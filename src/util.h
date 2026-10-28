@@ -3,7 +3,7 @@
 #ifndef DELTA_UTIL_H
 #define DELTA_UTIL_H
 
-#define DELTA_VERSION "0.1.5"
+#define DELTA_VERSION "0.1.6"
 /* Grupo de usuarios do Delta (Telegram). */
 #define DELTA_TELEGRAM "https://t.me/+NeaMf4VfXaY2MjIx"
 

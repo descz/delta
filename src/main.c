@@ -95,6 +95,7 @@ typedef struct {
     /* catalogo models.dev */
     Catalog  catalog;
     int      catalog_loaded;
+    int      catalog_filtrado;   /* /models deixou so' os provedores conectados */
     long     catalog_models;
     char    *login_provider;    /* provedor escolhido no /login */
     int      tr_width;          /* largura com que o transcript foi montado */
@@ -342,6 +343,16 @@ static void scroll_wheel(int shift);
 #define PASTE_MIN_CHARS   200    /* a partir disso vira {paste N caracteres} */
 static long catalog_model_count(void);
 
+/* O /models deixa o catalogo so' com os provedores conectados (lista curta).
+   Quem precisa resolver um provedor/modelo especifico chama isto: recarrega a
+   lista completa do cache, sem rede. */
+static void catalog_ensure_full(void)
+{
+    if (!app.catalog_filtrado) return;
+    if (catalog_load_cached(&app.catalog)) app.catalog_loaded = 1;
+    app.catalog_filtrado = 0;
+}
+
 static int catalog_ensure(void)
 {
     if (app.catalog_loaded) return 1;
@@ -416,6 +427,24 @@ static int provider_conectado(const MdProvider *p)
         if (tem) return 1;
     }
     return auth_has_key(p->id);
+}
+
+/* usado por catalog_keep (modelsdev.c nao conhece auth): mantem so' quem
+   tem chave salva ou no ambiente */
+static int keep_provider_conectado(const char *id, void *ud)
+{
+    (void)ud;
+    return provider_conectado(catalog_provider(&app.catalog, id));
+}
+
+/* Modelos que o usuario realmente pode usar (provedores com chave). */
+static long modelos_conectados(void)
+{
+    long n = 0;
+    for (size_t i = 0; i < app.catalog.n_providers; i++)
+        if (provider_conectado(&app.catalog.providers[i]))
+            n += (long)app.catalog.providers[i].n_models;
+    return n;
 }
 
 static int catalog_provedores_conectados(void)
@@ -538,6 +567,9 @@ static int menu_prepare(void)
         return (int)n;
     }
     if (app.picker == 2 || app.picker == 5) {
+        /* o /models deixa o catalogo so' com os conectados; para escolher um
+           provedor novo (ou desconectar) a lista completa volta do cache */
+        catalog_ensure_full();
         const char *f = app.picker_filter.data ? app.picker_filter.data : "";
         if (g_items_owner == 'p' && str_eq(g_items_key, f)) return (int)g_items_n;
         int n = fill_providers(f);
@@ -1890,6 +1922,7 @@ static void submit_input(void)
 static void refresh_model_caps(void)
 {
     app.cfg.supports_image = 0;
+    catalog_ensure_full();
     if (!app.catalog_loaded || !app.cfg.provider || !app.cfg.model) return;
     const MdModel *m = catalog_model(&app.catalog, app.cfg.provider, app.cfg.model);
     if (m && m->image_in) app.cfg.supports_image = 1;
@@ -2302,40 +2335,53 @@ static void handle_command(const char *raw)
     }
 
     if (str_eq(cmd, "/models") || str_eq(cmd, "/model")) {
-        /* recarrega o catalogo a cada /models: modelo novo pode ter saido no
-           meio da sessao e o usuario quer poder escolher agora. O cache tem
-           TTL de 7 dias, entao sem isto a lista ficava velha ate' reiniciar. */
+        /* Recarrega o catalogo a cada /models (modelo novo pode ter saido no
+           meio da sessao) e guarda SO' os provedores que o usuario conectou:
+           o resto do models.dev (233 provedores) fica no cache para o /login. */
         {
             int forcado = getenv("DELTA_NO_CATALOG_REFRESH") ? 0 : 1;
             Block *b = block_add(B_INFO);
+            long antes = app.catalog_loaded ? modelos_conectados() : 0;
             if (!forcado && app.catalog_loaded) {
-                /* ambiente de teste: usa o cache, sem rede */
-                str_addf(&b->text, "catalogo do cache: %zu provedores, %ld modelos\n",
-                         app.catalog.n_providers, catalog_model_count());
+                /* ambiente de teste/sem rede: usa o cache, mas filtra igual */
+                catalog_keep(&app.catalog, keep_provider_conectado, NULL);
+                app.catalog_filtrado = 1;
+                long agora = modelos_conectados();
+                str_addf(&b->text, "catalogo do cache \u00b7 %d provedor%s conectado%s, %ld modelos\n",
+                         catalog_provedores_conectados(),
+                         catalog_provedores_conectados() == 1 ? "" : "es",
+                         catalog_provedores_conectados() == 1 ? "" : "s", agora);
             } else {
                 str_adds(&b->text, "atualizando o catalogo do models.dev...");
                 app.tr_dirty = 1;
                 render();
                 Str e; str_init(&e);
-                long antes = app.catalog_loaded ? catalog_model_count() : 0;
                 int ok = catalog_load(&app.catalog, 1, &e);
                 str_clear(&b->text);
                 if (ok) {
                     app.catalog_loaded = 1;
-                    long agora = catalog_model_count();
-                    str_addf(&b->text, "catalogo atualizado: %zu provedores, %ld modelos",
-                             app.catalog.n_providers, agora);
+                    size_t total_models = catalog_models_total(&app.catalog);
+                    int conectados = catalog_keep(&app.catalog, keep_provider_conectado, NULL);
+                    app.catalog_filtrado = 1;
+                    long agora = modelos_conectados();
+                    str_addf(&b->text, "catalogo atualizado · %d provedor%s conectado%s, %ld modelos",
+                             conectados, conectados == 1 ? "" : "es",
+                             conectados == 1 ? "" : "s", agora);
+                    if (agora > 0 && (size_t)agora != total_models)
+                        str_addf(&b->text, " (o models.dev publica %zu no total)", total_models);
                     if (antes > 0 && agora != antes)
-                        str_addf(&b->text, " (%+ld desde o inicio da sessao)", agora - antes);
-                    str_adds(&b->text, "\n");
+                        str_addf(&b->text, " · %+ld desde o inicio da sessao", agora - antes);
+                    str_addc(&b->text, 10);
                 } else {
                     str_addf(&b->text, "nao consegui atualizar (%s)",
                              e.len ? e.data : "sem conexao");
                     if (catalog_load_cached(&app.catalog)) {
                         app.catalog_loaded = 1;
-                        str_adds(&b->text, " \u00b7 usando o cache local");
+                        catalog_keep(&app.catalog, keep_provider_conectado, NULL);
+                        app.catalog_filtrado = 1;
+                        str_adds(&b->text, " · usando o cache local");
                     }
-                    str_adds(&b->text, "\n");
+                    str_addc(&b->text, 10);
                 }
                 str_free(&e);
             }
@@ -2346,6 +2392,12 @@ static void handle_command(const char *raw)
         if (!*rest) {
             if (!catalog_ensure()) return;
             if (catalog_provedores_conectados() == 0) {
+                /* catalogo filtrado sem ninguem: recarrega a lista cheia antes
+                   de dizer que nao ha' provedor conectado */
+                if (app.catalog_filtrado) {
+                    catalog_load_cached(&app.catalog);
+                    app.catalog_filtrado = 0;
+                }
                 notify("nenhum provedor conectado · use /login para ligar um");
                 render();
                 return;
@@ -2356,6 +2408,7 @@ static void handle_command(const char *raw)
         /* aceita "provedor/modelo" ou so o modelo do provedor atual */
         const char *slash = strchr(rest, '/');
         int aplicado = 0;
+        if (slash) catalog_ensure_full();       /* pode ser de provedor nao conectado */
         if (slash && app.catalog_loaded) {
             char *prov = str_ndup(rest, (size_t)(slash - rest));
             if (catalog_provider(&app.catalog, prov)) {
@@ -2450,6 +2503,7 @@ static void handle_command(const char *raw)
     }
 
     if (str_eq(cmd, "/thinking")) {
+        catalog_ensure_full();
         if (*rest) {
             for (int i = 0; i < N_THINKING; i++) {
                 if (str_ieq(rest, THINKING_LEVELS[i].id)) {
