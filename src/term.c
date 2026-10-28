@@ -625,14 +625,26 @@ static void build_row(Screen *s, int y, Str *out)
     str_adds(out, "\x1b[0m");
     g_last_attr = 0;
 
+    int link_atual = 0;                        /* OSC 8 em vigor nesta linha */
     for (int x = 0; x < s->cols; x++) {
         size_t idx = (size_t)y * s->cols + x;
         uint32_t cp = s->cp[idx];
         if (cp == 0) continue;                 /* continuacao de wide char */
+        int lk = s->lk ? (int)s->lk[idx] : 0;
+        if (lk != link_atual) {                /* abre/fecha o hyperlink */
+            str_adds(out, "\x1b]8;;\x1b\\");
+            if (lk > 0 && lk <= (int)s->nlinks && s->links[lk - 1]) {
+                str_adds(out, "\x1b]8;;");
+                str_adds(out, s->links[lk - 1]);
+                str_adds(out, "\x1b\\");
+            }
+            link_atual = lk;
+        }
         emit_style(out, s->fg[idx], s->bg[idx], s->at[idx]);
         if (cp == 0xFFFFFFFFu) cp = ' ';
         str_addcp(out, cp);
     }
+    if (link_atual) str_adds(out, "\x1b]8;;\x1b\\");
     str_adds(out, "\x1b[0m");
     g_last_attr = 0;
 }

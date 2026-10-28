@@ -173,6 +173,28 @@ int main(void)
         theme_free(&t);
     }
 
+    /* ---------------- links clicaveis (OSC 8) ---------------- */
+    printf("[7] links na grade\n");
+    {
+        Theme t; theme_load_builtin_dark(&t);
+        Style base = { 0, COL_DEFAULT, 0 };
+        Screen s; screen_init(&s, 60, 6);
+        const char *txt = "grupo: https://t.me/+Neo123456789 aqui";
+        screen_para(&s, 0, 0, 60, txt, strlen(txt), base);
+        /* a URL tem que ter virado link; o texto em volta, nao */
+        int links_marcados = 0, antes = 0;
+        for (int x = 0; x < 60; x++) {
+            if (s.lk[x]) links_marcados++;
+            if (x < 7 && s.lk[x]) antes++;
+        }
+        ok(links_marcados >= 24, "URL na linha vira link (celulas marcadas)");
+        ok(antes == 0, "texto antes da URL nao vira link");
+        ok(s.nlinks == 1 && s.links[0] && str_eq(s.links[0], "https://t.me/+Neo123456789"),
+           "URL guardada na tabela do screen");
+        screen_free(&s);
+        theme_free(&t);
+    }
+
     printf("\n%d verificacoes, %d falhas\n", checks, failures);
     return failures ? 1 : 0;
 }

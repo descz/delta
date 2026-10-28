@@ -20,7 +20,8 @@ static void alloc_grid(Screen *s, int cols, int rows)
     s->fg = (uint32_t *)malloc(n * sizeof(uint32_t));
     s->bg = (uint32_t *)malloc(n * sizeof(uint32_t));
     s->at = (uint8_t *)malloc(n);
-    if (!s->cp || !s->fg || !s->bg || !s->at) { fprintf(stderr, "pi: oom\n"); exit(1); }
+    s->lk = (uint8_t *)calloc(n, 1);
+    if (!s->cp || !s->fg || !s->bg || !s->at || !s->lk) { fprintf(stderr, "pi: oom\n"); exit(1); }
 }
 
 void screen_ensure_rows(Screen *s, int rows)
@@ -32,6 +33,7 @@ void screen_ensure_rows(Screen *s, int rows)
                 for (int x = 0; x < s->cols; x++) {
                     size_t idx = (size_t)y * s->cols + x;
                     s->cp[idx] = ' '; s->fg[idx] = COL_DEFAULT; s->bg[idx] = COL_DEFAULT; s->at[idx] = 0;
+                    if (s->lk) s->lk[idx] = 0;
                 }
             s->rows = rows;
         }
@@ -44,11 +46,13 @@ void screen_ensure_rows(Screen *s, int rows)
     s->fg = (uint32_t *)realloc(s->fg, n * sizeof(uint32_t));
     s->bg = (uint32_t *)realloc(s->bg, n * sizeof(uint32_t));
     s->at = (uint8_t *)realloc(s->at, n);
-    if (!s->cp || !s->fg || !s->bg || !s->at) { fprintf(stderr, "pi: oom\n"); exit(1); }
+    s->lk = (uint8_t *)realloc(s->lk, n);
+    if (!s->cp || !s->fg || !s->bg || !s->at || !s->lk) { fprintf(stderr, "pi: oom\n"); exit(1); }
     for (int y = s->rows; y < new_cap; y++)
         for (int x = 0; x < s->cols; x++) {
             size_t idx = (size_t)y * s->cols + x;
             s->cp[idx] = ' '; s->fg[idx] = COL_DEFAULT; s->bg[idx] = COL_DEFAULT; s->at[idx] = 0;
+            s->lk[idx] = 0;
         }
     s->cap_rows = new_cap;
     if (rows > s->rows) s->rows = rows;
@@ -88,8 +92,10 @@ void screen_init(Screen *s, int cols, int rows)
 
 void screen_free(Screen *s)
 {
-    free(s->cp); free(s->fg); free(s->bg); free(s->at);
-    s->cp = NULL; s->fg = NULL; s->bg = NULL; s->at = NULL;
+    free(s->cp); free(s->fg); free(s->bg); free(s->at); free(s->lk);
+    s->cp = NULL; s->fg = NULL; s->bg = NULL; s->at = NULL; s->lk = NULL;
+    for (int i = 0; i < s->nlinks; i++) { free(s->links[i]); s->links[i] = NULL; }
+    s->nlinks = 0;
 }
 
 void screen_resize(Screen *s, int cols, int rows)
@@ -110,7 +116,10 @@ void screen_clear(Screen *s)
         s->fg[i] = COL_DEFAULT;
         s->bg[i] = COL_DEFAULT;
         s->at[i] = 0;
+        if (s->lk) s->lk[i] = 0;
     }
+    for (int k = 0; k < s->nlinks; k++) { free(s->links[k]); s->links[k] = NULL; }
+    s->nlinks = 0;
 }
 
 void screen_fill_rect(Screen *s, int x, int y, int w, int h, Style st)
@@ -266,6 +275,47 @@ static void ansi_text(Screen *s, int x, int y, int max_cols, const char *text, S
     }
 }
 
+/* Registra a URL na tabela do screen (reusa se repetir) e marca as celulas. */
+void screen_link(Screen *s, int x, int y, int len, const char *url)
+{
+    if (!s || !s->lk || !url || !*url || len <= 0) return;
+    int id = -1;
+    for (int i = 0; i < s->nlinks; i++)
+        if (str_eq(s->links[i], url)) { id = i; break; }
+    if (id < 0) {
+        if (s->nlinks >= 8) return;          /* sem espaco: fica sem link */
+        id = s->nlinks++;
+        s->links[id] = str_dup(url);
+    }
+    if (y < 0 || y >= s->rows) return;
+    for (int k = 0; k < len; k++) {
+        int cx = x + k;
+        if (cx < 0 || cx >= s->cols) break;
+        s->lk[(size_t)y * (size_t)s->cols + (size_t)cx] = (uint8_t)(id + 1);
+    }
+}
+
+/* Acha http(s)://... em `text` e marca a coluna correspondente como link.
+   Roda depois de desenhar a linha, entao a coluna sai da largura do prefixo. */
+static void marcar_links(Screen *s, int x, int y, const char *text, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        if (text[i] != 'h') continue;
+        if (!(n - i >= 7 && memcmp(text + i, "http://", 7) == 0) &&
+            !(n - i >= 8 && memcmp(text + i, "https://", 8) == 0)) continue;
+        size_t fim = i;
+        while (fim < n && text[fim] != ' ' && text[fim] != '\t' && text[fim] != '\n') fim++;
+        size_t url_n = fim - i;
+        if (url_n < 10) continue;
+        char *url = str_ndup(text + i, url_n);
+        int col = strn_width(text, i);
+        int larg = strn_width(text + i, url_n);
+        screen_link(s, x + col, y, larg, url);
+        free(url);
+        i = fim ? fim - 1 : i;
+    }
+}
+
 int screen_para(Screen *s, int x, int y, int w, const char *text, size_t n, Style st)
 {
     if (w < 1) return 0;
@@ -293,6 +343,7 @@ int screen_para(Screen *s, int x, int y, int w, const char *text, size_t n, Styl
             i += (size_t)c;
         }
         screen_text(s, x, y + row, text + start, i - start, st, w);
+        marcar_links(s, x, y + row, text + start, i - start);
         row++;
         if (i >= n) break;
         if (text[i] == '\n') { i++; continue; }        /* quebra explicita */
@@ -1145,7 +1196,16 @@ int ui_welcome(Screen *s, int y, int width, const Theme *t, const char *model, c
         screen_text(s, LOGO_X, y + i, LOGO[i], strlen(LOGO[i]), st_logo, LOGO_W);
 
     int clip = width > TEXTO_X ? width - TEXTO_X : 0;
-    screen_texts(s, TEXTO_X, y, "Delta Agent", st_nome, clip);
+    /* nome + versao: "Delta Agent v0.1.9" (versao em dim, nome em negrito) */
+    {
+        int usado = screen_texts(s, TEXTO_X, y, "Delta Agent", st_nome, clip);
+        if (clip > usado + 4) {
+            char ver[32];
+            snprintf(ver, sizeof ver, "v%s", DELTA_VERSION);
+            screen_text(s, TEXTO_X + usado + 1, y, ver, strlen(ver), st_muted,
+                        clip - usado - 1);
+        }
+    }
     screen_texts(s, TEXTO_X, y + 1, model ? model : "no-model", st_muted, clip);
     screen_texts(s, TEXTO_X, y + 2, cwd ? cwd : "", st_dim, clip);
     return 3;

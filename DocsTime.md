@@ -170,10 +170,15 @@ mesmo aviso de versão nova do boot da TUI).
     pasta padrão (`%LOCALAPPDATA%\Delta`). Rodar a suíte **sobrescreve o delta instalado na máquina**
     com o build local (mesmo código; sem ícone se o `windres` não estiver no PATH). Depois da suíte,
     recopie `dist/Delta.exe` se quiser o binário exato do release.
-20. **O teto de ferramentas por turno foi removido inteiro** (comando `/forlimit`, `g_tool_limit` e a
+20. **Links clicáveis = OSC 8.** `Screen` tem `lk` (por célula) + `links[8]`; `screen_para` detecta
+    `http(s)://…` e chama `screen_link`; `build_row` (term.c) emite `ESC ]8;;URL ESC \` ao redor das
+    células marcadas. **Cuidado ao alocar a grade**: `alloc_grid`, `screen_ensure_rows` (realloc) e
+    `screen_free` têm que tratar `lk` — esquecer o realloc do `lk` deu segfault (o teste `[7]` do
+    `tests/test_main.c` cobre isso). No replay o dump vem da grade, então OSC 8 não aparece lá.
+21. **O teto de ferramentas por turno foi removido inteiro** (comando `/forlimit`, `g_tool_limit` e a
     mensagem que mandava o modelo pedir `/forlimit` ao usuário). Não reintroduza o limite sem o
     comando: sobra código morto e conselho errado na boca do modelo.
-21. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
+22. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
     plataforma: `Delta.exe` (Windows) e `delta-linux-x86_64.tar.gz` (Linux, com o binário `delta`
     na raiz ou um nível abaixo). Renomear o asset quebra o `delta update` sem quebrar o instalador.
 15. **`delta update` troca o executável em uso.** Windows: renomeia o exe para `.old`, grava o

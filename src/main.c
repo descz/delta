@@ -149,10 +149,10 @@ static const Cmd COMMANDS[] = {
     { "translator","Troca o idioma da interface",                      "pt-BR|pt|en|es|zh|ja", 1 },
     { "reload",    "Recarrega config e tema do disco",                NULL,                 0 },
     { "quit",      "Sai do Delta Agent",                              NULL,                 0 },
-    { "subagentmodel", "Modelo que os subagentes usam",                NULL,                 0 },
-    { "deltagroup", "Grupo do Delta no Telegram (link de convite)",    NULL,                 0 },
-    { "undo",      "Restaura o conteudo anterior de um arquivo",       "[arquivo]",          1 },
-    { "update",    "Instala a versao mais nova do GitHub",              "[--check]",          1 },
+    { "subagentmodel", "Modelo em que os subagentes rodam (ele pergunta antes)", NULL,       0 },
+    { "deltagroup", "Grupo do Delta no Telegram · convite e avisos",    NULL,                 0 },
+    { "undo",      "Restaura o conteúdo anterior de um arquivo",       "[arquivo]",          1 },
+    { "update",    "Instala a versão mais nova do GitHub",              "[--check]",          1 },
 };
 #define N_COMMANDS ((int)(sizeof COMMANDS / sizeof COMMANDS[0]))
 
@@ -2206,19 +2206,12 @@ static void handle_command(const char *raw)
         str_adds(&b->text, "Grupo do Delta no Telegram\n\n");
         str_addf(&b->text, "  %s\n\n", DELTA_TELEGRAM);
         str_adds(&b->text,
-                 "  - duvidas, ideias e o que cada um esta' construindo com o Delta\n"
-                 "  - avisos de release (a mesma versao que o `delta update` instala)\n"
-                 "  - skills e automacoes que o pessoal publica\n\n"
-                 "  O link e' publico: nao muda o que o Delta faz nem libera rede.\n"
-                 "  Modelo e rede continuam sendo os seus (provedor + chave).\n");
-        if (term_is_tty()) {
-            if (url_open(DELTA_TELEGRAM))
-                str_adds(&b->text, "  abrindo no navegador...\n");
-            else
-                str_adds(&b->text, "  nao consegui abrir o navegador: copie o link acima\n");
-        }
-        if (clipboard_write_text(DELTA_TELEGRAM))
-            str_adds(&b->text, "  link copiado para a area de transferencia\n");
+                 "  O convite \u00e9 p\u00fablico e est\u00e1 no clipboard: \u00e9 onde o pessoal tira d\u00favidas, "
+                 "avisa das vers\u00f5es novas e mostra as automa\u00e7\u00f5es que anda fazendo com o Delta. "
+                 "Entrar no grupo n\u00e3o muda o que o Delta faz nem libera nada: modelo e rede continuam "
+                 "sendo os seus (provedor + chave). Ctrl+clique no link acima para abrir.\n");
+        if (!clipboard_write_text(DELTA_TELEGRAM))
+            str_adds(&b->text, "  (n\u00e3o consegui copiar automaticamente: selecione o link acima)\n");
         app.tr_dirty = 1;
         render();
         return;

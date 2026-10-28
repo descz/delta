@@ -33,6 +33,10 @@ typedef struct {
     uint32_t *fg;
     uint32_t *bg;
     uint8_t  *at;
+    /* links (OSC 8): por celula, 0 = sem link; indice+1 na tabela abaixo */
+    uint8_t  *lk;
+    char     *links[8];
+    uint8_t   nlinks;
 } Screen;
 
 void screen_init(Screen *s, int cols, int rows);
@@ -51,8 +55,11 @@ void screen_put(Screen *s, int x, int y, uint32_t cp, Style st);
 int  screen_text(Screen *s, int x, int y, const char *text, size_t n, Style st, int clip);
 int  screen_texts(Screen *s, int x, int y, const char *text, Style st, int clip);
 void screen_hline(Screen *s, int y, int x, int w, uint32_t cp, Style st);
-/* Desenha texto com quebra de palavra. Retorna linhas usadas. */
+/* Desenha texto com quebra de palavra. Retorna linhas usadas.
+   URLs (http/https) na linha viram links clicaveis (OSC 8). */
 int  screen_para(Screen *s, int x, int y, int w, const char *text, size_t n, Style st);
+/* Marca `len` colunas como link para `url` (o terminal mostra clicavel). */
+void screen_link(Screen *s, int x, int y, int len, const char *url);
 
 /* ---------------------------------------------------------------- */
 /* Bloco de linhas com estilo por caractere (saida do markdown)        */
