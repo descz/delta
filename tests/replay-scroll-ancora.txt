@@ -1,0 +1,14 @@
+# Rolar para tras enquanto o agente escreve: o topo da conversa tem que
+# ficar ancorado (antes cada linha nova empurrava a leitura para baixo).
+size 60 16
+type /help
+key enter
+type /help
+key enter
+key wheel-up
+key wheel-up
+dump antes
+working 1
+type mais uma linha enquanto o agente escreve
+key enter
+dump depois

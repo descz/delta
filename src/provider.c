@@ -394,6 +394,7 @@ typedef struct {
     Str current_tool_name;
     Str current_tool_args;
     int in_tool;
+    int abortado;             /* o usuario cortou (Ctrl+C) */
 } StreamState;
 
 static void pend_free(StreamState *st)
@@ -628,6 +629,24 @@ static void handle_sse_line(StreamState *st, const char *line, size_t len, Str *
     json_free(v);
 }
 
+/* Alimenta o parser SSE com bytes crus (linhas incompletas ficam no linebuf).
+   Usado pelas duas plataformas. */
+static void feed_sse(StreamState *st, Str *evname, Str *linebuf, const char *buf, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        char c = buf[i];
+        if (c == '\n') {
+            size_t ll = linebuf->len;
+            while (ll > 0 && linebuf->data[ll - 1] == '\r') ll--;
+            if (ll == 0) str_clear(evname);
+            else handle_sse_line(st, linebuf->data, ll, evname);
+            str_clear(linebuf);
+        } else {
+            str_addc(linebuf, c);
+        }
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* HTTP                                                                */
 /* ------------------------------------------------------------------ */
@@ -727,6 +746,106 @@ static void provider_headers(const Provider *p, const char *session_id,
 }
 
 #ifdef _WIN32
+/* ------------------------------------------------------------------ */
+/* Bomba: TODO o I/O de rede roda numa thread                          */
+/* ------------------------------------------------------------------ */
+/* WinHttpReadData/WinHttpReceiveResponse bloqueiam ate' o proximo byte e
+   `WinHttpSetTimeouts` de recepcao NAO interrompe essa espera (medido: 1 s
+   configurado num servidor que segura 3 s, zero timeouts). Como a TUI
+   precisa do thread da UI livre para animar o spinner e ler o teclado, a
+   thread faz envio, cabecalhos e leitura; ela enche um buffer e a UI drena
+   a cada ~15 ms. O parser SSE continua na thread da UI. */
+typedef struct {
+    HINTERNET req, conn, session;
+    WCHAR   *whdr;              /* cabecalhos (dono: a bomba) */
+    DWORD    whlen;
+    char    *corpo;             /* corpo do POST (dono: a bomba) */
+    size_t   corpo_len;
+    CRITICAL_SECTION cs;
+    Str      buf;               /* bytes ainda nao consumidos (protegido por cs) */
+    int      fim;               /* terminou (fim normal, erro ou abort) */
+    int      enviou;            /* 1 = pedido enviado e resposta recebida */
+    DWORD    status;            /* HTTP status (0 = sem resposta) */
+    DWORD    erro;              /* GetLastError da falha (0 = sem falha) */
+    volatile LONG parar;        /* o consumidor pediu para encerrar */
+} Bomba;
+
+static DWORD WINAPI bomba_main(LPVOID pp)
+{
+    Bomba *b = (Bomba *)pp;
+    char tmp[8192];
+
+    if (!WinHttpSendRequest(b->req, b->whdr, b->whlen, (LPVOID)b->corpo,
+                            (DWORD)b->corpo_len, (DWORD)b->corpo_len, 0)) {
+        b->erro = GetLastError();
+        goto fim;
+    }
+    if (!WinHttpReceiveResponse(b->req, NULL)) {
+        b->erro = GetLastError();
+        goto fim;
+    }
+    {
+        DWORD st = 0, sl = sizeof st;
+        WinHttpQueryHeaders(b->req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                            WINHTTP_HEADER_NAME_BY_INDEX, &st, &sl, WINHTTP_NO_HEADER_INDEX);
+        b->status = st;
+        b->enviou = 1;
+    }
+    for (;;) {
+        DWORD got = 0;
+        int grande = 0;
+        if (b->parar || provider_stream_abort) break;
+        if (!WinHttpReadData(b->req, tmp, sizeof tmp, &got)) { b->erro = GetLastError(); break; }
+        if (got == 0) break;
+        EnterCriticalSection(&b->cs);
+        str_add(&b->buf, tmp, got);
+        grande = (b->status >= 300 && b->buf.len > 8192);
+        LeaveCriticalSection(&b->cs);
+        if (grande) break;      /* corpo de erro: 8 KB bastam para a mensagem */
+    }
+
+fim:
+    EnterCriticalSection(&b->cs);
+    b->fim = 1;
+    LeaveCriticalSection(&b->cs);
+    WinHttpCloseHandle(b->req);
+    WinHttpCloseHandle(b->conn);
+    WinHttpCloseHandle(b->session);
+    free(b->whdr);
+    free(b->corpo);
+    return 0;
+}
+
+static void bomba_free(Bomba *b)
+{
+    if (!b) return;
+    str_free(&b->buf);
+    DeleteCriticalSection(&b->cs);
+    free(b);
+}
+
+/* Monta o pedido e devolve a bomba pronta (ou NULL, com `err` preenchido). */
+static Bomba *bomba_nova(HINTERNET req, HINTERNET conn, HINTERNET session,
+                         WCHAR *whdr, DWORD whlen, const char *body, size_t body_len)
+{
+    Bomba *b = (Bomba *)calloc(1, sizeof *b);
+    if (!b) return NULL;
+    if (body_len) {
+        b->corpo = (char *)malloc(body_len);
+        if (!b->corpo) { free(b); return NULL; }
+        memcpy(b->corpo, body, body_len);
+    }
+    InitializeCriticalSection(&b->cs);
+    str_init(&b->buf);
+    b->req = req;
+    b->conn = conn;
+    b->session = session;
+    b->whdr = whdr;
+    b->whlen = whlen;
+    b->corpo_len = body_len;
+    return b;
+}
+
 static int http_post_stream(const char *url, const Provider *p, const char *session_id,
                             const char *body, size_t body_len, StreamState *st, Str *err)
 {
@@ -743,6 +862,9 @@ static int http_post_stream(const char *url, const Provider *p, const char *sess
     HINTERNET session = WinHttpOpen(L"delta-agent/1.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                     WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!session) { str_adds(err, "WinHttpOpen falhou"); free(whost); free(wpath); url_free(&u); return 0; }
+    /* conecta/entrega com teto; recepcao longa (o modelo pode demorar entre
+       tokens), mas nao infinita, para a thread nao ficar presa para sempre */
+    WinHttpSetTimeouts(session, 30000, 30000, 30000, 300000);
 
     HINTERNET conn = WinHttpConnect(session, whost, (INTERNET_PORT)u.port, 0);
     if (!conn) { str_adds(err, "WinHttpConnect falhou"); WinHttpCloseHandle(session); free(whost); free(wpath); url_free(&u); return 0; }
@@ -797,117 +919,97 @@ static int http_post_stream(const char *url, const Provider *p, const char *sess
     WCHAR *whdr = (WCHAR *)malloc(((size_t)wlen + 1) * sizeof(WCHAR));
     MultiByteToWideChar(CP_UTF8, 0, headers.data, (int)headers.len, whdr, wlen);
     whdr[wlen] = 0;
-
-    BOOL ok = WinHttpSendRequest(req, whdr, (DWORD)wlen,
-                                 (LPVOID)body, (DWORD)body_len, (DWORD)body_len, 0);
-    DWORD last_error = ok ? 0 : GetLastError();
     str_free(&headers);
-    free(whdr);
+    free(whost);
+    free(wpath);
+    url_free(&u);
 
-    if (!ok) {
-        str_addf(err, "falha ao enviar a requisicao (erro %lu)", (unsigned long)last_error);
+    Bomba *b = bomba_nova(req, conn, session, whdr, (DWORD)wlen, body, body_len);
+    if (!b) {
         WinHttpCloseHandle(req); WinHttpCloseHandle(conn); WinHttpCloseHandle(session);
-        free(whost); free(wpath); url_free(&u);
-        return 0;
-    }
-    if (!WinHttpReceiveResponse(req, NULL)) {
-        str_addf(err, "falha na resposta (erro %lu)", (unsigned long)GetLastError());
-        WinHttpCloseHandle(req); WinHttpCloseHandle(conn); WinHttpCloseHandle(session);
-        free(whost); free(wpath); url_free(&u);
-        return 0;
-    }
-
-    DWORD status = 0, slen = sizeof status;
-    WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                        WINHTTP_HEADER_NAME_BY_INDEX, &status, &slen, WINHTTP_NO_HEADER_INDEX);
-
-    /* status fora de 2xx: le o corpo do erro (limitado) e sai — antes o laco
-       podia terminar sem nunca checar o status e a falha passava batido */
-    if (status < 200 || status >= 300) {
-        str_addf(err, "HTTP %lu: ", (unsigned long)status);
-        int lidos = 0;
-        while (lidos < 4096) {
-            DWORD avail = 0;
-            if (!WinHttpQueryDataAvailable(req, &avail) || avail == 0) break;
-            char buf[1024];
-            DWORD got = 0;
-            DWORD want = avail > sizeof buf ? (DWORD)sizeof buf : avail;
-            if (!WinHttpReadData(req, buf, want, &got) || got == 0) break;
-            str_add(err, buf, got);
-            lidos += (int)got;
-        }
-        WinHttpCloseHandle(req);
-        WinHttpCloseHandle(conn);
-        WinHttpCloseHandle(session);
-        free(whost);
-        free(wpath);
-        url_free(&u);
+        free(whdr);
+        str_adds(err, "sem memoria para o pedido");
         return 0;
     }
 
     Str evname; str_init(&evname);
     Str linebuf; str_init(&linebuf);
+    Str corpo_erro; str_init(&corpo_erro);
+    DWORD status = 0, erro = 0;
+    int enviou = 0;
+    int abortado = 0;
 
-    /* timeout curto de recepcao: a leitura devolve o controle a cada ~100 ms
-       para a TUI desenhar o spinner e responder ao Ctrl+C mesmo enquanto o
-       provedor nao mandou o primeiro byte. */
-    WinHttpSetTimeouts(req, 0, 30000, 30000, 100);
+    HANDLE th = CreateThread(NULL, 0, bomba_main, b, 0, NULL);
+    if (!th) {
+        /* sem thread (raro): faz o mesmo caminho na propria thread da UI */
+        bomba_main(b);
+    }
 
     for (;;) {
-        DWORD avail = 0;
-        if (!WinHttpQueryDataAvailable(req, &avail)) {
-            if (GetLastError() == ERROR_WINHTTP_TIMEOUT) {
-                wait_tick();
-                if (provider_stream_abort) break;
-                continue;
-            }
-            break;
+        Str chunk; str_init(&chunk);
+        int acabou = 0;
+        EnterCriticalSection(&b->cs);
+        if (b->buf.len) {
+            str_add(&chunk, b->buf.data, b->buf.len);
+            str_clear(&b->buf);
         }
-        if (avail == 0) break;
-        char *buf = (char *)malloc(avail + 1);
-        DWORD got = 0;
-        if (!WinHttpReadData(req, buf, avail, &got) || got == 0) {
-            DWORD erro_leitura = GetLastError();
-            free(buf);
-            if (erro_leitura == ERROR_WINHTTP_TIMEOUT) {
-                wait_tick();
-                if (provider_stream_abort) break;
-                continue;
-            }
-            break;
-        }
-        buf[got] = 0;
+        acabou = b->fim;
+        status = b->status;
+        erro = b->erro;
+        enviou = b->enviou;
+        LeaveCriticalSection(&b->cs);
 
-        size_t i = 0;
-        while (i < got) {
-            char c = buf[i];
-            if (c == '\n') {
-                size_t ll = linebuf.len;
-                while (ll > 0 && linebuf.data[ll - 1] == '\r') ll--;
-                if (ll == 0) { str_clear(&evname); }
-                else handle_sse_line(st, linebuf.data, ll, &evname);
-                str_clear(&linebuf);
-            } else {
-                str_addc(&linebuf, c);
+        if (chunk.len) {
+            if (status >= 200 && status < 300) {
+                feed_sse(st, &evname, &linebuf, chunk.data, chunk.len);
+            } else if (corpo_erro.len < 4096) {
+                str_add(&corpo_erro, chunk.data, chunk.len < 4096 ? chunk.len : 4096);
             }
-            i++;
         }
-        free(buf);
-        if (provider_stream_abort) break;
+        str_free(&chunk);
+
+        if (provider_stream_abort) { abortado = 1; break; }
+        if (acabou) break;
+        wait_tick();              /* desenha o spinner e le o teclado */
+        if (chunk.len == 0) msleep(15);
     }
+
+    if (th) {
+        InterlockedExchange(&b->parar, 1);
+        /* espera so' um instante: no caminho normal a bomba ja' terminou. Num
+           abort ela pode estar presa num WinHttpReadData (o servidor pode
+           demorar minutos para mandar o proximo byte) — nesse caso a bomba
+           fecha os proprios handles e o `b` fica orfaoo (dezenas de bytes)
+           em vez de travar a UI esperando. */
+        if (WaitForSingleObject(th, 150) == WAIT_OBJECT_0) {
+            CloseHandle(th);
+            bomba_free(b);
+            b = NULL;
+        } else {
+            CloseHandle(th);
+            b = NULL;
+        }
+    }
+
     str_free(&evname);
     str_free(&linebuf);
 
-    WinHttpCloseHandle(req);
-    WinHttpCloseHandle(conn);
-    WinHttpCloseHandle(session);
-    free(whost);
-    free(wpath);
-    url_free(&u);
-
-    if (provider_stream_abort) {
+    if (abortado) {
         provider_stream_abort = 0;
+        st->abortado = 1;
+        str_free(&corpo_erro);
         if (err) str_adds(err, "interrompido");
+        return 0;
+    }
+    if (status && (status < 200 || status >= 300)) {
+        str_addf(err, "HTTP %lu: ", (unsigned long)status);
+        if (corpo_erro.len) str_add(err, corpo_erro.data, corpo_erro.len);
+        str_free(&corpo_erro);
+        return 0;
+    }
+    str_free(&corpo_erro);
+    if (!enviou) {
+        str_addf(err, "falha na requisicao (erro %lu)", (unsigned long)erro);
         return 0;
     }
     return 1;
@@ -1004,20 +1106,7 @@ static int http_post_stream(const char *url, const Provider *p, const char *sess
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) continue;
             break;
         }
-        size_t i = 0;
-        while (i < (size_t)got) {
-            char c = buf[i];
-            if (c == '\n') {
-                size_t ll = linebuf.len;
-                while (ll > 0 && linebuf.data[ll - 1] == '\r') ll--;
-                if (ll == 0) str_clear(&evname);
-                else handle_sse_line(st, linebuf.data, ll, &evname);
-                str_clear(&linebuf);
-            } else {
-                str_addc(&linebuf, c);
-            }
-            i++;
-        }
+        feed_sse(st, &evname, &linebuf, buf, (size_t)got);
     }
     int rc = pclose(f);
     str_free(&evname);
@@ -1026,6 +1115,7 @@ static int http_post_stream(const char *url, const Provider *p, const char *sess
 
     if (provider_stream_abort) {
         provider_stream_abort = 0;
+        st->abortado = 1;
         remove(thdr);
         str_adds(err, "interrompido");
         return 0;
@@ -1188,6 +1278,17 @@ static void tidy_http_error(Str *e)
     json_free(v);
 }
 
+/* 429/5xx/rede costumam ser passageiros; 4xx (modelo invalido, chave errada)
+   nao melhora repetindo — e o usuario espera 5 s a cada tentativa. */
+static int vale_retry(const char *msg)
+{
+    if (!msg) return 1;
+    const char *h = strstr(msg, "HTTP ");
+    if (!h) return 1;                       /* falha de rede */
+    long status = atol(h + 5);
+    return status == 429 || status >= 500;
+}
+
 int provider_run(const Provider *p, const MsgList *msgs, const char *system_prompt,
                  Turn *out, DeltaCB cb, void *ud, Str *err)
 {
@@ -1223,7 +1324,9 @@ int provider_run(const Provider *p, const MsgList *msgs, const char *system_prom
 
         int vazio = (out->text.len == 0 && out->thinking.len == 0 && out->calls.n_calls == 0);
         int falhou = (!ok || local_err.len);
+        if (st.abortado) break;             /* Ctrl+C: nao tenta de novo */
         if (!falhou || !vazio || tentativa >= TENTATIVAS) break;
+        if (local_err.len && !vale_retry(local_err.data)) break;
 
         if (local_err.len) tidy_http_error(&local_err);
         if (p->on_retry)

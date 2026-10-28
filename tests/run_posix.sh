@@ -78,6 +78,17 @@ reject "$AR/copia.txt" "│"                        "sem moldura de caixa"
 expect "$AR/copia.log" "  /help                              Mostra os comandos e atalhos" "linha longa nao chega quebrada"
 
 echo
+echo "[3c3] scroll durante o stream (topo ancorado)"
+$BIN --replay tests/replay-scroll-ancora.txt 60 16 > "$AR/scroll.log" 2>&1
+TOPO_ANTES=$(sed -n '/--- passo .*: antes ---/{n;p;}' "$AR/scroll.log")
+TOPO_DEPOIS=$(sed -n '/--- passo .*: depois ---/{n;p;}' "$AR/scroll.log")
+if [ -n "$TOPO_ANTES" ] && [ "$TOPO_ANTES" = "$TOPO_DEPOIS" ]; then
+    pass "rolar para tras: o topo nao escorrega quando o agente escreve"
+else
+    fail "scroll escorregou (\"$TOPO_ANTES\" -> \"$TOPO_DEPOIS\")"
+fi
+
+echo
 echo "[3d] /projects + ~/.deltaCore"
 mkdir -p build/proj-teste
 $BIN --replay tests/replay-projects.txt 100 24 > "$AR/proj.log" 2>&1

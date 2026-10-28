@@ -111,6 +111,8 @@ typedef struct {
     int      sel_click_x, sel_click_y;   /* onde o clique comecou */
     int      tr_start;          /* linha do transcript que aparece na linha 0 da tela */
     int      tr_view;           /* linhas visiveis do transcript */
+    int      tr_total_prev;     /* linhas do transcript no frame anterior (ancora do scroll) */
+    int      tr_prev_width;     /* largura daquele frame */
 } App;
 
 static App app;
@@ -343,6 +345,8 @@ static void input_insert_text(const char *t, size_t n);
 static void copy_last_response(void);
 static void sel_clear(void);
 static void render_selection(void);
+/* Rola a conversa: +1 = roda para cima (conteudo mais antigo). */
+static void scroll_wheel(int shift);
 
 #define PASTE_MIN_EVENTOS 8      /* lote a partir disso e colagem, nao digitacao */
 #define PASTE_MIN_CHARS   200    /* a partir disso vira {paste N caracteres} */
@@ -966,6 +970,7 @@ static void render_transcript(int width, size_t from)
     app.tr_done = app.n_blocks;
     app.tr_end_y = y;
 
+
     if (y == 0) {
         screen_ensure_rows(s, 1);
         s->rows = 1;
@@ -1088,6 +1093,14 @@ static void render(void)
 
     /* recorta a janela visivel do transcript, alinhada embaixo */
     int total = app.tr.rows;
+    /* rolou para tras e o agente escreveu mais? desconta o crescimento: sem
+       isso o topo escorrega para baixo a cada linha nova (ler no meio de uma
+       resposta era impossivel). So' vale quando a largura nao mudou. */
+    if (app.scroll > 0 && app.tr_prev_width == cols && app.tr_total_prev > 0 &&
+        total > app.tr_total_prev)
+        app.scroll += total - app.tr_total_prev;
+    app.tr_total_prev = total;
+    app.tr_prev_width = cols;
     int max_scroll = total > tr_view ? total - tr_view : 0;
     if (app.scroll > max_scroll) app.scroll = max_scroll;
     if (app.scroll < 0) app.scroll = 0;
@@ -1122,7 +1135,10 @@ static void render(void)
     if (app.picker) {
         const char *titulo = menu_title();
         if (titulo) ui_border_label(&app.screen, ey, cols, &app.theme, titulo);
-    } else if (app.scroll > 0 && !app.ext_mode) {   /* vale tambem durante a geracao */
+    } else if (app.scroll > 0 && !app.ext_mode && !app.working && !mostrar_status) {
+        /* dica de rolagem so' quando a borda nao tem nada mais util para
+           mostrar: o "Working..." e o aviso passageiro tem prioridade (antes
+           o hint apagava o status e o quadrado sumia durante o trabalho) */
         char hint[110];
         snprintf(hint, sizeof hint, "\u2191 %d linhas acima \u00b7 ESC volta ao fim", app.scroll);
         ui_border_label(&app.screen, ey, cols, &app.theme, hint);
@@ -1361,19 +1377,20 @@ static void ui_poll_input(void)
         Event ev;
         if (!term_read(&ev, 0)) break;
         steer_dbg("ev type=%d cp=%u working=%d", (int)ev.type, (unsigned)ev.cp, app.working);
-        if (ev.type == EV_ESC || (ev.type == EV_CTRL && ev.cp == 'c')) {
+        if (ev.type == EV_CTRL && ev.cp == 'c') {
             app.abort_requested = 1;
             notify("Interrompido");
             return;
         }
         if (ev.type == EV_RESIZE) { render(); continue; }
         if (ev.type == EV_WHEEL) {
-            app.scroll = app.scroll - ev.shift;
-            if (app.scroll < 0) app.scroll = 0;
+            scroll_wheel(ev.shift);
             render();
             continue;
         }
-        /* digitacao while working: texto entra na caixa e Enter enfileira */
+        /* digitacao while working: texto entra na caixa e Enter enfileira.
+           ESC NAO interrompe: ele volta ao fim da conversa / limpa a selecao
+           (quem interrompe e' Ctrl+C, como no README). */
         handle_event(&ev);
     }
 }
@@ -2720,6 +2737,14 @@ static void sel_clear(void)
     app.sel_drag = 0;
 }
 
+/* Roda do mouse. Um degrau por evento, igual com o agente trabalhando ou
+   parado (antes a versao do "working" andava 1 linha e invertia o sentido). */
+static void scroll_wheel(int shift)
+{
+    app.scroll += (shift > 0) ? 3 : -3;
+    if (app.scroll < 0) app.scroll = 0;
+}
+
 static void sel_normalize(int *y0, int *x0, int *y1, int *x1)
 {
     if (app.sel_ay > app.sel_hy ||
@@ -3269,8 +3294,7 @@ static void handle_event(const Event *ev)
             if (app.menu_sel < 0) app.menu_sel = 0;
             if (app.menu_sel >= n) app.menu_sel = n - 1;
         } else {
-            app.scroll += (ev->shift > 0) ? 3 : -3;   /* roda: cima = mais antigo */
-            if (app.scroll < 0) app.scroll = 0;
+            scroll_wheel(ev->shift);   /* roda: cima = mais antigo */
         }
         render();
         return;
@@ -3488,10 +3512,13 @@ static void handle_event(const Event *ev)
                 render();
                 break;
             case EV_ESC:
+                /* cascata: primeiro a selecao, depois a rolagem, e so' no fim o
+                   texto do editor (antes o ESC fazia as tres coisas de uma vez
+                   e apagava o que estava sendo digitado) */
                 if (app.sel_active) { sel_clear(); render(); break; }
+                if (app.scroll > 0) { app.scroll = 0; render(); break; }
                 if (app.input.len) { str_clear(&app.input); app.cursor = 0; }
                 app.menu_suppressed = 0;
-                app.scroll = 0;
                 render();
                 break;
             case EV_CTRL_KEY:
@@ -4377,7 +4404,7 @@ int main(int argc, char **argv)
                 }
             }
             if (app.working) {
-                render();
+                render();          /* spinner (do relogio) + leitura do teclado */
             } else if (app.status.len && now_ms() >= app.status_until) {
                 str_clear(&app.status);
                 render();

@@ -217,9 +217,12 @@ Notas do release: escreva em `build/RELEASE.md` (não versionado) — o modelo a
 | sintoma | causa / correção |
 |---|---|
 | teclado morto durante o streaming | `term_read(ev, 0)` retornava sempre 0; poll é `WaitForSingleObject(h, 0)` |
-| spinner de "Working" congelado | duas causas: o quadro vinha de um **contador de frames** (o laço principal está bloqueado dentro do agente, então só andava quando o usuário mexia no teclado) e a leitura do stream bloqueava no primeiro byte. Hoje o quadro vem do relógio (`spin_from_clock`) e a leitura chama `provider_set_wait_tick` (WinHTTP com timeout de recepção de 100 ms / `select` no pipe do curl). Não volte a contar frames. |
+| spinner de "Working" congelado | **três causas cumulativas**: (1) o quadro vinha de um contador de frames — hoje vem do relógio (`spin_from_clock`); (2) `WinHttpReadData`/`WinHttpReceiveResponse` bloqueiam e o timeout de recepção do WinHTTP **não** interrompe essa espera (medido com servidor lento: 1 s configurado, zero timeouts) — hoje a leitura roda numa thread ("bomba") e a UI drena o buffer a cada 15 ms; (3) quando o usuário tinha rolado para trás, o rótulo "↑ N linhas acima" substituía o status na borda — hoje "Working..." tem prioridade. |
+| Ctrl+C/ESC não cortavam a espera | mesma causa (2): nada rodava enquanto o socket dormia. A bomba checa `provider_stream_abort` a cada leitura e o consumidor abandona em ~150 ms (`WaitForSingleObject(th, 150)`); a bomba órfã fecha os próprios handles. Não espere a thread com timeout longo "para garantir" — isso reintroduz o travamento. |
+| 4xx repetia 3× com 5 s de espera | `provider_run` tentava de novo qualquer erro; `vale_retry()` só repete 429/5xx/rede. `StreamState.abortado` impede retry depois de Ctrl+C. |
 | tool de extensão criada não aparece / lixo no schema | `tools_all()` é **cacheada** em `g_todas`; `ext_reload()` liberava as strings que ela referenciava. `ext_reload()` agora chama `tools_invalidate()`. |
 | texto copiado vinha com `│ ─ ╭` e quebrado no meio | copiar da grade pega moldura e as quebras do wrap. Clique seleciona o **bloco** e o texto sai de `Block.text` (só trecho parcial vem da grade, sem moldura). |
+| ler a resposta com o agente escrevendo era impossível | `scroll` é medido a partir do fim; cada linha nova empurrava o texto para baixo. No `render()`, o crescimento do transcript é descontado do `scroll` enquanto o usuário está rolado para trás (só se a largura não mudou). |
 | `Ctrl+X` nunca funcionava no Linux/macOS | `clipboard_write_text` POSIX era stub (`return 0`); hoje usa wl-copy/xclip/xsel/pbcopy. No Windows: CRLF + retry no `OpenClipboard` (outro processo pode estar segurando). |
 | `delta update` baixava 0 bytes / falhava no redirect | o GitHub manda o asset para `objects.githubusercontent.com`; `http_get_text_to` agora liga `WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS` (POSIX já usava `curl -L`) e tem teto de tempo. |
 | a TUI fica lenta para abrir | a consulta de release no boot pode custar uma requisição. O cache (`update.json`, 24 h) evita isso depois da primeira vez; `DELTA_NO_UPDATE_CHECK=1` desliga de vez. |
@@ -230,7 +233,7 @@ Notas do release: escreva em `build/RELEASE.md` (não versionado) — o modelo a
 | lag de 140 ms com `/models` aberto | `auth.json` era lido do disco por provedor; agora tem cache (`auth_forget` invalida) |
 | `Ctrl+C` fechava o app | removido: `Ctrl+C` interrompe/limpa, nunca sai |
 | colar chave no `/login` não funcionava | rajada de colagem ia para o editor; hoje vai para o campo (`picker_insert_text`) |
-| status "Working..." invisível | desenhado **antes** do `screen_hline`; ordem invertida |
+| status "Working..." invisível | desenhado **antes** do `screen_hline`; ordem invertida. Hoje há uma regra a mais: o rótulo de rolagem ("↑ N linhas acima") perde para o status — veja a linha do spinner congelado. |
 | sessões de todas as pastas misturadas | `cwd_slug()` era stub; hoje gera slug real + migração |
 | `.exe` parado na tela antiga | faltou regerar `src/installer_html.h` e recompilar |
 | C quebrado com `'\\'` | escape perdido ao gerar arquivo via Python/sed; use `chr(92)` |
