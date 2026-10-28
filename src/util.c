@@ -1,5 +1,6 @@
 /* util.c */
 #include "util.h"
+#include "skills_seed.h"      /* texto das skills embutidas (tools/embed-skills.py) */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -549,6 +550,23 @@ void delta_bootstrap(void)
         char *d = path_join(base, subs[i]);
         dir_make(d);
         free(d);
+    }
+
+    /* skills embutidas: entram no ambiente na primeira execucao e nunca
+       sobrescrevem o que o usuario editou (cada SKILL.md e' dele depois) */
+    {
+        char *rootsk = path_join(base, "skills");
+        for (int i = 0; SKILLS_SEED[i].name; i++) {
+            char *d = path_join(rootsk, SKILLS_SEED[i].name);
+            char *md = path_join(d, "SKILL.md");
+            if (!file_exists(md)) {
+                dir_make(d);
+                file_write(md, SKILLS_SEED[i].body, strlen(SKILLS_SEED[i].body));
+            }
+            free(md);
+            free(d);
+        }
+        free(rootsk);
     }
 
     char *sp = path_join(base, "system/prompt.md");

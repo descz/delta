@@ -986,6 +986,11 @@ static void blocks_from_msgs(void)
             Block *b = block_add(B_USER);
             str_add(&b->text, m->text.data ? m->text.data : "", m->text.len);
         } else if (m->role == ROLE_ASSISTANT) {
+            /* o raciocinio vem antes do texto, como no streaming ao vivo */
+            if (m->thinking.len) {
+                Block *b = block_add(B_THINKING);
+                str_add(&b->text, m->thinking.data, m->thinking.len);
+            }
             if (m->text.len) {
                 Block *b = block_add(B_ASSISTANT);
                 str_add(&b->text, m->text.data, m->text.len);
@@ -3693,7 +3698,8 @@ static void usage(void)
         "Delta Agent " VERSION " - coding agent leve (C11, sem dependencias)\n"
         "\n"
         "Uso:\n"
-        "  delta                     TUI interativa\n"
+        "  delta                     TUI interativa (sempre um chat novo)\n"
+        "  delta continue            retoma a ultima sessao desta pasta\n"
         "  delta -p \"<prompt>\"        modo impressao (nao interativo)\n"
         "  delta --model <id>        modelo\n"
         "  delta --provider <nome>   anthropic | openai\n"
@@ -3745,8 +3751,9 @@ int main(int argc, char **argv)
     const char *opt_replay = NULL;
     int replay_cols = 110, replay_rows = 32;
     int preview_mode = 0, preview_cols = 100, preview_rows = 34;
-    int opt_new = 0;                 /* --new: nao retoma a sessao da pasta */
-    int opt_resume = 0;              /* --resume: forca retomar (usado em teste) */
+    int opt_new = 0;                 /* --new: forca sessao nova (padrao agora) */
+    int opt_continue = 0;            /* continue/--continue/--resume: retoma a ultima da pasta */
+    int opt_no_session = 0;          /* --no-session: nao grava sessao (subagentes) */
 
     /* --cwd antes de --tool/--tool-script: o roteiro roda no diretorio pedido */
     for (int k = 1; k + 1 < argc; k++)
@@ -3772,8 +3779,11 @@ int main(int argc, char **argv)
             opt_apikey = argv[++i];
         } else if (str_eq(a, "--new")) {
             opt_new = 1;
-        } else if (str_eq(a, "--resume")) {
-            opt_resume = 1;
+        } else if (str_eq(a, "continue") || str_eq(a, "--continue") ||
+                   str_eq(a, "--resume") || str_eq(a, "resume")) {
+            opt_continue = 1;
+        } else if (str_eq(a, "--no-session")) {
+            opt_no_session = 1;
         } else if (str_eq(a, "--no-altscreen")) {
             use_altscreen = 0;
         } else if (str_eq(a, "--replay") && i + 1 < argc) {
@@ -3868,12 +3878,12 @@ int main(int argc, char **argv)
     }
     agent_init(&app.agent, &app.cfg, cwd);
     plan_refresh();               /* painel do plano (agent op=plan) */
-    /* `delta` abre no ultimo chat desta pasta (--new comeca do zero).
-       So' na TUI: -p/--replay sao execucoes isoladas, nao continuam sessao. */
+    /* `delta` sempre comeca um chat novo. `delta continue` retoma a ultima
+       sessao desta pasta. Subagentes rodam com --no-session para nao sujar
+       a lista de sessoes da pasta do pai. */
     {
         int retomou = 0;
-        int tui = !opt_replay && !prompt && !preview_mode;
-        if ((tui || opt_resume) && !opt_new)
+        if (opt_continue && !opt_new && !opt_no_session)
             retomou = session_resume_last(cwd, &app.agent.msgs);
         if (retomou > 0) {
             blocks_from_msgs();
@@ -3881,7 +3891,7 @@ int main(int argc, char **argv)
             str_addf(&b->text, "sessao retomada · %d mensagens · continue de onde parou "
                                "(/new começa outra)", retomou);
             app.tr_dirty = 1;
-        } else {
+        } else if (!opt_no_session) {
             session_start(cwd);
         }
     }

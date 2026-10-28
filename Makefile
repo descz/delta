@@ -47,7 +47,7 @@ OBJ      := $(patsubst src/%.c,$(BUILD)/%.o,$(ALL_SRC))
 CORE_OBJ := $(patsubst src/%.c,$(BUILD)/%.o,$(CORE_SRC))
 DEP      := $(OBJ:.o=.d)
 
-.PHONY: all clean test run dist html
+.PHONY: all clean test run dist html skills
 
 all: $(BIN)
 
@@ -80,6 +80,10 @@ dist: $(BIN)
 html:
 	python tools/embed-installer.py > src/installer_html.h
 	python tools/embed-logo.py > src/asset_logo.h
+
+# regenera as skills embutidas (edite skills/<nome>/SKILL.md e rode isto)
+skills:
+	python tools/embed-skills.py > src/skills_seed.h
 
 bin:
 	@mkdir -p bin

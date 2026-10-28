@@ -51,11 +51,11 @@ or framework installer. On Windows it is **544 KB** and about **1.7 MB of privat
 | **Shell** | runs commands, keeps background jobs, `/terminal` shows the output in a chat block |
 | **Git** | status, diff, log, commit and *checkpoint* before changing anything |
 | **Web** | downloads pages, extracts data, reads documentation — and speaks **MCP** over HTTP or stdio |
-| **Skills** | saved workflows in `SKILL.md`, indexed in the system prompt and reused |
+| **Skills** | saved workflows in `SKILL.md` — six ship built in (code design, spreadsheets/PDF, docs, automation, verification, systematic debugging); indexed in the system prompt and read on demand |
 | **Memory** | durable facts across sessions, searchable by text |
 | **Project graph** | indexes symbols and imports once, then answers without re-reading every file |
 | **Models** | [models.dev](https://models.dev) catalog with hundreds of models and providers |
-| **Sessions** | per-folder history in JSONL; `delta` resumes that folder's last chat |
+| **Sessions** | per-folder history in JSONL with the thinking preserved; `delta` always starts a new chat, `delta continue` reopens that folder's last one |
 | **Streaming** | token by token, cut immediately when you send a message mid-turn |
 
 All inside the terminal, with its own TUI: mouse selection and copy, rendered markdown (headings,
@@ -93,7 +93,10 @@ sem chave de API · use /login para colar a chave do provedor
 read src/main.c and explain the flow
 ```
 
-Next time, `delta` opens **in that folder's last chat**. `delta --new` starts fresh.
+Next time, `delta` starts a **new chat** in that folder. To pick up the previous one — messages, tool calls and the model's
+thinking included — run `delta continue`.
+
+Inside the app, `/new` starts a fresh session and `/clear` wipes the screen.
 
 ## Commands and shortcuts
 

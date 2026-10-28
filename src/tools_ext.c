@@ -2320,46 +2320,278 @@ static const char *self_exe(void)
 
 /* Subagente = o proprio binario em modo -p (um agente completo, com tools),
  * num processo separado: nao mexe no estado da TUI nem na sessao do pai. */
-static int subagent_run(const char *cwd, const char *task, int max_turns, Str *out, ToolResult *res)
+/* ------------------------------------------------------------------ */
+/* Subagentes                                                          */
+/* ------------------------------------------------------------------ */
+/* Um subagente e' outro processo do proprio delta com -p: contexto limpo,
+   ferramentas proprias, sem sessao na pasta do pai (--no-session) e, se
+   quiser, com outro modelo (barato para varrer, forte para revisar).
+   op=subagent roda um; op=subagents roda ate' 4 em paralelo, cada um com a
+   saida num arquivo (nada de pipe: o filho nunca escreve na TUI do pai). */
+
+typedef struct {
+    char    *task_file;
+    char    *out_file;
+    char    *cmd;
+#ifdef _WIN32
+    HANDLE   proc;
+#else
+    int      pid;
+#endif
+    uint64_t t0;
+    int      exit_code;
+    int      rodou;
+} Child;
+
+/* Grava a tarefa num arquivo: evita brigar com as aspas do cmd.exe. */
+static char *child_task_file(const char *task, size_t idx)
 {
-    (void)max_turns;
+    char *dir = delta_home();
+    dir_make(dir);
+    Str nome; str_init(&nome);
+    str_addf(&nome, "subagent-%llu-%lu.md", (unsigned long long)now_ms(), (unsigned long)idx);
+    char *tmp = path_join(dir, nome.data);
+    str_free(&nome);
+    free(dir);
+    if (!file_write(tmp, task, strlen(task))) { free(tmp); return NULL; }
+    return tmp;
+}
+
+static char *child_cmd(const char *exe, const char *task_file, const char *model,
+                       const char *out_file, const char *child_cwd)
+{
+    Str c; str_init(&c);
+#ifdef _WIN32
+    str_adds(&c, "set DELTA_SUBAGENT=1&& ");
+    if (child_cwd && *child_cwd) str_addf(&c, "cd /d \"%s\" && ", child_cwd);
+#else
+    str_adds(&c, "DELTA_SUBAGENT=1 ");
+    if (child_cwd && *child_cwd) str_addf(&c, "cd \"%s\" && ", child_cwd);
+#endif
+    str_addf(&c, "\"%s\" -p \"@%s\" --no-session", exe, task_file);
+    if (model && *model) str_addf(&c, " --model \"%s\"", model);
+    if (out_file) str_addf(&c, " > \"%s\" 2>&1", out_file);
+    return str_steal(&c);
+}
+
+static int child_start(Child *c, const char *exe, const char *task, size_t idx,
+                       const char *model, const char *child_cwd, const char *out_dir)
+{
+    memset(c, 0, sizeof *c);
+    c->task_file = child_task_file(task, idx);
+    if (!c->task_file) return 0;
+    {
+        Str o; str_init(&o);
+#ifdef _WIN32
+        str_addf(&o, "%s\\subagent-%lu.out", out_dir, (unsigned long)idx);
+#else
+        str_addf(&o, "%s/subagent-%lu.out", out_dir, (unsigned long)idx);
+#endif
+        c->out_file = str_steal(&o);
+    }
+    c->cmd = child_cmd(exe, c->task_file, model, c->out_file, child_cwd);
+    c->t0 = now_ms();
+
+#ifdef _WIN32
+    {
+        STARTUPINFOA si;
+        memset(&si, 0, sizeof si);
+        si.cb = sizeof si;
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
+        PROCESS_INFORMATION pi;
+        memset(&pi, 0, sizeof pi);
+        Str full; str_init(&full);
+        str_adds(&full, "cmd.exe /c chcp 65001 >nul & ");
+        str_adds(&full, c->cmd);
+        char *mutavel = str_dup(full.data);
+        str_free(&full);
+        int ok = CreateProcessA(NULL, mutavel, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL,
+                                (child_cwd && *child_cwd) ? child_cwd : NULL, &si, &pi);
+        free(mutavel);
+        if (!ok) return 0;
+        CloseHandle(pi.hThread);
+        c->proc = pi.hProcess;
+        c->rodou = 1;
+        return 1;
+    }
+#else
+    {
+        pid_t pid = fork();
+        if (pid < 0) return 0;
+        if (pid == 0) {
+            if (child_cwd && *child_cwd && chdir(child_cwd) != 0) _exit(126);
+            execl("/bin/sh", "sh", "-c", c->cmd, (char *)NULL);
+            _exit(127);
+        }
+        c->pid = (int)pid;
+        c->rodou = 1;
+        return 1;
+    }
+#endif
+}
+
+/* Espera ate' `timeout_sec` (0 = sem limite). Preenche exit_code. */
+static void child_wait(Child *c, int timeout_sec)
+{
+    if (!c->rodou) return;
+#ifdef _WIN32
+    DWORD ms = timeout_sec > 0 ? (DWORD)timeout_sec * 1000 : INFINITE;
+    if (WaitForSingleObject(c->proc, ms) == WAIT_TIMEOUT) {
+        TerminateProcess(c->proc, 124);
+        WaitForSingleObject(c->proc, 5000);
+        c->exit_code = 124;
+    } else {
+        DWORD code = 1;
+        GetExitCodeProcess(c->proc, &code);
+        c->exit_code = (int)code;
+    }
+    CloseHandle(c->proc);
+    c->proc = NULL;
+#else
+    uint64_t inicio = now_ms();
+    for (;;) {
+        int status = 0;
+        pid_t w = waitpid((pid_t)c->pid, &status, WNOHANG);
+        if (w == (pid_t)c->pid) {
+            c->exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+            break;
+        }
+        if (w < 0) { c->exit_code = 1; break; }
+        if (timeout_sec > 0 && (now_ms() - inicio) > (uint64_t)timeout_sec * 1000) {
+            kill((pid_t)c->pid, SIGKILL);
+            waitpid((pid_t)c->pid, &status, 0);
+            c->exit_code = 124;
+            break;
+        }
+        msleep(30);
+    }
+#endif
+}
+
+static void child_free(Child *c)
+{
+    if (c->task_file) { remove(c->task_file); free(c->task_file); c->task_file = NULL; }
+    if (c->out_file) { free(c->out_file); c->out_file = NULL; }
+    if (c->cmd) { free(c->cmd); c->cmd = NULL; }
+    c->rodou = 0;
+}
+
+/* Copia a saida do filho (arquivo) para `out`, com teto de caracteres. */
+static void child_output(Child *c, size_t max_chars, Str *out)
+{
+    size_t n = 0;
+    char *txt = c->out_file ? file_read(c->out_file, &n) : NULL;
+    if (txt) {
+        str_add(out, txt, n < max_chars ? n : max_chars);
+        if (n > max_chars) str_adds(out, "\n[... saida cortada]\n");
+        free(txt);
+    }
+    if (c->out_file) { remove(c->out_file); free(c->out_file); c->out_file = NULL; }
+    if (out->len == 0) str_adds(out, "(subagente sem resposta)\n");
+}
+
+static char *job_dir(void)
+{
+    char *dir = delta_home();
+    char *jobs = path_join(dir, "jobs");
+    dir_make(jobs);
+    free(dir);
+    return jobs;
+}
+
+static int subagent_run(const char *cwd, const char *task, const char *model,
+                        int timeout_sec, size_t max_chars, const char *child_cwd,
+                        Str *out, ToolResult *res)
+{
+    (void)cwd;
     if (getenv("DELTA_SUBAGENT")) {
         err_out(res, "Erro: um subagente nao pode abrir outro subagente.");
         return 0;
     }
     const char *exe = self_exe();
     if (!exe) { err_out(res, "Erro: nao consegui localizar o proprio executavel."); return 0; }
+    if (timeout_sec <= 0) timeout_sec = 900;
+    if (max_chars == 0) max_chars = 20000;
 
-    /* a tarefa vai num arquivo: evita brigar com as aspas do cmd.exe */
-    char *dir = delta_home();
-    dir_make(dir);
-    char nome[64];
-    snprintf(nome, sizeof nome, "subagent-%llu.md", (unsigned long long)now_ms());
-    char *tmp = path_join(dir, nome);
-    if (!file_write(tmp, task, strlen(task))) {
-        err_out(res, "Erro: nao consegui gravar a tarefa do subagente.");
-        free(tmp); free(dir);
+    char *jobs = job_dir();
+    Child c;
+    if (!child_start(&c, exe, task, 0, model, child_cwd ? child_cwd : cwd, jobs)) {
+        child_free(&c);
+        free(jobs);
+        err_out(res, "Erro: falha ao iniciar o subagente.");
         return 0;
     }
-
-    Str cmd; str_init(&cmd);
-#ifdef _WIN32
-    str_addf(&cmd, "set DELTA_SUBAGENT=1&& \"%s\" -p \"@%s\"", exe, tmp);
-#else
-    str_addf(&cmd, "DELTA_SUBAGENT=1 \"%s\" -p \"@%s\"", exe, tmp);
-#endif
-    int code = 1;
-    int ok = tools_exec(cwd, cmd.data, 900, out, &code);
-    str_free(&cmd);
-    remove(tmp);
-    free(tmp); free(dir);
-
-    if (!ok) { err_out(res, "Erro: falha ao iniciar o subagente."); return 0; }
-    if (code != 0) {
+    free(jobs);
+    child_wait(&c, timeout_sec);
+    child_output(&c, max_chars, out);
+    if (c.exit_code != 0) {
         res->is_error = 1;
-        str_addf(&res->output, "\n[subagente saiu com codigo %d]\n", code);
+        str_addf(&res->output, "\n[subagente saiu com codigo %d em %.1f s]\n",
+                 c.exit_code, (double)(now_ms() - c.t0) / 1000.0);
+    } else {
+        str_addf(&res->output, "\n[subagente ok em %.1f s]\n",
+                 (double)(now_ms() - c.t0) / 1000.0);
     }
-    if (res->output.len == 0) str_adds(&res->output, "(subagente sem resposta)\n");
+    child_free(&c);
+    return 1;
+}
+
+#define SUBAGENT_MAX 4
+
+/* Ate' 4 tarefas em paralelo; cada uma com contexto e ferramentas proprios. */
+static int subagent_many(const char *cwd, JValue *tasks, const char *model, int timeout_sec,
+                         size_t max_chars, const char *child_cwd, Str *out, ToolResult *res)
+{
+    if (getenv("DELTA_SUBAGENT")) {
+        err_out(res, "Erro: um subagente nao pode abrir outro subagente.");
+        return 0;
+    }
+    const char *exe = self_exe();
+    if (!exe) { err_out(res, "Erro: nao consegui localizar o proprio executavel."); return 0; }
+    if (tasks->kind != J_ARR || tasks->count == 0) {
+        err_out(res, "Erro: 'tasks' tem que ser uma lista de tarefas.");
+        return 0;
+    }
+    if (timeout_sec <= 0) timeout_sec = 900;
+    if (max_chars == 0) max_chars = 20000;
+    size_t n = tasks->count > SUBAGENT_MAX ? SUBAGENT_MAX : tasks->count;
+    if (tasks->count > SUBAGENT_MAX)
+        str_addf(&res->output, "(%lu tarefas pedidas; rodando as %d primeiras)\n",
+                 (unsigned long)tasks->count, SUBAGENT_MAX);
+
+    char *jobs = job_dir();
+    Child cs[SUBAGENT_MAX];
+    memset(cs, 0, sizeof cs);
+    size_t iniciados = 0;
+    for (size_t i = 0; i < n; i++) {
+        const char *task = json_str(json_at(tasks, i));
+        if (!*task) continue;
+        if (!child_start(&cs[i], exe, task, i + 1, model,
+                         child_cwd ? child_cwd : cwd, jobs))
+            continue;
+        iniciados++;
+    }
+    for (size_t i = 0; i < n; i++) child_wait(&cs[i], timeout_sec);
+
+    int falhou = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (!cs[i].rodou) continue;
+        str_addf(&res->output, "\n=== tarefa %lu (%.1f s, codigo %d) ===\n",
+                 (unsigned long)(i + 1), (double)(now_ms() - cs[i].t0) / 1000.0, cs[i].exit_code);
+        Str saida; str_init(&saida);
+        child_output(&cs[i], max_chars, &saida);
+        str_add(&res->output, saida.data, saida.len);
+        str_free(&saida);
+        if (cs[i].exit_code != 0) falhou = 1;
+        child_free(&cs[i]);
+    }
+    free(jobs);
+    if (falhou) res->is_error = 1;
+    if (iniciados == 0) {
+        err_out(res, "Erro: nenhuma tarefa pode ser iniciada.");
+        return 0;
+    }
     return 1;
 }
 
@@ -2428,7 +2660,16 @@ static int agent_op(JValue *a, const char *cwd, ToolResult *res)
     if (str_eq(op, "subagent")) {
         const char *task = arg_s(a, "task");
         if (!*task) { err_out(res, "Erro: 'task' e' obrigatorio."); return 0; }
-        return subagent_run(cwd, task, arg_i(a, "max_turns", 12), &res->output, res);
+        return subagent_run(cwd, task, arg_s(a, "model"),
+                            arg_i(a, "timeout", 900), (size_t)arg_i(a, "max_output", 20000),
+                            arg_s(a, "cwd"), &res->output, res);
+    }
+    if (str_eq(op, "subagents")) {
+        JValue *tasks = json_get(a, "tasks");
+        if (!tasks) { err_out(res, "Erro: 'tasks' (lista) e' obrigatorio em op=subagents."); return 0; }
+        return subagent_many(cwd, tasks, arg_s(a, "model"),
+                             arg_i(a, "timeout", 900), (size_t)arg_i(a, "max_output", 20000),
+                             arg_s(a, "cwd"), &res->output, res);
     }
     err_out(res, "Erro: operacao desconhecida de agent: %s", op);
     return 0;
@@ -2436,10 +2677,15 @@ static int agent_op(JValue *a, const char *cwd, ToolResult *res)
 
 static const char AGENT_SCHEMA[] =
     "{\"type\":\"object\",\"properties\":{"
-    "\"op\":{\"type\":\"string\",\"enum\":[\"plan\",\"subagent\",\"skill\"]},"
+    "\"op\":{\"type\":\"string\",\"enum\":[\"plan\",\"subagent\",\"subagents\",\"skill\"]},"
     "\"plan_markdown\":{\"type\":\"string\",\"description\":\"Plano em markdown com caixas - [ ] / - [x]\"},"
-    "\"task\":{\"type\":\"string\",\"description\":\"Tarefa do subagente\"},"
-    "\"max_turns\":{\"type\":\"number\"},"
+    "\"task\":{\"type\":\"string\",\"description\":\"Tarefa do subagente (op=subagent)\"},"
+    "\"tasks\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},"
+    "\"description\":\"Ate' 4 tarefas independentes para rodar em paralelo (op=subagents)\"},"
+    "\"model\":{\"type\":\"string\",\"description\":\"Modelo do subagente (ex.: um barato para varrer, o forte para revisar)\"},"
+    "\"timeout\":{\"type\":\"number\",\"description\":\"Segundos antes de matar o subagente (padrao 900)\"},"
+    "\"max_output\":{\"type\":\"number\",\"description\":\"Teto de caracteres da saida (padrao 20000)\"},"
+    "\"cwd\":{\"type\":\"string\",\"description\":\"Pasta onde o subagente trabalha (padrao: a atual)\"},"
     "\"name\":{\"type\":\"string\",\"description\":\"Nome da skill (vazio lista todas)\"}},"
     "\"required\":[\"op\"]}";
 

@@ -201,7 +201,7 @@ wait $SETUP_PID 2>/dev/null
 rm -rf build/inst-cli build/inst-http build/iso
 
 echo
-echo "[3h] retomada: delta abre no ultimo chat da pasta"
+echo "[3h] retomada: delta = chat novo, delta continue = ultima sessao da pasta"
 python tests/mock_openai.py "$((PORT + 11))" > /dev/null 2>&1 &
 RMOCK=$!
 sleep 2
@@ -219,8 +219,17 @@ dump inicio
 (cd build/resume && ../../bin/delta.exe --replay r2.txt 100 40 --resume     --provider openai --baseurl "http://127.0.0.1:$((PORT + 11))/v1" --api-key sk-teste     > /tmp/delta_resume.log 2>&1)
 expect /tmp/delta_resume.log "sessao retomada"      "retoma a sessao da pasta"
 expect /tmp/delta_resume.log "leia mock-target.txt" "historico anterior reconstruido"
-(cd build/resume && ../../bin/delta.exe --replay r2.txt 100 40 --new     --provider openai --baseurl "http://127.0.0.1:$((PORT + 11))/v1" --api-key sk-teste     > /tmp/delta_new.log 2>&1)
-reject /tmp/delta_new.log "sessao retomada"         "--new comeca uma sessao nova"
+# `delta` sem nenhuma flag: chat novo (nao retoma nada)
+(cd build/resume && ../../bin/delta.exe --replay r2.txt 100 40     --provider openai --baseurl "http://127.0.0.1:$((PORT + 11))/v1" --api-key sk-teste     > /tmp/delta_new.log 2>&1)
+reject /tmp/delta_new.log "sessao retomada"         "delta sem flag nao retoma (chat novo)"
+(cd build/resume && ../../bin/delta.exe --replay r2.txt 100 40 continue     --provider openai --baseurl "http://127.0.0.1:$((PORT + 11))/v1" --api-key sk-teste     > /tmp/delta_cont.log 2>&1)
+expect /tmp/delta_cont.log "sessao retomada"        "delta continue retoma a sessao"
+# o thinking tem que sobreviver ao resume (nao pode sumir do transcript)
+if grep -q "pensando\|thinking\|Vou ler" /tmp/delta_cont.log; then
+    pass "thinking reconstruido ao retomar"
+else
+    fail "thinking sumiu ao retomar a sessao"
+fi
 kill $RMOCK 2>/dev/null
 wait $RMOCK 2>/dev/null
 rm -rf build/resume
@@ -805,6 +814,23 @@ printf '{"openai":"sk-teste"}' > "$HOME/.deltaCore/auth.json"
 expect "$AR/sub.log" "subagente ok" "agent: subagent"
 ./bin/delta.exe --tool agent '{"op":"subagent","task":"leia tests/mock-target.txt e diga o numero"}' > "$AR/sub2.log" 2>&1
 expect "$AR/sub2.log" "eco: leia tests/mock-target.txt" "agent: subagent usa tools"
+# fan-out: 4 tarefas em paralelo, cada uma com resposta propria
+./bin/delta.exe --tool agent '{"op":"subagents","tasks":["subagente-teste a","subagente-teste b","subagente-teste c"]}' > "$AR/subm.log" 2>&1
+expect "$AR/subm.log" "=== tarefa 3"  "agent: subagents roda em paralelo"
+if [ "$(grep -c 'subagente ok' "$AR/subm.log")" -ge 3 ]; then
+    pass "agent: as tres tarefas do fan-out responderam"
+else
+    fail "agent: tarefa do fan-out sem resposta"
+fi
+# o filho nao pode poluir a lista de sessoes da pasta
+rm -rf build/noses && mkdir -p build/noses
+(cd build/noses && ../../bin/delta.exe --tool agent '{"op":"subagent","task":"subagente-teste"}' > /dev/null 2>&1)
+if ls "$HOME/.deltaCore/sessions" 2>/dev/null | grep -q "noses"; then
+    fail "agent: subagente criou sessao na pasta"
+else
+    pass "agent: subagente roda com --no-session"
+fi
+rm -rf build/noses
 if [ -f "$AR/cfg.bak" ]; then cp "$AR/cfg.bak" "$HOME/.deltaCore/config.json"; else rm -f "$HOME/.deltaCore/config.json"; fi
 if [ -f "$AR/auth.bak" ]; then cp "$AR/auth.bak" "$HOME/.deltaCore/auth.json"; else rm -f "$HOME/.deltaCore/auth.json"; fi
 
@@ -853,6 +879,16 @@ if grep -q "teste-prompt" build/mock-last-request.json 2>/dev/null; then
     pass "skills entram no prompt de sistema"
 else fail "skills fora do prompt de sistema"; fi
 ./bin/delta.exe --tool skills '{"op":"delete","name":"teste-prompt"}' > /dev/null 2>&1
+
+echo "--- skills embutidas (nascem no ambiente novo) ---"
+rm -rf "$AR/core-skills"
+DELTA_CORE="$AR/core-skills" ./bin/delta.exe --tool skills '{"op":"list"}' > "$AR/skseed.log" 2>&1
+expect "$AR/skseed.log" "design-de-codigo"  "skills embutidas: design de codigo"
+expect "$AR/skseed.log" "planilhas-e-pdf"   "skills embutidas: planilhas e PDF"
+expect "$AR/skseed.log" "automacao"         "skills embutidas: automacao"
+DELTA_CORE="$AR/core-skills" ./bin/delta.exe --tool skills '{"op":"read","name":"design-de-codigo"}' > "$AR/skread.log" 2>&1
+expect "$AR/skread.log" "Teste da deleção"   "skills embutidas: texto completo no disco"
+rm -rf "$AR/core-skills"
 
 # --- mcp: add / list / tools / call / remove (servidor falso)
 (python tests/mcp_fake.py $((PORT + 5)) > /dev/null 2>&1 & echo $! > "$AR/mcp.pid")

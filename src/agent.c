@@ -461,6 +461,12 @@ void session_append(const Agent *a, const char *type, const Msg *m)
         }
         str_adds(&o, "\",\"content\":");
         json_write_string(&o, m->text.data ? m->text.data : "", m->text.len);
+        /* o thinking e' parte da conversa: sem gravar, retomar a sessao perde
+           todo o raciocinio do turno */
+        if (m->thinking.len) {
+            str_adds(&o, ",\"thinking\":");
+            json_write_string(&o, m->thinking.data, m->thinking.len);
+        }
         if (m->role == ROLE_TOOL) {
             str_adds(&o, ",\"toolCallId\":");
             json_write_string(&o, m->tool_call_id ? m->tool_call_id : "", strlen(m->tool_call_id ? m->tool_call_id : ""));
@@ -505,6 +511,69 @@ void session_append(const Agent *a, const char *type, const Msg *m)
 /* ================================================================== */
 /* Carrega o .jsonl mais recente de `cwd` em `msgs` e passa a gravar nele.
    Devolve o numero de mensagens carregadas (0 = nao havia sessao). */
+/* Le um arquivo de sessao e devolve quantas mensagens ele tem. */
+static int session_read_file(const char *file, MsgList *msgs)
+{
+    size_t len = 0;
+    char *txt = file_read(file, &len);
+    if (!txt) return 0;
+    int n = 0;
+    size_t pos = 0;
+    while (pos < len) {
+        size_t eol = pos;
+        while (eol < len && txt[eol] != '\n') eol++;
+        size_t ll = eol - pos;
+        if (ll > 2) {
+            char save = txt[pos + ll];
+            txt[pos + ll] = 0;
+            JValue *v = json_parse_cstr(txt + pos);
+            txt[pos + ll] = save;
+            JValue *m = v ? json_get(v, "message") : NULL;
+            if (m && m->kind == J_OBJ) {
+                const char *role = json_str(json_get(m, "role"));
+                Msg *msg = NULL;
+                if (str_eq(role, "user")) msg = msglist_add(msgs, ROLE_USER);
+                else if (str_eq(role, "assistant")) msg = msglist_add(msgs, ROLE_ASSISTANT);
+                else if (str_eq(role, "toolResult")) msg = msglist_add(msgs, ROLE_TOOL);
+                if (msg) {
+                    const char *content = json_str(json_get(m, "content"));
+                    str_adds(&msg->text, content);
+                    const char *th = json_str(json_get(m, "thinking"));
+                    if (*th) str_adds(&msg->thinking, th);
+                    if (msg->role == ROLE_TOOL) {
+                        const char *id = json_str(json_get(m, "toolCallId"));
+                        const char *tn = json_str(json_get(m, "toolName"));
+                        msg->tool_call_id = str_dup(id);
+                        msg->tool_name = str_dup(tn);
+                        JValue *ie = json_get(m, "isError");
+                        msg->is_error = ie ? json_bool(ie, 0) : 0;
+                    }
+                    JValue *calls = json_get(m, "toolCalls");
+                    if (calls && calls->kind == J_ARR) {
+                        for (size_t k = 0; k < calls->count; k++) {
+                            JValue *c = calls->items[k];
+                            msg_add_call(msg, json_str(json_get(c, "id")),
+                                         json_str(json_get(c, "name")),
+                                         json_str(json_get(c, "arguments")));
+                        }
+                    }
+                    n++;
+                }
+            }
+            if (v) json_free(v);
+        }
+        pos = eol + 1;
+    }
+    free(txt);
+    return n;
+}
+
+/* Ordena nomes de sessao do mais novo para o mais antigo (nome = iso_id). */
+static int cmp_sessao_desc(const void *a, const void *b)
+{
+    return strcmp(*(const char *const *)b, *(const char *const *)a);
+}
+
 int session_resume_last(const char *cwd, MsgList *msgs)
 {
     char *root = sessions_root();
@@ -522,71 +591,25 @@ int session_resume_last(const char *cwd, MsgList *msgs)
 
     size_t cnt = 0;
     char **files = dir_list(dir, &cnt);
-    char *best = NULL;
-    for (size_t i = 0; files && i < cnt; i++) {
-        const char *nm = files[i];
-        size_t nl = strlen(nm);
-        if (nl < 6 || !str_ieq(nm + nl - 6, ".jsonl")) continue;
-        if (!best || strcmp(nm, best) > 0) {          /* nome comeca com a data */
-            free(best);
-            best = str_dup(nm);
-        }
-    }
-    if (files) dir_list_free(files, cnt);
 
+    /* so' nomes .jsonl, do mais novo para o mais antigo */
+    size_t n_jsonl = 0;
+    for (size_t i = 0; i < cnt; i++) {
+        size_t nl = strlen(files[i]);
+        if (nl >= 6 && str_ieq(files[i] + nl - 6, ".jsonl")) files[n_jsonl++] = files[i];
+    }
+    if (n_jsonl > 1) qsort(files, n_jsonl, sizeof files[0], cmp_sessao_desc);
+
+    /* tenta do mais novo para o mais antigo: sessao sem nenhuma mensagem
+       (arquivo criado e abandonado) nao conta como "a ultima sessao" */
     int n = 0;
-    if (best) {
-        char *file = path_join(dir, best);
-        size_t len = 0;
-        char *txt = file_read(file, &len);
-        if (txt) {
-            size_t pos = 0;
-            while (pos < len) {
-                size_t eol = pos;
-                while (eol < len && txt[eol] != '\n') eol++;
-                size_t ll = eol - pos;
-                if (ll > 2) {
-                    char save = txt[pos + ll];
-                    txt[pos + ll] = 0;
-                    JValue *v = json_parse_cstr(txt + pos);
-                    txt[pos + ll] = save;
-                    JValue *m = v ? json_get(v, "message") : NULL;
-                    if (m && m->kind == J_OBJ) {
-                        const char *role = json_str(json_get(m, "role"));
-                        Msg *msg = NULL;
-                        if (str_eq(role, "user")) msg = msglist_add(msgs, ROLE_USER);
-                        else if (str_eq(role, "assistant")) msg = msglist_add(msgs, ROLE_ASSISTANT);
-                        else if (str_eq(role, "toolResult")) msg = msglist_add(msgs, ROLE_TOOL);
-                        if (msg) {
-                            const char *content = json_str(json_get(m, "content"));
-                            str_adds(&msg->text, content);
-                            const char *th = json_str(json_get(m, "thinking"));
-                            if (*th) str_adds(&msg->thinking, th);
-                            if (msg->role == ROLE_TOOL) {
-                                const char *id = json_str(json_get(m, "toolCallId"));
-                                const char *tn = json_str(json_get(m, "toolName"));
-                                msg->tool_call_id = str_dup(id);
-                                msg->tool_name = str_dup(tn);
-                                JValue *ie = json_get(m, "isError");
-                                msg->is_error = ie ? json_bool(ie, 0) : 0;
-                            }
-                            JValue *calls = json_get(m, "toolCalls");
-                            if (calls && calls->kind == J_ARR) {
-                                for (size_t k = 0; k < calls->count; k++) {
-                                    JValue *c = calls->items[k];
-                                    msg_add_call(msg, json_str(json_get(c, "id")),
-                                                 json_str(json_get(c, "name")),
-                                                 json_str(json_get(c, "arguments")));
-                                }
-                            }
-                            n++;
-                        }
-                    }
-                    if (v) json_free(v);
-                }
-                pos = eol + 1;
-            }
-            free(txt);
+    for (size_t i = 0; i < n_jsonl && n == 0; i++) {
+        char *file = path_join(dir, files[i]);
+        n = session_read_file(file, msgs);
+        if (n == 0) {
+            msglist_free(msgs);          /* descarta o que veio vazio */
+            free(file);
+            continue;
         }
         /* continua gravando no mesmo arquivo */
         free(g_session_file);
@@ -595,7 +618,6 @@ int session_resume_last(const char *cwd, MsgList *msgs)
         g_session_dir = str_dup(dir);
         const char *base = path_basename(file);
         if (base) {
-            /* id = trecho depois do '_' (nome: iso_id.jsonl) */
             const char *us = strrchr(base, '_');
             if (us && strlen(us + 1) > 5) {
                 char idbuf[64];
@@ -606,10 +628,8 @@ int session_resume_last(const char *cwd, MsgList *msgs)
                 g_session_id = str_dup(idbuf);
             }
         }
-        free(best);
-    } else {
-        free(best);
     }
+    if (files) dir_list_free(files, cnt);
     free(dir);
     return n;
 }
@@ -656,8 +676,12 @@ static void build_system_prompt(Agent *a)
     {
         char *idx = tools_skills_index(a->cwd, 2400);
         if (idx && *idx) {
-            str_adds(&s, "\nSkills available (read one with the skills tool, op=read):\n");
+            str_adds(&s,
+                "\nSkills (guia de bolso; o texto completo esta' no disco):\n"
+                "Leia UMA com a tool skills (op=read) quando a tarefa casar com a descricao —\n"
+                "antes de comecar, nao no fim. Nao leia todas: e' caro e distrai.\n");
             str_adds(&s, idx);
+            str_adds(&s, "Se a tarefa se repetir, salve o jeito de fazer como skill (skills op=create).\n");
         }
         free(idx);
     }

@@ -146,6 +146,10 @@ class Handler(BaseHTTPRequestHandler):
 
         # ecoa a mensagem do usuario: prova que ela chegou ao "modelo"
         eventos = []
+        # raciocinio no formato OpenAI (reasoning_content): testa thinking ao vivo
+        # e a persistencia/retomada dele na sessao
+        eventos.append({"id": "2", "choices": [{"index": 0, "delta": {
+            "reasoning_content": "Vou ler o arquivo e resumir o conteudo."}}]})
         for piece in ["O arquivo contem: ", "**42**", " e o *caminho* lido foi ",
                       "`tests/mock-target.txt`.", "\n\n```c\n", "int resposta = 42;\n",
                       "```\n", "\n\n(eco: " + ultimo + ")\n"]:

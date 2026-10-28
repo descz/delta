@@ -47,7 +47,8 @@ página do instalador e `LEIA-ME` estão em **inglês** por decisão do dono.
 | `term.c` | terminal: Win32 (ReadConsoleInput) / POSIX (termios) |
 | `theme.c`, `okcolor.c` | temas JSON e cores OkLCH/OkHsl |
 | `clipboard.c` | colagem (texto, imagem→PNG, arquivos) |
-| `json.c`, `util.c`, `i18n.c`, `extensions.c`, `modelsdev.c` | base |
+| `skills/` (raiz) | skills embutidas: `skills/<nome>/SKILL.md` — viram `src/skills_seed.h` com `make skills` e nascem em `<core>/skills` no primeiro boot |
+| `json.c`, `util.c`, `i18n.c`, `extensions.c`, `modelsdev.c` | base (`util.c` também grava as skills embutidas no bootstrap) |
 
 Gerados (não editar): `src/installer_html.h` (página do instalador + fontes em base64) e
 `src/asset_logo.h` (logo). Regenere com `python tools/embed-installer.py > src/installer_html.h` e
@@ -95,9 +96,8 @@ steer-at 3 texto novo  # digita no meio do stream (teste headless do steer)
 ```
 
 Novos comandos de replay usados nos testes: `bench`, `benchmd`, `bencht`, `mouse`, `steer-at`,
-`working`, `drain`, `select-block <n| -1>` (seleciona a mensagem inteira), `copy-text`
-(imprime o que o `Ctrl+X` copiaria, sem passar pelo clipboard) e `update-check` (roda o mesmo
-aviso de versão nova do boot da TUI).
+`working`, `drain`, `idle <ms>` (espera sem input: teste de maratona) e `update-check` (roda o
+mesmo aviso de versão nova do boot da TUI).
 
 ---
 
@@ -131,7 +131,18 @@ aviso de versão nova do boot da TUI).
     vezes. Prefira o tool `write` para blocos grandes de C, ou use `chr(92)`/`chr(10)` explícitos.
 13. **Licença:** o produto é não comercial; não introduza dependência com licença incompatível
     nem remova os avisos.
-14. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
+14. **Sessão: `delta` é chat novo, `delta continue` retoma.** Não volte a retomar por padrão:
+    o thinking é gravado no JSONL (`thinking`) e reconstruído por `blocks_from_msgs`; o resume
+    pula arquivos de sessão vazios (senão ele "retoma" um chat que nunca existiu).
+15. **Skills embutidas:** o texto vive em `skills/<nome>/SKILL.md`; `make skills` regenera
+    `src/skills_seed.h` (embutido no exe). `delta_bootstrap()` grava o que faltar em
+    `<core>/skills` e **nunca sobrescreve** o que o usuário editou. O prompt só lista
+    nome + descrição (2400 chars) — o texto completo é lido com `skills op=read`.
+16. **Subagentes:** `agent op=subagent` (um) e `op=subagents` (até 4 em paralelo, saída em
+    `<core>/jobs/*.out`). O filho roda com `--no-session` (não polui as sessões da pasta) e
+    `DELTA_SUBAGENT=1` (impede recursão). Timeout padrão 900 s; `model`/`cwd`/`max_output`
+    configuráveis.
+17. **Nomes dos assets do release são contrato do updater.** `update.c` escolhe o arquivo por
     plataforma: `Delta.exe` (Windows) e `delta-linux-x86_64.tar.gz` (Linux, com o binário `delta`
     na raiz ou um nível abaixo). Renomear o asset quebra o `delta update` sem quebrar o instalador.
 15. **`delta update` troca o executável em uso.** Windows: renomeia o exe para `.old`, grava o
@@ -228,6 +239,8 @@ Notas do release: escreva em `build/RELEASE.md` (não versionado) — o modelo a
 | a TUI fica lenta para abrir | a consulta de release no boot pode custar uma requisição. O cache (`update.json`, 24 h) evita isso depois da primeira vez; `DELTA_NO_UPDATE_CHECK=1` desliga de vez. |
 | suíte vermelha só nas seções de rede/console | a TUI de verdade consultaria o GitHub no boot: `run_all.sh`/`run_posix.sh` exportam `DELTA_NO_UPDATE_CHECK=1` e as seções de update religam com `DELTA_UPDATE_URL` para o release falso. |
 | `gh release create` falhou com `open build/RELEASE.md: no such file` | `mingw32-make clean` apaga `build/` inteiro — e as notas do release (`build/RELEASE.md`) moram lá, fora do git. Escreva as notas **depois** do build/clean. |
+| sessão retomada "perdia" o thinking | o JSONL não gravava `thinking` e o resume escolhia o arquivo mais novo por nome — que podia ser uma sessão vazia. Hoje grava e reconstrói (`blocks_from_msgs`), e o resume pula sessão sem mensagem. |
+| subagente aparecia como sessão da pasta / `continue` abria o filho | o filho herdava `session_start`; agora roda com `--no-session`. |
 | release publicado com tag antiga no "latest" | o GitHub chama de *latest* o release **não-prerelease mais recente por data**, não o de número maior. Ao recomeçar a numeração, marque o release antigo como *pre-release* (`gh release edit v1.0.0 --prerelease`). |
 | lag de 78 ms/frame | transcript remontava tudo; use `tr_touch`/`tr_fast_from` |
 | lag de 140 ms com `/models` aberto | `auth.json` era lido do disco por provedor; agora tem cache (`auth_forget` invalida) |

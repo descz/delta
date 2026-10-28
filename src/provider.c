@@ -461,6 +461,7 @@ static void handle_openai_delta(StreamState *st, JValue *delta)
         emit(st, 0, content->str, strlen(content->str));
     }
     JValue *reasoning = json_get(delta, "reasoning_content");
+    if (!reasoning) reasoning = json_get(delta, "reasoning");   /* OpenRouter */
     if (reasoning && reasoning->kind == J_STR && reasoning->str && *reasoning->str) {
         str_adds(&st->turn->thinking, reasoning->str);
         emit(st, 1, reasoning->str, strlen(reasoning->str));
