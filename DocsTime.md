@@ -161,6 +161,15 @@ mesmo aviso de versão nova do boot da TUI).
     **A página é conteúdo do produto**: ao mexer em comando/atalho, atualize
     `installer/installer.html` e rode `make html` — ela ficou desatualizada uma vez (documentava
     `/copy`, `/forlimit`, `delta wiki` abrindo navegador e `delta` retomando sessão).
+    **No duplo clique a janela do console é escondida** (`console_so_nosso()` + `ShowWindow`, logo no
+    início do `setup_run`) — sem isso ficava um terminal aberto atrás do popup. Ela reaparece
+    (`console_mostra(1)`) só quando o popup não abre e caímos na tela nativa. Nunca esconda quando
+    houver shell no mesmo console (rodar `delta --setup` num terminal) nem com
+    `DELTA_SETUP_NOBROWSER=1`.
+    **Efeito colateral do teste `[3f]`:** ele chama `/api/install`, e o instalador grava o binário na
+    pasta padrão (`%LOCALAPPDATA%\Delta`). Rodar a suíte **sobrescreve o delta instalado na máquina**
+    com o build local (mesmo código; sem ícone se o `windres` não estiver no PATH). Depois da suíte,
+    recopie `dist/Delta.exe` se quiser o binário exato do release.
 20. **O teto de ferramentas por turno foi removido inteiro** (comando `/forlimit`, `g_tool_limit` e a
     mensagem que mandava o modelo pedir `/forlimit` ao usuário). Não reintroduza o limite sem o
     comando: sobra código morto e conselho errado na boca do modelo.
