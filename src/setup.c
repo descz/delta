@@ -40,7 +40,7 @@
 #endif
 
 #ifndef DELTA_VERSION
-#  define DELTA_VERSION "0.1.8"
+#  define DELTA_VERSION "0.1.9"
 #endif
 
 /* ================================================================== */
@@ -535,6 +535,27 @@ static char *pick_folder(void)
    sem abas, sem barra de endereco. Sem navegador Chromium, cai no navegador
    padrao; sem navegador nenhum, cai na tela nativa do terminal. */
 
+/* Console: no duplo clique o Windows abre uma janela so' para o processo.
+   Como o instalador vive na janela HTML, essa janela so' atrapalha — ela e'
+   escondida e so' reaparece se o popup nao abrir. */
+#ifdef _WIN32
+static int console_so_nosso(void)
+{
+    DWORD pids[8];
+    DWORD n = GetConsoleProcessList(pids, 8);
+    return n <= 1;
+}
+
+static void console_mostra(int visivel)
+{
+    HWND h = GetConsoleWindow();
+    if (h) ShowWindow(h, visivel ? SW_SHOW : SW_HIDE);
+}
+#else
+static int console_so_nosso(void) { return 0; }
+static void console_mostra(int visivel) { (void)visivel; }
+#endif
+
 static int g_stop = 0;
 static int g_srv = -1;
 static char g_token[40];
@@ -841,6 +862,10 @@ int setup_run(void)
     fflush(stdout);
 
     int abriu = 0;
+    int sozinho = console_so_nosso();          /* duplo clique: console e' descartavel */
+    /* esconde ja' no inicio (evita o "flash" da janela); o fallback de
+       terminal abaixo chama console_mostra(1) se precisar dela */
+    if (sozinho && !getenv("DELTA_SETUP_NOBROWSER")) console_mostra(0);
     if (getenv("DELTA_SETUP_NOBROWSER")) {
         /* teste/headless: serve a pagina sem abrir janela nenhuma */
         abriu = 1;
@@ -848,8 +873,12 @@ int setup_run(void)
         abriu = url_open_popup(url);
         if (!abriu) abriu = url_open(url);    /* navegador padrao, em aba */
     }
+    /* o instalador vive na janela HTML; a janela do terminal so' reaparece
+       se o popup nao abrir (fallback abaixo) */
+    if (!abriu) console_mostra(1);
     if (!abriu) {
         /* sem navegador: a tela nativa do terminal faz o mesmo servico */
+        console_mostra(1);
         sock_close((sock_t)g_srv);
         g_srv = -1;
         return setup_wizard();
