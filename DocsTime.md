@@ -239,10 +239,26 @@ gh release upload v1.0.0 dist/Delta.exe dist/SHA256SUMS.txt --repo descz/delta -
 Notas do release: escreva em `build/RELEASE.md` (não versionado) — o modelo atual está no release
 `v1.0.0`; mantenha o formato (o que é, tabela de downloads, destaques, verificação, requisitos).
 
+**Notas de release são em inglês** (README, site e a página do instalador também). O texto que vira
+release fica em `build/RELEASE.md` (não versionado): escreva em inglês, com a tabela de downloads e a
+seção **"What has actually been tested"** — a mesma honestidade do README. Releases antigos (v0.1.0 …
+v1.0.0) foram padronizados em inglês em 2026-10-28 via `gh release edit --notes-file`.
+
 **GitHub Pages** já está ligado em `main` / `/docs`; publicar o site é só dar `git push` (leva
 ~30–60 s). O site usa fontes em `docs/fonts/` e `docs/.nojekyll`.
 
 ---
+
+## 5b. O que é (e o que não é) testado
+
+| plataforma | estado real |
+|---|---|
+| **Windows 10/11 x64** | plataforma de referência — 283 checks de ponta a ponta + instalador e `delta update` exercitados à mão |
+| **Linux x86_64** | compila e roda (gcc 13, WSL, 32 checks: build, núcleo, replay, streaming real, instalador, self-update). **Nada de desktop** foi exercitado: `.desktop`, favoritos do GNOME, clipboard via `wl-copy`/`xclip` |
+| **macOS 11+** | **só código-fonte, nunca executado** (não há Mac). Camada nativa (`osascript`, `.app`, Dock) sem teste. Não prometa binário |
+
+Não mude o README, o site nem as notas para "works on macOS" sem rodar num Mac de verdade — a seção
+"What has actually been tested" existe justamente para isso.
 
 ## 6. Checklist antes de dizer "pronto"
 

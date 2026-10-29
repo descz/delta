@@ -9,7 +9,7 @@
   <img alt="source-available" src="https://img.shields.io/badge/source-available-white?style=flat-square&labelColor=black">
   <img alt="windows" src="https://img.shields.io/badge/windows-10%2F11-white?style=flat-square&labelColor=black">
   <img alt="linux" src="https://img.shields.io/badge/linux-x86__64-white?style=flat-square&labelColor=black">
-  <img alt="macos" src="https://img.shields.io/badge/macos-11%2B-white?style=flat-square&labelColor=black">
+  <img alt="macos" src="https://img.shields.io/badge/macos-source%20only-white?style=flat-square&labelColor=black">
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-noncommercial-white?style=flat-square&labelColor=black"></a>
 </p>
 
@@ -77,6 +77,16 @@ The installer asks **where to keep the data**, creates the folder, copies the bi
 the `PATH` and creates the shortcut (taskbar on Windows, `.desktop` + GNOME favorites on Linux,
 `Delta.app` + Dock on macOS). Windows may warn on SmartScreen the first time (*More info → Run
 anyway*) because the binary is not code-signed.
+
+### What has actually been tested
+
+Being explicit, because "compiles" is not "works":
+
+| platform | status |
+|---|---|
+| **Windows 10/11 x64** | **Tested** — the reference platform: 283 end-to-end checks (TUI, streaming, tools, installer, self-update), plus the installer and `delta update` exercised by hand. |
+| **Linux x86_64** | **Builds and runs** (gcc 13, WSL, 32 checks: build, core, replay, real streaming via curl, installer, self-update). **Not exercised on a desktop session**: `.desktop` entry, GNOME favorites and clipboard (`wl-copy`/`xclip`) are untested. |
+| **macOS 11+** | **Source only, and not tested** — I have no Mac. The release ships the source plus `INSTALAR-MAC.command`, which checks Xcode Command Line Tools and builds locally; the native layer (`osascript`, `.app`, Dock) was never executed. Treat it as a starting point, not as a supported binary. |
 
 There is no ready-made macOS binary: the package ships the source and a `.command` that checks the
 Xcode Command Line Tools (free), builds and opens the installer — there is no reliable cross-compile

@@ -195,7 +195,7 @@
         <a href="https://github.com/descz/delta/releases/latest" class="btn btn-white">Download for your system</a>
         <a href="#loop" class="btn btn-outline">See how it thinks</a>
       </div>
-      <p class="hero-note reveal">Windows · Linux · macOS — one file, no Node, no Python, no admin</p>
+      <p class="hero-note reveal">Windows · Linux · macOS (source) — one file, no Node, no Python, no admin</p>
     </div>
   </section>
 
@@ -352,12 +352,17 @@
       </p>
 
       <div class="grid g3">
-        <div class="card os-card reveal"><h3>Windows 10/11 <span class="tag">x64</span></h3>
-          <p><code>Delta.exe</code> — program + installer in one file. Double click opens the page in your browser.</p></div>
-        <div class="card os-card reveal"><h3>Linux <span class="tag">x86_64</span></h3>
-          <p><code>delta-linux-x86_64.run</code> — self-extracting, installs and puts <code>delta</code> on PATH.</p></div>
-        <div class="card os-card reveal"><h3>macOS <span class="tag">11+</span></h3>
-          <p>Source package + <code>INSTALAR-MAC.command</code>: builds on your machine and installs the app.</p></div>
+        <div class="card os-card reveal"><h3>Windows 10/11 <span class="tag">x64</span> <span class="tag">tested</span></h3>
+          <p><code>Delta.exe</code> — program + installer in one file. Double click opens the HTML install window
+             (no console, native folder picker). This is the reference platform.</p></div>
+        <div class="card os-card reveal"><h3>Linux <span class="tag">x86_64</span> <span class="tag">builds &amp; runs</span></h3>
+          <p><code>delta-linux-x86_64.run</code> — self-extracting, installs and puts <code>delta</code> on PATH.
+             Verified in WSL; the desktop bits (<code>.desktop</code>, GNOME favorites, clipboard) were not
+             exercised on a real desktop.</p></div>
+        <div class="card os-card reveal"><h3>macOS <span class="tag">source</span> <span class="tag">not tested</span></h3>
+          <p>Source package + <code>INSTALAR-MAC.command</code>: builds on your machine. I have no Mac, so the
+             native parts (<code>osascript</code>, <code>.app</code>, Dock) were never run — treat it as a
+             starting point.</p></div>
       </div>
 
 <pre class="reveal"><span class="c"># linux</span>
@@ -414,7 +419,14 @@ delta wiki               <span class="c"># prints the documentation address</spa
 
         <details class="faq reveal"><summary>What about macOS?</summary>
           <p>The binary has to be built on the machine — there is no reliable cross-compile to Mach-O.
-             The package ships a <code>.command</code> that checks Xcode Command Line Tools and does everything.</p></details>
+             The package ships a <code>.command</code> that checks Xcode Command Line Tools, builds and installs.
+             <b>It was never run by the author</b> (no Mac available), so the macOS path is untested: expect
+             to fix things, not to have a supported binary.</p></details>
+
+        <details class="faq reveal"><summary>Was Linux tested on a real desktop?</summary>
+          <p>Partially. The build, the CLI, the TUI, real streaming and the self-update were verified on
+             Linux (WSL, gcc 13). The desktop integration — <code>.desktop</code> entry, GNOME favorites and
+             the clipboard (<code>wl-copy</code>/<code>xclip</code>) — was not exercised on a desktop session.</p></details>
 
         <details class="faq reveal"><summary>Can I use it commercially or publish a fork?</summary>
           <p>No. The license is <b>source-available and non-commercial</b>: it forbids selling, charging
