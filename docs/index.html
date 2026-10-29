@@ -227,8 +227,9 @@
         <div class="card reveal">
           <div class="num">02</div>
           <h3>It remembers</h3>
-          <p>Sessions per folder in JSONL: <code>delta</code> reopens that folder's last chat with the
-             full history. Skills become <code>SKILL.md</code>; durable facts go to memory.</p>
+          <p>Sessions per folder in JSONL: <code>delta</code> starts a new chat, <code>delta continue</code>
+             reopens that folder's last one with the full history and the model's thinking. Skills become
+             <code>SKILL.md</code>; durable facts go to memory.</p>
         </div>
         <div class="card reveal">
           <div class="num">03</div>
@@ -363,23 +364,24 @@
 chmod +x delta-linux-x86_64.run &amp;&amp; ./delta-linux-x86_64.run
 
 <span class="c"># first run</span>
-delta                    <span class="c"># opens the CLI (resumes this folder's last chat)</span>
+delta                    <span class="c"># opens the CLI (always a new chat)</span>
+delta continue           <span class="c"># reopens this folder's last chat</span>
 /login                   <span class="c"># pick the provider and paste the key</span>
 /projects D:\dev\app     <span class="c"># where it works (saved)</span>
 
 <span class="c"># day to day</span>
 read src/main.c and explain the flow
 /terminal git status     <span class="c"># runs in your shell and shows the output in the chat</span>
-/copy                    <span class="c"># copies the last reply</span>
-delta wiki               <span class="c"># opens this documentation in the browser</span></pre>
+delta update             <span class="c"># installs the newest release</span>
+delta wiki               <span class="c"># prints the documentation address</span></pre>
 
       <div class="grid g3" style="margin-top:16px">
         <div class="card reveal"><h3>Commands</h3>
           <ul><li><code>/models</code> connected models</li><li><code>/thinking</code> effort</li>
-              <li><code>/undo</code> restore a file</li><li><code>/forlimit</code> cap tools per turn</li></ul></div>
+              <li><code>/undo</code> restore a file</li><li><code>/subagentmodel</code> model for subagents</li></ul></div>
         <div class="card reveal"><h3>Shortcuts</h3>
           <ul><li><code>Enter</code> send · <code>Shift+Enter</code> new line</li>
-              <li><code>Ctrl+C</code> stop (never closes)</li><li><code>Ctrl+X</code> copy reply</li>
+              <li><code>Ctrl+C</code> stop (never closes)</li><li><code>Ctrl+V</code> paste text/image</li>
               <li><code>Ctrl+Q</code> return the queue to the editor</li></ul></div>
         <div class="card reveal"><h3>Data</h3>
           <ul><li><code>config.json</code> · <code>auth.json</code></li>

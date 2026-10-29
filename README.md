@@ -107,11 +107,10 @@ Inside the app, `/new` starts a fresh session and `/clear` wipes the screen.
 | `/thinking` | reasoning effort (off → max, depending on the model) |
 | `/projects <folder>` | set the working folder (saved in config) |
 | `/terminal <cmd>` | runs in your shell and shows the output in the chat |
-| `/copy` | copies the last reply |
 | `/undo [file]` | restores a file to its content before the last edit |
 | `/update` | installs the newest version from GitHub (the app warns at startup when one exists) |
-| `/deltagroup` | Delta group on Telegram (invite link, copied to the clipboard) |
-| `/forlimit [n]` | toggles a tools-per-turn cap (run again to turn it off) |
+| `/subagentmodel` | model the subagents run on (it asks before creating one) |
+| `/deltagroup` | Delta group on Telegram — invite link, copied to the clipboard and clickable |
 | `/status` `/session` | configuration, usage and session |
 | `/new` `/clear` `/reload` `/quit` | new session, clear, reload, quit |
 | `/help` | all of it on screen |
@@ -128,10 +127,10 @@ turn that off with `"updateCheck": false` in `config.json` or `DELTA_NO_UPDATE_C
 |---|---|
 | `Enter` / `Shift+Enter` | send / new line |
 | `Ctrl+C` | stops the generation (never closes the app) |
-| `Ctrl+X` | copies the last reply |
 | `Ctrl+Q` | returns the last queued message to the editor |
-| mouse | click selects a whole message (`Ctrl+X` copies it, without the box); drag selects text and copies on release; wheel scrolls the conversation |
-| `Esc` | clears the selection and jumps to the end |
+| `Ctrl+V` | paste text, image or file |
+| mouse | wheel scrolls the conversation (copying by selection was removed) |
+| `Esc` | goes back to the end of the conversation |
 
 **Typing while it works is supported**: the message appears in the chat marked *queued* and the agent
 **cuts the reply mid-stream** to read it — no waiting for the final message.
