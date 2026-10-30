@@ -379,7 +379,7 @@ static int graph_save(CodeGraph *g)
     for (size_t i = 0; i < g->n_imps; i++) {
         str_addf(&o, "imp %s %s\n", g->files[g->imps[i].file].path, g->imps[i].target);
     }
-    int ok = file_write(p, o.data, o.len);
+    int ok = file_write_atomic(p, o.data, o.len);
     str_free(&o);
     free(p);
     g->dirty = 0;

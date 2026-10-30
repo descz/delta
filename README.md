@@ -115,6 +115,7 @@ Inside the app, `/new` starts a fresh session and `/clear` wipes the screen.
 | `/login` `/logout` | connect/disconnect providers (one key per provider) |
 | `/models` | models from connected providers — the catalog is re-downloaded on every run (a model released mid-session shows up) and **only the providers you connected are kept**; `/login` still sees the full list |
 | `/thinking` | reasoning effort (off → max, depending on the model) |
+| `/verbosity` | how much prose in the reply — `low`, `normal`, `high`; reasoning and the work itself stay untouched |
 | `/projects <folder>` | set the working folder (saved in config) |
 | `/terminal <cmd>` | runs in your shell and shows the output in the chat |
 | `/undo [file]` | restores a file to its content before the last edit |
@@ -136,10 +137,10 @@ turn that off with `"updateCheck": false` in `config.json` or `DELTA_NO_UPDATE_C
 | key | action |
 |---|---|
 | `Enter` / `Shift+Enter` | send / new line |
-| `Ctrl+C` | stops the generation (never closes the app) |
+| `Ctrl+C` | with a selection: copies it to the clipboard; otherwise stops the generation (never closes the app) |
 | `Ctrl+Q` | returns the last queued message to the editor |
 | `Ctrl+V` | paste text, image or file |
-| mouse | wheel scrolls the conversation (copying by selection was removed) |
+| mouse | wheel scrolls the conversation; **drag selects** (white background, black text) and a plain click clears the selection |
 | `Esc` | goes back to the end of the conversation |
 
 **Typing while it works is supported**: the message appears in the chat marked *queued* and the agent
@@ -194,6 +195,11 @@ One folder, chosen at install time (default `C:\Users\<you>\.deltaCore`):
 ```
 
 `system/prompt.md` is re-read every turn: that is where you write your team rules.
+
+**Several windows at once is supported.** Every file in this folder is written to a temporary and
+swapped in one step (`file_write_atomic`), so a second `delta` — or a subagent — never reads a
+half-written `config.json`, `auth.json`, `memory.json` or catalog. Without that, the instance that
+reads a truncated config loses provider and key and its session looks dead.
 
 ## Build from source
 

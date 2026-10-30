@@ -1,0 +1,33 @@
+# Selecao com o mouse: arrastar seleciona (fundo branco, letra preta),
+# Ctrl+C copia, clique limpa. Soltar NAO copia.
+echo CONVERSA PARA SELECIONAR
+type /status
+key enter
+status-off
+dump antes_da_selecao
+
+echo SEM SELECAO
+sel
+
+echo ARRASTANDO (linha 1 -> linha 5)
+mouse 2 1 click
+mouse 2 1 drag
+mouse 30 3 drag
+mouse 30 5 drag
+mouse 30 5 release
+sel
+dump com_selecao
+
+echo COPIANDO COM CTRL+C
+key ctrl-c
+sel
+dump depois_do_ctrl_c
+
+echo CLIQUE LIMPA A SELECAO
+mouse 4 2 click
+sel
+dump depois_do_clique
+
+echo CTRL+C SEM SELECAO SEGUE INTERROMPENDO (nada rodando)
+key ctrl-c
+dump ctrl_c_sem_selecao

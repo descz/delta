@@ -135,7 +135,7 @@ static void cache_save(const UpdateInfo *u, long long checked)
     json_write_string(&o, u->page, strlen(u->page));
     str_adds(&o, "}\n");
     char *p = cache_path();
-    file_write(p, o.data, o.len);
+    file_write_atomic(p, o.data, o.len);
     free(p);
     str_free(&o);
 }

@@ -1,0 +1,10 @@
+# Soltar o mouse NAO copia: a selecao so' vai para o clipboard no Ctrl+C.
+echo CONVERSA
+type /status
+key enter
+status-off
+mouse 2 1 click
+mouse 2 1 drag
+mouse 30 5 drag
+mouse 30 5 release
+sel

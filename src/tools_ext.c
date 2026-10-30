@@ -1992,7 +1992,7 @@ static int memory_save(JValue *arr)
     }
     str_addc(&out, ']');
     char *p = memory_path();
-    int ok = file_write(p, out.data, out.len);
+    int ok = file_write_atomic(p, out.data, out.len);
     free(p);
     str_free(&out);
     return ok;
@@ -2619,7 +2619,7 @@ static int agent_op(JValue *a, const char *cwd, ToolResult *res)
     if (str_eq(op, "plan")) {
         const char *plan = arg_s(a, "plan_markdown");
         char *p = plan_path();
-        int ok = file_write(p, plan, strlen(plan));
+        int ok = file_write_atomic(p, plan, strlen(plan));
         free(p);
         if (!ok) { err_out(res, "Erro: nao foi possivel gravar o plano."); return 0; }
         int pend = 0, done = 0;
@@ -2802,7 +2802,7 @@ static int extend_op(JValue *a, const char *cwd, ToolResult *res)
         iso_now(ts);
         json_write_string(&out, ts, strlen(ts));
         str_adds(&out, ",\n  \"kind\": \"delta-plugin-scaffold\"\n}\n");
-        int ok = file_write(path, out.data, out.len);
+        int ok = file_write_atomic(path, out.data, out.len);
         if (ok) str_addf(&res->output, "Plugin scaffold criado: %s\n", path);
         else err_out(res, "Erro: nao foi possivel gravar %s.", path);
         str_free(&out);
@@ -2982,7 +2982,7 @@ static int skills_op(JValue *a, const char *cwd, ToolResult *res)
             str_adds(&out, "\n---\n\n");
         }
         str_adds(&out, conteudo);
-        int ok = file_write(md, out.data, out.len);
+        int ok = file_write_atomic(md, out.data, out.len);
         if (ok) str_addf(&res->output, "Skill %s: %s\n", str_eq(op, "create") ? "criada" : "atualizada", md);
         else err_out(res, "Erro: nao consegui gravar %s.", md);
         str_free(&out);
@@ -3156,7 +3156,7 @@ static int mcp_save(McpConfig *arr, int n)
     }
     str_addc(&out, ']');
     char *p = mcp_path();
-    int ok = file_write(p, out.data, out.len);
+    int ok = file_write_atomic(p, out.data, out.len);
     free(p);
     str_free(&out);
     return ok;

@@ -6,6 +6,7 @@
 #include "../src/ui.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
@@ -193,6 +194,38 @@ int main(void)
            "URL guardada na tabela do screen");
         screen_free(&s);
         theme_free(&t);
+    }
+
+    /* ---------------- gravacao atomica (duas instancias no mesmo disco) ---------------- */
+    printf("[8] file_write_atomic\n");
+    {
+        char big[4096];
+        for (size_t i = 0; i < sizeof big; i++) big[i] = (char)('a' + (i % 26));
+        const char *p = "build/test-atomic.json";
+        ok(file_write_atomic(p, big, sizeof big), "grava arquivo novo");
+        size_t n = 0;
+        char *back = file_read(p, &n);
+        ok(back && n == sizeof big && memcmp(back, big, sizeof big) == 0,
+           "conteudo e tamanho conferem");
+        free(back);
+
+        ok(file_write_atomic(p, "{\"a\":1}\n", 8), "sobrescreve arquivo existente");
+        back = file_read(p, &n);
+        ok(back && n == 8 && memcmp(back, "{\"a\":1}\n", 8) == 0,
+           "sobrescrita troca o conteudo inteiro");
+        free(back);
+
+        size_t ntmp = 0;
+        char **files = dir_list("build", &ntmp);
+        int tmp_sobrando = 0;
+        for (size_t i = 0; files && i < ntmp; i++)
+            if (strstr(files[i], "test-atomic.json.") && strstr(files[i], ".tmp")) tmp_sobrando++;
+        if (files) dir_list_free(files, ntmp);
+        ok(tmp_sobrando == 0, "nenhum temporario fica para tras");
+
+        ok(!file_write_atomic("build/pasta-que-nao-existe/x.json", "x", 1),
+           "falha sem crash quando a pasta nao existe");
+        remove(p);
     }
 
     printf("\n%d verificacoes, %d falhas\n", checks, failures);

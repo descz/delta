@@ -310,8 +310,74 @@ char *str_ndup(const char *s, size_t n)
 /* ================================================================== */
 /* Arquivos                                                            */
 /* ================================================================== */
+#ifdef _WIN32
+/* Caminho UTF-8 -> UTF-16 (CreateFileW nao aceita UTF-8). */
+static WCHAR *win_path(const char *utf8)
+{
+    int n = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, NULL, 0);
+    if (n <= 0) return NULL;
+    WCHAR *w = (WCHAR *)malloc((size_t)n * sizeof(WCHAR));
+    if (!w) return NULL;
+    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, w, n);
+    return w;
+}
+
+/* Le abrindo com FILE_SHARE_DELETE.
+ *
+ * `fopen` nao concede compartilhamento de exclusao: enquanto esta instancia
+ * lê o config, a outra nao consegue troca-lo por rename — e quando consegue a
+ * forca, aparece uma janela em que o nome nao abre. Com FILE_SHARE_DELETE o
+ * rename passa por cima de quem esta' lendo e o leitor sempre ve um arquivo
+ * inteiro (o antigo ou o novo). */
+static char *file_read_shared(const char *path, size_t *out_len)
+{
+    WCHAR *w = win_path(path);
+    if (!w) return NULL;
+
+    HANDLE h = INVALID_HANDLE_VALUE;
+    for (int tentativa = 0; tentativa < 20; tentativa++) {
+        h = CreateFileW(w, GENERIC_READ,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (h != INVALID_HANDLE_VALUE) break;
+        DWORD err = GetLastError();
+        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) {
+            free(w);
+            return NULL;          /* nao existe mesmo: nao insiste */
+        }
+        msleep(5);
+    }
+    free(w);
+    if (h == INVALID_HANDLE_VALUE) return NULL;
+
+    LARGE_INTEGER sz;
+    if (!GetFileSizeEx(h, &sz) || sz.QuadPart < 0 || sz.QuadPart > (LONGLONG)512 * 1024 * 1024) {
+        CloseHandle(h);
+        return NULL;
+    }
+    size_t n = (size_t)sz.QuadPart;
+    char *buf = (char *)malloc(n + 1);
+    if (!buf) { CloseHandle(h); return NULL; }
+    size_t done = 0;
+    while (done < n) {
+        DWORD falta = (DWORD)((n - done) > ((size_t)1 << 30) ? ((size_t)1 << 30) : (n - done));
+        DWORD got = 0;
+        if (!ReadFile(h, buf + done, falta, &got, NULL) || got == 0) break;
+        done += got;
+    }
+    CloseHandle(h);
+    buf[done] = 0;
+    if (out_len) *out_len = done;
+    return buf;
+}
+#endif
+
 char *file_read(const char *path, size_t *out_len)
 {
+#ifdef _WIN32
+    return file_read_shared(path, out_len);
+#else
+    /* no POSIX o rename e' atomico: quem le nunca ve o nome faltando */
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
     if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return NULL; }
@@ -325,6 +391,7 @@ char *file_read(const char *path, size_t *out_len)
     buf[rd] = 0;
     if (out_len) *out_len = rd;
     return buf;
+#endif
 }
 
 int file_write(const char *path, const char *data, size_t len)
@@ -343,6 +410,54 @@ int file_append(const char *path, const char *data, size_t len)
     size_t wr = len ? fwrite(data, 1, len, f) : 0;
     fclose(f);
     return wr == len;
+}
+
+/* Grava sem que ninguem veja o arquivo pela metade.
+ *
+ * Com `fopen(path, "wb")` o arquivo eh truncado antes da escrita: quem ler do
+ * outro processo nesse intervalo recebe 0 bytes ou JSON cortado. Isso acontece
+ * de verdade com duas (ou mais) instancias do Delta na mesma pasta de dados —
+ * a que leu um config cortado perde provedor/chave e a sessao parece morta.
+ * Medido: 614 leituras corrompidas em 3 s de escrita concorrente.
+ *
+ * Solucao: temporario no mesmo diretorio + rename (atomico no mesmo volume). */
+int file_write_atomic(const char *path, const char *data, size_t len)
+{
+    static unsigned seq = 0;
+    size_t plen = strlen(path);
+    char *tmp = (char *)malloc(plen + 64);
+    if (!tmp) return 0;
+    /* o nome do temporario PRECISA ser unico por processo: so' now_ms()+seq
+       colidia entre duas instancias gravando no mesmo milissegundo, e uma
+       renomeava o temporario que a outra ainda estava escrevendo (arquivo
+       vazio/truncado no destino). */
+#ifdef _WIN32
+    unsigned long pid = (unsigned long)GetCurrentProcessId();
+#else
+    unsigned long pid = (unsigned long)getpid();
+#endif
+    snprintf(tmp, plen + 64, "%s.%lu.%llu-%u.tmp", path, pid,
+             (unsigned long long)now_ms(), (unsigned)(++seq));
+
+    FILE *f = fopen(tmp, "wb");
+    if (!f) { free(tmp); return 0; }
+    size_t wr = len ? fwrite(data, 1, len, f) : 0;
+    int ok = (wr == len) && (fflush(f) == 0);
+    fclose(f);
+    if (!ok) { remove(tmp); free(tmp); return 0; }
+
+    ok = 0;
+    for (int tentativa = 0; tentativa < 20; tentativa++) {
+#ifdef _WIN32
+        if (MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) { ok = 1; break; }
+#else
+        if (rename(tmp, path) == 0) { ok = 1; break; }
+#endif
+        msleep(10);   /* antivirus/outro leitor segurando o destino por um instante */
+    }
+    if (!ok) remove(tmp);
+    free(tmp);
+    return ok;
 }
 
 int file_exists(const char *path)

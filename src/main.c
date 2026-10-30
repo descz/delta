@@ -79,6 +79,11 @@ typedef struct {
     Str      status;
     uint64_t status_until;
 
+    /* vigia do stream: quando o provedor aceita a conexao e para de mandar
+       bytes (fila do provedor, rede caida), avisa que esta' esperando */
+    uint64_t last_activity_ms;
+    int      stall_warned;
+
     int      abort_requested;
     int      quit;
     char    *theme_name;
@@ -104,7 +109,10 @@ typedef struct {
     int      tr_fast;           /* 1 = so' repintar a partir de tr_fast_from */
     size_t   tr_fast_from;
 
-    /* selecao no transcript: desativada nesta versao (sem copiar mensagens) */
+    /* selecao no transcript: arrasto do mouse; Ctrl+C copia, clique limpa */
+    int      sel_active;
+    int      sel_ax, sel_ay;    /* ancora (onde o arrasto comecou) */
+    int      sel_hx, sel_hy;    /* cabeca (onde o mouse esta) */
     int      tr_start;          /* linha do transcript que aparece na linha 0 da tela */
     int      tr_view;           /* linhas visiveis do transcript */
     int      tr_total_prev;     /* linhas do transcript no frame anterior (ancora do scroll) */
@@ -126,7 +134,7 @@ typedef struct {
 /* chave i18n de cada comando, na mesma ordem da tabela */
 static const char *const CMD_KEYS[] = {
     "cmd.help", "cmd.login", "cmd.logout", "cmd.models", "cmd.thinking",
-    "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new",
+    "cmd.verbosity", "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new",
     "cmd.clear", "cmd.skills", "cmd.extensions", "cmd.translator",
     "cmd.reload", "cmd.quit", "cmd.subagentmodel", "cmd.deltagroup", "cmd.undo", "cmd.update"
 };
@@ -138,6 +146,7 @@ static const Cmd COMMANDS[] = {
     { "logout",    "Remove a chave do provedor atual",                NULL,                 0 },
     { "models",    "Todos os modelos de todos os provedores",         "<filtro>",           1 },
     { "thinking",  "Nível de raciocínio",                             "off|low|medium|high", 1 },
+    { "verbosity", "Quanta prosa na resposta (o raciocínio não muda)",  "low|normal|high",    1 },
     { "projects",  "Define a pasta onde o Delta trabalha",             "<pasta>",           1 },
     { "terminal",  "Executa um comando no shell e mostra a saida",     "<comando>",          1 },
     { "status",    "Mostra a configuração e o uso",                    NULL,                 0 },
@@ -328,6 +337,10 @@ static int plan_draw(Screen *s, int y, int width)
 static void ext_panel_draw(Screen *s, int ey, int cols);
 static int  fila_count(void);
 static void render(void);
+static void sel_clear(void);
+static void render_selection(void);
+static int  sel_has_text(void);
+static void copy_selection(void);
 static void set_status(const char *fmt, ...);
 static void notify(const char *fmt, ...);
 static void handle_event(const Event *ev);
@@ -528,6 +541,15 @@ static const struct { const char *id; const char *desc; } THINKING_LEVELS[] = {
     { "max",     "Sem limite" },
 };
 #define N_THINKING ((int)(sizeof THINKING_LEVELS / sizeof THINKING_LEVELS[0]))
+
+/* /verbosity: quanta prosa em volta do resultado. Nao toca no raciocinio
+   (/thinking) nem no trabalho — so' no texto que vem junto. */
+static const struct { const char *id; const char *desc; } VERBOSITY_LEVELS[] = {
+    { "low",    "Menos prosa: 1-2 frases (codigo e trabalho inteiros)" },
+    { "normal", "Estilo atual: paragrafos de 2-3 linhas" },
+    { "high",   "Explica a escolha, as alternativas e as ressalvas" },
+};
+#define N_VERBOSITY ((int)(sizeof VERBOSITY_LEVELS / sizeof VERBOSITY_LEVELS[0]))
 
 /* Niveis de thinking que O MODELO ATUAL aceita (reasoning_options do models.dev). */
 static int fill_thinking(const char *filter)
@@ -1188,6 +1210,7 @@ static void render(void)
         app.scroll += total - app.tr_total_prev;
     app.tr_total_prev = total;
     app.tr_prev_width = cols;
+    if (app.tr_prev_width && app.tr_prev_width != cols) sel_clear();
     int max_scroll = total > tr_view ? total - tr_view : 0;
     if (app.scroll > max_scroll) app.scroll = max_scroll;
     if (app.scroll < 0) app.scroll = 0;
@@ -1196,7 +1219,7 @@ static void render(void)
     screen_blit(&app.screen, &app.tr, start, 0, tr_view);
     app.tr_start = start;
     app.tr_view = tr_view;
-    /* selecao/copiar desativados nesta versao */
+    render_selection();
 
     /* editor */
     int ey = rows - footer_h - editor_h - menu_h;
@@ -1371,6 +1394,8 @@ static void enqueue_input(void);
 static void cb_on_text(void *ud, const char *s, size_t n)
 {
     (void)ud;
+    app.last_activity_ms = now_ms();
+    app.stall_warned = 0;
     if (g_cur_assistant == (size_t)-1) {
         block_add(B_ASSISTANT);
         g_cur_assistant = app.n_blocks - 1;
@@ -1391,6 +1416,8 @@ static void cb_on_text(void *ud, const char *s, size_t n)
 static void cb_on_thinking(void *ud, const char *s, size_t n)
 {
     (void)ud;
+    app.last_activity_ms = now_ms();
+    app.stall_warned = 0;
     if (g_cur_thinking == (size_t)-1) {
         block_add(B_THINKING);
         g_cur_thinking = app.n_blocks - 1;
@@ -1415,6 +1442,8 @@ static void cb_on_turn_start(void *ud)
     g_cur_assistant = (size_t)-1;
     g_cur_thinking = (size_t)-1;
     app.working = 1;
+    app.last_activity_ms = now_ms();
+    app.stall_warned = 0;
     str_clear(&app.work_msg);
     str_adds(&app.work_msg, "Working...");
 }
@@ -1422,6 +1451,8 @@ static void cb_on_turn_start(void *ud)
 static void cb_on_tool_start(void *ud, const char *name, const char *args)
 {
     (void)ud;
+    app.last_activity_ms = now_ms();
+    app.stall_warned = 0;
     Block *b = block_add(B_TOOL);
     b->tool_name = str_dup(name);
     b->tool_args = str_dup(args);
@@ -1465,6 +1496,12 @@ static void ui_poll_input(void)
         if (!term_read(&ev, 0)) break;
         steer_dbg("ev type=%d cp=%u working=%d", (int)ev.type, (unsigned)ev.cp, app.working);
         if (ev.type == EV_CTRL && ev.cp == 'c') {
+            /* selecao ativa: Ctrl+C copia (nao interrompe o turno) */
+            if (app.sel_active && sel_has_text()) {
+                copy_selection();
+                render();
+                continue;
+            }
             app.abort_requested = 1;
             notify("Interrompido");
             return;
@@ -1482,12 +1519,36 @@ static void ui_poll_input(void)
     }
 }
 
+/* Quanto tempo sem nenhum byte do provedor para avisar (ms). DELTA_STALL_MS
+   existe para o teste usar 300 ms em vez de 45 s. */
+static int stall_ms(void)
+{
+    static int ms = -1;
+    if (ms < 0) {
+        char *e = env_get("DELTA_STALL_MS");
+        ms = (e && *e) ? atoi(e) : 0;
+        free(e);
+        if (ms <= 0) ms = 45000;
+    }
+    return ms;
+}
+
 /* Poll de entrada durante o streaming: aborta, roda a tela e deixa o
    usuario digitar (Enter enfileira; /stop interrompe). */
 static int cb_should_abort(void *ud)
 {
     (void)ud;
     if (app.abort_requested) return 1;
+    /* provedor aceitou e parou de mandar: avisa uma vez (o turno continua —
+       Ctrl+C cancela). Antes disso a sessao ficava "parada" sem explicacao
+       ate' o timeout de 5 min da conexao. */
+    if (app.working && app.last_activity_ms && !app.stall_warned &&
+        now_ms() - app.last_activity_ms > (uint64_t)stall_ms()) {
+        app.stall_warned = 1;
+        notify("sem dados do provedor ha' %d s \u00b7 Ctrl+C cancela (pode ser fila do provedor)",
+               (stall_ms() + 999) / 1000);
+        render();
+    }
     ui_poll_input();
     /* hotkey de colagem de imagem/video (o terminal engole o chord) */
     if (term_poll_paste_hotkey() && now_ms() - app.last_clip_ms >= 300) {
@@ -1745,6 +1806,8 @@ static int fila_pop_last(Str *text, char **imgs, int *n_imgs, size_t *block)
 static void cb_on_interval(void *ud)
 {
     (void)ud;
+    app.last_activity_ms = now_ms();
+    app.stall_warned = 0;
     while (g_fila_n > 0) {
         Str t; str_init(&t);
         char *imgs[8]; int n_imgs = 0;
@@ -2122,13 +2185,15 @@ static void handle_command(const char *raw)
             str_adds(&b->text, line);
         }
         str_adds(&b->text,
-            "\nAtalhos: Enter envia, Shift+Enter quebra linha, Ctrl+C interrompe/limpa,\n"
-            "Ctrl+D sai (Ctrl+C nunca fecha o app). Digite enquanto ele trabalha: a\n"
+            "\nAtalhos: Enter envia, Shift+Enter quebra linha. Arraste o mouse para\n"
+            "selecionar (fundo branco, letra preta) e Ctrl+C copia; um clique limpa\n"
+            "a seleção. Sem seleção, Ctrl+C interrompe a geração ou limpa o editor\n"
+            "(nunca fecha o app; Ctrl+D sai). Digite enquanto ele trabalha: a\n"
             "mensagem aparece no chat marcada \"na fila\" e o agente corta a resposta\n"
             "no meio para le-la (Ctrl+Q devolve).\n"
             "Editor: Ctrl+U/K (linha), Ctrl+W (palavra), Ctrl+Y (colar), Ctrl+Z (undo).\n"
-            "Up/Down, PgUp/PgDn e a roda do mouse rolam a conversa; Esc volta para o\n"
-            "fim (e limpa a seleção). Tab completa o comando, Esc fecha o menu.\n");
+            "Up/Down, PgUp/PgDn e a roda do mouse rolam a conversa; Esc limpa a\n"
+            "seleção e volta para o fim. Tab completa o comando, Esc fecha o menu.\n");
         app.tr_dirty = 1;
         render();
         return;
@@ -2532,6 +2597,39 @@ static void handle_command(const char *raw)
         return;
     }
 
+    /* /verbosity: so' a prosa da resposta. O raciocinio (thinking) e o trabalho
+       (tools, codigo, testes) nao mudam — menos texto nunca vira menos trabalho. */
+    if (str_eq(cmd, "/verbosity")) {
+        const char *atual = app.cfg.verbosity && *app.cfg.verbosity ? app.cfg.verbosity : "normal";
+        if (*rest) {
+            for (int i = 0; i < N_VERBOSITY; i++) {
+                if (str_ieq(rest, VERBOSITY_LEVELS[i].id)) {
+                    free(app.cfg.verbosity);
+                    app.cfg.verbosity = str_dup(VERBOSITY_LEVELS[i].id);
+                    config_save(&app.cfg);
+                    agent_rebuild_prompt(&app.agent);   /* o prompt muda na hora */
+                    notify("verbosity: %s", VERBOSITY_LEVELS[i].id);
+                    render();
+                    return;
+                }
+            }
+            notify("nivel invalido (low|normal|high) · atual: %s", atual);
+            render();
+            return;
+        }
+        Block *b = block_add(B_INFO);
+        str_adds(&b->text, "Verbosidade: " );
+        str_adds(&b->text, atual);
+        str_adds(&b->text, "  (o thinking e o trabalho nao mudam; so' a prosa)\n\n");
+        for (int i = 0; i < N_VERBOSITY; i++)
+            str_addf(&b->text, "  %-7s %s%s\n", VERBOSITY_LEVELS[i].id, VERBOSITY_LEVELS[i].desc,
+                     str_eq(atual, VERBOSITY_LEVELS[i].id) ? "  <-" : "");
+        str_adds(&b->text, "\n/verbosity low|normal|high\n");
+        app.tr_dirty = 1;
+        render();
+        return;
+    }
+
     if (str_eq(cmd, "/translator") || str_eq(cmd, "/language")) {
         if (!*rest) {
             Block *b = block_add(B_INFO);
@@ -2618,13 +2716,14 @@ static void handle_command(const char *raw)
             free(de_env);
         }
         str_addf(&b->text,
-                 "provedor : %s\nmodelo   : %s\nendpoint : %s\nchave    : %s\nthinking : %s\ntema     : %s\n"
+                 "provedor : %s\nmodelo   : %s\nendpoint : %s\nchave    : %s\nthinking : %s\nverbos.  : %s\ntema     : %s\n"
                  "contexto : %s%ld\nimagem   : %s\ncatalogo : %s\ncwd      : %s\nsessao   : %s\n",
                  app.cfg.provider ? app.cfg.provider : "?",
                  app.cfg.model ? app.cfg.model : "?",
                  app.cfg.base_url ? app.cfg.base_url : "?",
                  chave,
                  app.cfg.thinking_level ? app.cfg.thinking_level : "off",
+                 app.cfg.verbosity && *app.cfg.verbosity ? app.cfg.verbosity : "normal",
                  app.theme_name ? app.theme_name : "mono",
                  ctx > 0 ? "" : "(desconhecido) ",
                  ctx,
@@ -2847,12 +2946,219 @@ static void input_yank(void)
 /* ================================================================== */
 /* Selecao no transcript + copia                                       */
 /* ================================================================== */
-/* ================================================================== */
-/* Copia da conversa — DESATIVADA nesta versao                          */
-/* ================================================================== */
-/* O mouse nao seleciona nem copia: clique e arrasto nao fazem nada no
-   transcript. Reativar requer repor a selecao (sel_*), o copy_payload e o
-   Ctrl+X que ficaram no historico do git (commit "copiar mensagens"). */
+/* Arrastar com o botao esquerdo seleciona; Ctrl+C copia (nada vai para o
+   clipboard ao soltar); um clique sem arrasto limpa a selecao. A selecao
+   e' pintada com fundo branco e letra preta, independente do tema. */
+#define SEL_BG 0xFFFFFFu
+#define SEL_FG 0x000000u
+
+static void sel_clear(void)
+{
+    app.sel_active = 0;
+}
+
+static void sel_normalize(int *y0, int *x0, int *y1, int *x1)
+{
+    if (app.sel_ay > app.sel_hy ||
+        (app.sel_ay == app.sel_hy && app.sel_ax > app.sel_hx)) {
+        *y0 = app.sel_hy; *x0 = app.sel_hx; *y1 = app.sel_ay; *x1 = app.sel_ax;
+    } else {
+        *y0 = app.sel_ay; *x0 = app.sel_ax; *y1 = app.sel_hy; *x1 = app.sel_hx;
+    }
+}
+
+static int sel_has_text(void)
+{
+    int y0, x0, y1, x1;
+    sel_normalize(&y0, &x0, &y1, &x1);
+    return y0 != y1 || x0 != x1;
+}
+
+/* Ultima linha (exclusiva) do bloco i no transcript. */
+static int block_row_end(size_t i)
+{
+    int inicio = app.blocks[i].tr_y;
+    if (i + 1 < app.n_blocks) {
+        int fim = app.blocks[i + 1].tr_y;
+        if (fim > inicio) return fim;
+    }
+    return app.tr_end_y > inicio ? app.tr_end_y : inicio + 1;
+}
+
+/* Texto "de verdade" de um bloco: sem moldura, sem wrap visual, sem o
+   rodape de tokens. E' o que o usuario espera ao copiar uma mensagem. */
+static void block_plain_text(const Block *b, Str *out)
+{
+    if (b->kind == B_TOOL) {
+        if (b->tool_name && *b->tool_name) {
+            str_adds(out, b->tool_name);
+            if (b->tool_args && *b->tool_args) {
+                str_addc(out, ' ');
+                str_adds(out, b->tool_args);
+            }
+            if (b->tool_output.len) str_addc(out, '\n');
+        }
+        if (b->tool_output.len) str_add(out, b->tool_output.data, b->tool_output.len);
+        return;
+    }
+    if (b->text.len) str_add(out, b->text.data, b->text.len);
+}
+
+static int eh_sem_conteudo(uint32_t cp)
+{
+    /* espaco, celula nunca escrita ou desenho de caixa (╭─│╰ etc.) */
+    return cp == 0 || cp == ' ' || cp == '\t' || (cp >= 0x2500 && cp <= 0x257F);
+}
+
+static void sel_push_line(Str *out, const char *s, size_t n)
+{
+    if (n == 0) {
+        if (out->len && out->data[out->len - 1] != '\n') str_addc(out, '\n');
+        return;
+    }
+    if (out->len && out->data[out->len - 1] != '\n') str_addc(out, '\n');
+    str_add(out, s, n);
+    str_addc(out, '\n');
+}
+
+/* Trecho cru da grade (usado so' quando a selecao pega meia mensagem):
+   tira a moldura e os espacos das pontas de cada linha. */
+static void sel_grid_range(Str *out, int ya, int yb, int xa, int xb)
+{
+    int rows = app.tr.rows, cols = app.tr.cols;
+    if (ya < 0) ya = 0;
+    if (yb >= rows) yb = rows - 1;
+    if (cols <= 0) return;
+    for (int y = ya; y <= yb; y++) {
+        int xs = (y == ya) ? xa : 0;
+        int xe = (y == yb) ? xb : cols - 1;
+        if (xs < 0) xs = 0;
+        if (xe > cols - 1) xe = cols - 1;
+        int first = -1, last = -1;
+        for (int x = xs; x <= xe; x++) {
+            uint32_t cp = app.tr.cp[(size_t)y * (size_t)cols + (size_t)x];
+            if (!eh_sem_conteudo(cp)) {
+                if (first < 0) first = x;
+                last = x;
+            }
+        }
+        if (first < 0) { sel_push_line(out, "", 0); continue; }
+        Str line; str_init(&line);
+        for (int x = first; x <= last; x++) {
+            uint32_t cp = app.tr.cp[(size_t)y * (size_t)cols + (size_t)x];
+            if (cp == 0) cp = ' ';
+            char buf[4];
+            int n = utf8_encode(cp, buf);
+            str_add(&line, buf, (size_t)n);
+        }
+        sel_push_line(out, line.data, line.len);
+        str_free(&line);
+    }
+}
+
+/* Texto da selecao. Regra: mensagem inteira sai do modelo de blocos (texto
+   original, sem quebras do wrap nem moldura de caixa); o que estiver cortado
+   no meio sai da grade, limpo. */
+static void selection_text(Str *out)
+{
+    int y0, x0, y1, x1;
+    sel_normalize(&y0, &x0, &y1, &x1);
+    if (app.tr.rows <= 0) return;
+    if (y0 < 0) y0 = 0;
+    if (y1 >= app.tr.rows) y1 = app.tr.rows - 1;
+    if (y0 > y1) return;
+    const int cols = app.tr.cols;
+
+    size_t i = 0;
+    int y = y0;
+    while (y <= y1) {
+        while (i < app.n_blocks && block_row_end(i) <= y) i++;
+        if (i >= app.n_blocks) {          /* fim: cabecalho/linhas soltas */
+            sel_grid_range(out, y, y1, (y == y0) ? x0 : 0, x1);
+            break;
+        }
+        int bs = app.blocks[i].tr_y;
+        int be = block_row_end(i);
+        if (bs > y) {                     /* linhas antes do bloco */
+            int ate = (bs - 1 > y1) ? y1 : bs - 1;
+            sel_grid_range(out, y, ate, (y == y0) ? x0 : 0, (ate == y1) ? x1 : cols - 1);
+            y = ate + 1;
+            continue;
+        }
+        int cobre_tudo = (y <= bs) && (y1 >= be - 1) &&
+                         (y > y0 || x0 == 0) &&
+                         (y1 > be - 1 || x1 >= cols - 1);
+        if (cobre_tudo) {
+            Str t; str_init(&t);
+            block_plain_text(&app.blocks[i], &t);
+            if (t.len) {
+                if (out->len && out->data[out->len - 1] != '\n') str_addc(out, '\n');
+                str_add(out, t.data, t.len);
+                if (out->data[out->len - 1] != '\n') str_addc(out, '\n');
+            }
+            str_free(&t);
+            y = be;
+            i++;
+            continue;
+        }
+        int ate = (be - 1 > y1) ? y1 : be - 1;
+        if (ate < y) { i++; continue; }
+        sel_grid_range(out, y, ate, (y == y0) ? x0 : 0, (ate == y1) ? x1 : cols - 1);
+        y = ate + 1;
+    }
+
+    /* sem linhas em branco nas pontas */
+    while (out->len && (out->data[out->len - 1] == '\n' || out->data[out->len - 1] == ' '))
+        str_truncate(out, out->len - 1);
+    size_t ini = 0;
+    while (ini < out->len && out->data[ini] == '\n') ini++;
+    if (ini) {
+        memmove(out->data, out->data + ini, out->len - ini);
+        out->len -= ini;
+        out->data[out->len] = 0;
+    }
+}
+
+/* Pinta a selecao: fundo branco, letra preta (independe do tema). */
+static void render_selection(void)
+{
+    if (!app.sel_active || !sel_has_text()) return;
+    int y0, x0, y1, x1;
+    sel_normalize(&y0, &x0, &y1, &x1);
+    int cols = app.screen.cols;
+    for (int sy = 0; sy < app.tr_view; sy++) {
+        int ty = app.tr_start + sy;
+        if (ty < y0 || ty > y1 || ty >= app.tr.rows) continue;
+        int xs = (ty == y0) ? x0 : 0;
+        int xe = (ty == y1) ? x1 : cols - 1;
+        if (xs > xe) continue;
+        if (xe > cols - 1) xe = cols - 1;
+        for (int x = xs; x <= xe; x++) {
+            size_t i = (size_t)sy * (size_t)cols + (size_t)x;
+            app.screen.fg[i] = SEL_FG;
+            app.screen.bg[i] = SEL_BG;
+            app.screen.at[i] &= (uint8_t)~ATTR_INVERSE;
+            app.screen.at[i] &= (uint8_t)~ATTR_DIM;
+        }
+    }
+}
+
+/* Ctrl+C com selecao: vai para o clipboard e avisa na borda do editor. */
+static void copy_selection(void)
+{
+    Str t; str_init(&t);
+    selection_text(&t);
+    if (!t.len) {
+        notify_status("nada selecionado");
+        str_free(&t);
+        return;
+    }
+    if (clipboard_write_text(t.data))
+        notify_status("selecao copiada (%d caracteres)", (int)utf8_len(t.data));
+    else
+        notify_status("nao deu para copiar (clipboard ocupado?)");
+    str_free(&t);
+}
 
 /* Roda do mouse. Um degrau por evento, igual com o agente trabalhando ou
    parado (antes a versao do "working" andava 1 linha e invertia o sentido). */
@@ -3122,8 +3428,28 @@ static void handle_event(const Event *ev)
     int n_items = (int)g_items_n;
     if (ev->type != EV_CTRL_KEY && ev->type != EV_RESIZE) app.ctrl_key_ms = 0;
 
-    /* -------- mouse: roda do mouse rola a conversa (selecao/copiar desativados) -------- */
-    if (ev->type == EV_DRAG || ev->type == EV_RELEASE) return;
+    /* -------- mouse: arrasto seleciona; clique limpa; roda rola a conversa -------- */
+    if (ev->type == EV_DRAG) {
+        if (app.menu_visible || app.picker) return;
+        if (ev->my < 0 || ev->my >= app.tr_view) return;
+        int ty = app.tr_start + ev->my;
+        if (ty >= app.tr.rows || app.tr.cols <= 0) return;
+        int tx = ev->mx < 0 ? 0 : (ev->mx >= app.tr.cols ? app.tr.cols - 1 : ev->mx);
+        if (!app.sel_active) {
+            app.sel_active = 1;
+            app.sel_ax = app.sel_hx = tx;
+            app.sel_ay = app.sel_hy = ty;
+            render();
+            return;
+        }
+        if (tx != app.sel_hx || ty != app.sel_hy) {
+            app.sel_hx = tx;
+            app.sel_hy = ty;
+            render();
+        }
+        return;
+    }
+    if (ev->type == EV_RELEASE) return;   /* soltar nao copia: o Ctrl+C copia */
     if (ev->type == EV_WHEEL) {
         int n = (int)g_items_n;
         if ((app.menu_visible || app.picker) && n > 0) {
@@ -3147,6 +3473,11 @@ static void handle_event(const Event *ev)
             }
             render();
             return;
+        }
+        /* clique no transcript: limpa a selecao (nao seleciona mensagem) */
+        if (!app.menu_visible && !app.picker && app.sel_active) {
+            sel_clear();
+            render();
         }
         return;
     }
@@ -3326,9 +3657,10 @@ static void handle_event(const Event *ev)
                 render();
                 break;
             case EV_ESC:
-                /* cascata: primeiro a rolagem, depois o texto do editor (antes
-                   o ESC fazia as duas coisas de uma vez e apagava o que estava
+                /* cascata: selecao, rolagem, e so' no fim o texto do editor
+                   (antes o ESC fazia tudo de uma vez e apagava o que estava
                    sendo digitado) */
+                if (app.sel_active) { sel_clear(); render(); break; }
                 if (app.scroll > 0) { app.scroll = 0; render(); break; }
                 if (app.input.len) { str_clear(&app.input); app.cursor = 0; }
                 app.menu_suppressed = 0;
@@ -3354,8 +3686,14 @@ static void handle_event(const Event *ev)
                     free(dir);
                     render();
                 } else if (ev->cp == 'c') {
-                    /* Ctrl+C nunca fecha o app: interrompe a geracao ou limpa o
+                    /* Ctrl+C nunca fecha o app: com selecao no transcript,
+                       copia; sem selecao, interrompe a geracao ou limpa o
                        editor. Sair e' /quit ou Ctrl+D. */
+                    if (app.sel_active && sel_has_text()) {
+                        copy_selection();
+                        render();
+                        break;
+                    }
                     if (app.working) {
                         app.abort_requested = 1;
                         notify("interrompendo...");
@@ -3769,6 +4107,29 @@ static int run_replay(const char *path, int cols, int rows, int force_offline)
                 handle_event(&ev);
             } else {
                 fprintf(stderr, "replay: mouse <x> <y> [click|drag|release]\n");
+            }
+        } else if (str_eq(line, "sel")) {
+            /* sel - estado da selecao, cores da primeira celula e o texto que
+               o Ctrl+C copiaria (gancho dos testes, sem tocar no clipboard) */
+            render();
+            if (!app.sel_active) {
+                printf("sel: inativa\n");
+            } else {
+                int y0, x0, y1, x1;
+                sel_normalize(&y0, &x0, &y1, &x1);
+                int sy = y0 - app.tr_start;
+                uint32_t fg = 0, bg = 0;
+                if (sy >= 0 && sy < app.tr_view && x0 >= 0 && x0 < app.screen.cols) {
+                    size_t k = (size_t)sy * (size_t)app.screen.cols + (size_t)x0;
+                    fg = app.screen.fg[k];
+                    bg = app.screen.bg[k];
+                }
+                Str t; str_init(&t);
+                selection_text(&t);
+                printf("sel: %d,%d -> %d,%d fg=%06X bg=%06X texto=%zu inicio=\"%.60s\"\n",
+                       y0, x0, y1, x1, (unsigned)fg, (unsigned)bg, t.len,
+                       t.data ? t.data : "");
+                str_free(&t);
             }
         } else if (str_eq(line, "dump")) {
             printf("--- passo %d: %s ---\n", step, arg ? arg : "");

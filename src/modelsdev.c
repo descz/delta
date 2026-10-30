@@ -528,7 +528,7 @@ static void catalog_write_cache(const Catalog *c)
         str_adds(&o, "]}");
     }
     str_adds(&o, "]}");
-    file_write(path, o.data, o.len);
+    file_write_atomic(path, o.data, o.len);
     str_free(&o);
     free(path);
 }

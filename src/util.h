@@ -3,7 +3,7 @@
 #ifndef DELTA_UTIL_H
 #define DELTA_UTIL_H
 
-#define DELTA_VERSION "0.1.10"
+#define DELTA_VERSION "0.1.11"
 /* Grupo de usuarios do Delta (Telegram). */
 #define DELTA_TELEGRAM "https://t.me/+NeaMf4VfXaY2MjIx"
 
@@ -67,6 +67,10 @@ char    *str_ndup(const char *s, size_t n);
 /* Le arquivo inteiro. Retorna NULL em erro. *out_len opcional. */
 char    *file_read(const char *path, size_t *out_len);
 int      file_write(const char *path, const char *data, size_t len);
+/* Igual, mas atomico: escreve num temporario e troca de uma vez. Eh o que
+   impede outra instancia do Delta (ou um subagente) de ler config/memory/
+   catalogo pela metade enquanto este aqui grava. */
+int      file_write_atomic(const char *path, const char *data, size_t len);
 /* Acrescenta ao fim (cria se nao existir). */
 int      file_append(const char *path, const char *data, size_t len);
 int      file_exists(const char *path);

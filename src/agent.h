@@ -15,6 +15,7 @@ typedef struct {
     char  *system_extra;
     char  *language;        /* pt-BR (padrao), pt, en, es, zh, ja */
     char  *thinking_level;
+    char  *verbosity;      /* low | normal | high - so' a prosa da resposta */
     char  *headers;       /* JSON com cabecalhos HTTP extras por provedor */
     int    supports_image; /* o modelo atual aceita imagem */
     int    check_updates;  /* 1 = procura versao nova no boot (config: updateCheck) */

@@ -39,10 +39,20 @@ int config_load(Config *c, char *note, size_t note_len)
     c->temperature = 0;
     c->check_updates = 1;
     c->thinking_level = str_dup("off");
+    c->verbosity = str_dup("normal");
 
     char *path = config_path();
     size_t len = 0;
     char *text = file_read(path, &len);
+    /* uma instancia antiga (ou outro programa) pode ter deixado o arquivo
+       cortado: nao aceita isso como "sem config" — rele uma vez antes. */
+    if (text && len > 0 && !(text[0] == '{' && text[len - 1] == '\n')) {
+        msleep(30);
+        size_t len2 = 0;
+        char *retry = file_read(path, &len2);
+        if (retry && len2 > 0) { free(text); text = retry; len = len2; }
+        else free(retry);
+    }
     int chave_do_arquivo = 0;
     if (text) {
         JValue *v = json_parse(text, len);
@@ -56,6 +66,7 @@ int config_load(Config *c, char *note, size_t note_len)
             if ((s = json_str(json_get(v, "language")))[0]) c->language = str_dup(s);
             if ((s = json_str(json_get(v, "projectDir")))[0]) c->project_dir = str_dup(s);
             if ((s = json_str(json_get(v, "thinkingLevel")))[0]) { free(c->thinking_level); c->thinking_level = str_dup(s); }
+            if ((s = json_str(json_get(v, "verbosity")))[0]) { free(c->verbosity); c->verbosity = str_dup(s); }
             if ((s = json_str(json_get(v, "subagentModel")))[0]) { free(c->subagent_model); c->subagent_model = str_dup(s); }
             if (json_get(v, "updateCheck")) c->check_updates = json_bool(json_get(v, "updateCheck"), 1);
             JValue *hv = json_get(v, "headers");
@@ -143,6 +154,9 @@ int config_save(const Config *c)
     str_adds(&o, ",\n  \"thinkingLevel\": ");
     json_write_string(&o, c->thinking_level ? c->thinking_level : "off",
                       strlen(c->thinking_level ? c->thinking_level : "off"));
+    str_adds(&o, ",\n  \"verbosity\": ");
+    json_write_string(&o, c->verbosity && *c->verbosity ? c->verbosity : "normal",
+                      strlen(c->verbosity && *c->verbosity ? c->verbosity : "normal"));
     str_adds(&o, ",\n  \"maxTokens\": ");
     str_addf(&o, "%d", c->max_tokens);
     str_adds(&o, ",\n  \"subagentModel\": ");
@@ -156,7 +170,7 @@ int config_save(const Config *c)
     }
     str_adds(&o, "\n}\n");
     char *p = config_path();
-    int ok = file_write(p, o.data, o.len);
+    int ok = file_write_atomic(p, o.data, o.len);
     free(p);
     str_free(&o);
     return ok;
@@ -171,6 +185,7 @@ void config_free(Config *c)
     free(c->system_extra);
     free(c->language);
     free(c->thinking_level);
+    free(c->verbosity);
     free(c->subagent_model);
     free(c->headers);
     free(c->project_dir);
@@ -258,7 +273,7 @@ static int auth_write(JValue *v)
     }
     str_adds(&o, "\n}\n");
     char *path = auth_path();
-    int ok = file_write(path, o.data, o.len);
+    int ok = file_write_atomic(path, o.data, o.len);
     free(path);
     str_free(&o);
     return ok;
@@ -642,6 +657,30 @@ int session_resume_last(const char *cwd, MsgList *msgs)
 /* ================================================================== */
 /* Prompt de sistema                                                   */
 /* ================================================================== */
+/* /verbosity: muda SO' a prosa em volta do resultado. O nivel de raciocinio
+   e o trabalho (tools, codigo, testes) ficam intactos — pedir menos texto
+   nunca pode virar menos trabalho nem pior qualidade. */
+static void add_verbosity_rules(Str *s, const char *level)
+{
+    if (str_eq(level, "low")) {
+        str_adds(s,
+            "- Verbosity is LOW: 1 to 2 short sentences of prose. No preamble (\"I'll take a look\"), no\n"
+            "  narrating the plan before acting, no recap of what you just did, no closing offer of further\n"
+            "  help. When the answer is a command, a path or a diff, that IS the whole reply.\n"
+            "- Short means less prose, never less work: code, diffs, commands, test output and findings\n"
+            "  keep their full size and exactness, with the same quality as always.\n");
+    } else if (str_eq(level, "high")) {
+        str_adds(s,
+            "- Verbosity is HIGH: before the result, one short paragraph on why that approach, which\n"
+            "  alternatives you rejected and what the caveat is. Do not pad and do not repeat the request.\n");
+    } else {
+        str_adds(s, "- Be concise: reply only in paragraphs of 2 to 3 lines.\n");
+    }
+    str_adds(s,
+        "- Never use bullet lists, numbered lists, headings or tables; fenced code blocks are the only\n"
+        "  exception.\n");
+}
+
 static void build_system_prompt(Agent *a)
 {
     Str s; str_init(&s);
@@ -654,9 +693,9 @@ static void build_system_prompt(Agent *a)
         "Response style (strict, always):\n"
         "- Serious, professional tone by default: no jokes, no small talk, no exclamation marks, "
         "no emojis or emoticons.\n"
-        "- Address the user as \"chefe\" at least once per reply, naturally inside a sentence.\n"
-        "- Be concise: reply only in paragraphs of 2 to 3 lines. Do not use bullet lists, "
-        "numbered lists, headings or tables; fenced code blocks are the only exception.\n"
+        "- Address the user as \"chefe\" at least once per reply, naturally inside a sentence.\n");
+    add_verbosity_rules(&s, a->cfg->verbosity);
+    str_adds(&s,
         "- Use **bold** for the essential term and *italic* for the nuance or caveat.\n"
         "- Put commands, paths, diffs and code inside fenced blocks with a language tag "
         "(```c, ```bash) or inline `code`.\n"

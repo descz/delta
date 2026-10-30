@@ -77,6 +77,42 @@ expect /tmp/delta_cmds.log "Limpa a conversa"      "bloco multilinha quebra linh
 reject /tmp/delta_cmds.log "esta ajud$"            "nenhuma linha perde o ultimo caractere"
 
 echo
+echo "[3c] verbosity: so' a prosa da resposta, thinking intacto"
+CFG_VB_ANTES=$(cat "$HOME/.deltaCore/config.json" 2>/dev/null)
+TH_ANTES=$(printf '%s' "$CFG_VB_ANTES" | grep -oE '"thinkingLevel": *"[a-z]+"')
+./bin/delta.exe --replay tests/replay-verbosity.txt 104 30 > /tmp/delta_vb.log 2>&1
+expect /tmp/delta_vb.log "Verbosidade: normal"                "/verbosity sem argumento lista os niveis"
+expect /tmp/delta_vb.log "Menos prosa"                       "nivel low descrito"
+expect /tmp/delta_vb.log "nivel invalido (low|normal|high)"   "nivel invalido recusado"
+expect /tmp/delta_vb.log "verbos.  : low"                    "/status mostra a verbosidade"
+expect /tmp/delta_vb.log "verbosity: normal"                 "volta ao normal"
+if grep -qE '"verbosity": *"(low|normal|high)"' "$HOME/.deltaCore/config.json" 2>/dev/null; then
+    pass "verbosity salva na config"
+else
+    fail "verbosity nao foi salva"
+fi
+TH_DEPOIS=$(grep -oE '"thinkingLevel": *"[a-z]+"' "$HOME/.deltaCore/config.json" 2>/dev/null)
+if [ "$TH_ANTES" = "$TH_DEPOIS" ]; then
+    pass "verbosity nao mexe no thinking"
+else
+    fail "verbosity alterou o thinking ($TH_ANTES -> $TH_DEPOIS)"
+fi
+[ -n "$CFG_VB_ANTES" ] && printf '%s' "$CFG_VB_ANTES" > "$HOME/.deltaCore/config.json"
+
+echo
+echo "[3d] selecao no transcript (arrasto, Ctrl+C copia, clique limpa)"
+./bin/delta.exe --replay tests/replay-selecao.txt 100 24 > /tmp/delta_sel.log 2>&1
+expect /tmp/delta_sel.log "fg=000000 bg=FFFFFF"  "selecao pintada com fundo branco e letra preta"
+expect /tmp/delta_sel.log "provedor : opencode-go" "texto da selecao sai limpo (sem moldura)"
+N_BRANCO=$(grep -c "fg=000000 bg=FFFFFF" /tmp/delta_sel.log)
+if [ "$N_BRANCO" -eq 2 ]; then pass "Ctrl+C copia sem apagar a selecao"
+else fail "Ctrl+C deveria manter a selecao ($N_BRANCO marcas brancas)"; fi
+N_INATIVA=$(grep -c "sel: inativa" /tmp/delta_sel.log)
+if [ "$N_INATIVA" -eq 2 ]; then pass "clique limpa a selecao"
+else fail "clique nao limpou a selecao ($N_INATIVA inativas, esperava 2)"; fi
+expect /tmp/delta_sel.log "nada rodando" "sem selecao, Ctrl+C segue interrompendo"
+
+echo
 echo "[3b] fila enquanto o agente trabalha (replay)"
 ./bin/delta.exe --replay tests/replay-fila.txt 80 24 > /tmp/delta_fila.log 2>&1
 expect /tmp/delta_fila.log "Working..."                  "status de trabalho visivel na borda do editor"
@@ -325,9 +361,41 @@ fi
 
 echo
 echo "[4b] prompt de sistema (tom serio, formato, chefe)"
-for alvo in 'Delta Agent' 'chefe' 'emojis' 'Serious, professional tone' 'paragraphs of 2 to 3 lines' 'fenced blocks'; do
+for alvo in 'Delta Agent' 'chefe' 'emojis' 'Serious, professional tone' 'Response style (strict, always)' 'fenced blocks'; do
     expect build/mock-last-request.json "$alvo" "prompt contem: $alvo"
 done
+
+echo
+echo "[4c] /verbosity muda so' a prosa no prompt (o thinking nao entra nele)"
+CFG_P=$(mktemp)
+cp "$HOME/.deltaCore/config.json" "$CFG_P" 2>/dev/null
+python - <<'PYEOF'
+import json, io, os
+p = os.path.expanduser("~/.deltaCore/config.json")
+d = json.load(io.open(p, encoding="utf-8"))
+d["verbosity"] = "low"
+io.open(p, "w", encoding="utf-8").write(json.dumps(d, indent=2))
+PYEOF
+./bin/delta.exe -p "oi" --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$PORT/v1" --api-key sk-teste > /tmp/delta_vbp.log 2>&1
+expect build/mock-last-request.json "Verbosity is LOW"            "nivel low entra no prompt"
+expect build/mock-last-request.json "1 to 2 short sentences"      "low pede 1-2 frases"
+reject build/mock-last-request.json "paragraphs of 2 to 3 lines"   "low nao usa o estilo normal"
+expect build/mock-last-request.json "Short means less prose"       "low nao encurta o trabalho"
+reject build/mock-last-request.json "Thinking longer"              "low nao mexe no raciocinio"
+[ -s "$CFG_P" ] && cp "$CFG_P" "$HOME/.deltaCore/config.json"
+rm -f "$CFG_P"
+
+echo
+echo "[4d] aviso quando o provedor para de mandar bytes"
+python tests/mock_openai.py "$((PORT + 12))" 1.2 0.02 > /dev/null 2>&1 &
+sleep 2
+DELTA_STALL_MS=300 ./bin/delta.exe --replay tests/replay-agent.txt 110 36 \
+    --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 12))/v1" --api-key sk-teste > /tmp/delta_stall.log 2>&1
+pkill -f "mock_openai.py $((PORT + 12))" >/dev/null 2>&1
+expect /tmp/delta_stall.log "sem dados do provedor"  "avisa que esta' esperando o provedor"
+expect /tmp/delta_stall.log "O arquivo contem: 42"   "o turno continua depois do aviso"
 
 echo
 echo "[5] modo nao interativo (-p)"
@@ -631,6 +699,30 @@ else
 fi
 
 echo
+echo "[15c] selecao: soltar nao copia, Ctrl+C copia"
+if [ "${DELTA_TEST_CLIPBOARD:-0}" != "1" ]; then
+    echo "  (pulado: mexe no seu clipboard - rode com DELTA_TEST_CLIPBOARD=1 para ativar)"
+elif command -v powershell >/dev/null 2>&1; then
+    powershell -STA -NoProfile -Command "Set-Clipboard -Value 'sentinela-nao-copia'" >/dev/null 2>&1
+    ./bin/delta.exe --replay tests/replay-selecao-solta.txt 100 24 > /tmp/delta_sel2.log 2>&1
+    CLIP=$(powershell -STA -NoProfile -Command "Get-Clipboard -Raw" 2>/dev/null | tr -d '\r')
+    if printf '%s' "$CLIP" | grep -q "sentinela-nao-copia"; then
+        pass "soltar o mouse nao copia nada"
+    else
+        fail "soltar o mouse mexeu no clipboard"
+    fi
+    ./bin/delta.exe --replay tests/replay-selecao.txt 100 24 > /tmp/delta_sel3.log 2>&1
+    CLIP=$(powershell -STA -NoProfile -Command "Get-Clipboard -Raw" 2>/dev/null | tr -d '\r')
+    if printf '%s' "$CLIP" | grep -q "provedor : "; then
+        pass "Ctrl+C pôs a selecao no clipboard"
+    else
+        fail "Ctrl+C nao copiou a selecao"
+    fi
+else
+    echo "  (sem powershell: pulando)"
+fi
+
+echo
 echo "[16] Ctrl+V no CONSOLE de verdade (o conhost cola o texto sozinho)"
 if [ "${DELTA_TEST_CLIPBOARD:-0}" != "1" ]; then
     echo "  (pulado: abre janela e mexe no clipboard - DELTA_TEST_CLIPBOARD=1 ativa)"
@@ -773,6 +865,14 @@ dump depois
 ./bin/delta.exe --tool memory '{"op":"search","query":"clang"}' > "$AR/am.log" 2>&1
 expect "$AR/am.log" "clang" "memoria automatica: diario"
 if grep -q '"kind":"preference"' "$MEM" 2>/dev/null; then pass "memoria automatica: preferencia"; else fail "memoria automatica: preferencia ausente"; fi
+if [ -f "$AR/memory.bak" ]; then cp "$AR/memory.bak" "$MEM"; else rm -f "$MEM"; fi
+
+# --- varias instancias gravando o mesmo memory.json (o "para do nada")
+if python tests/concurrency.py ./bin/delta.exe 6 20 > /tmp/delta_conc.log 2>&1; then
+    pass "6 instancias gravando ao mesmo tempo: nenhuma leitura cortada"
+else
+    fail "escrita concorrente corrompeu o memory.json"; tail -3 /tmp/delta_conc.log
+fi
 if [ -f "$AR/memory.bak" ]; then cp "$AR/memory.bak" "$MEM"; else rm -f "$MEM"; fi
 
 # --- agent (plan + skill index)

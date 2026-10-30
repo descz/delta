@@ -1,0 +1,26 @@
+# /verbosity: so' a prosa da resposta muda; o thinking e o trabalho nao.
+echo LISTA DE VERBOSIDADE
+type /verbosity
+key enter
+dump verbosity_lista
+
+echo NIVEL LOW
+type /verbosity low
+key enter
+status-off
+dump verbosity_low
+
+echo NIVEL INVALIDO
+type /verbosity alto
+key enter
+dump verbosity_invalido
+
+echo STATUS MOSTRA O NIVEL
+type /status
+key enter
+dump verbosity_status
+
+echo VOLTA AO NORMAL
+type /verbosity normal
+key enter
+dump verbosity_normal

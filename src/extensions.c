@@ -103,7 +103,7 @@ static int ext_save(const Ext *arr, int n)
     }
     str_addc(&out, ']');
     char *p = ext_path();
-    int ok = file_write(p, out.data, out.len);
+    int ok = file_write_atomic(p, out.data, out.len);
     free(p);
     str_free(&out);
     return ok;
