@@ -182,6 +182,22 @@ void term_set_title(const char *t)
     str_free(&s);
 }
 
+/* Titulo da aba: Δ Agent - <última pasta do projeto>. A pasta diz em que
+   projeto a aba trabalha (várias abas = vários projetos lado a lado); o
+   modelo na barra não diz nada que a própria conversa não diga. */
+void term_title_cwd(const char *cwd)
+{
+    if (!cwd || !*cwd) cwd = ".";
+    const char *fim = cwd + strlen(cwd);
+    while (fim > cwd && (fim[-1] == '/' || fim[-1] == '\\')) fim--;   /* barra do fim */
+    const char *ini = fim;
+    while (ini > cwd && ini[-1] != '/' && ini[-1] != '\\') ini--;     /* última pasta */
+    if (ini == fim) { ini = cwd; }                                    /* raiz: usa tudo */
+    char title[192];
+    snprintf(title, sizeof title, "Δ Agent - %.140s", ini);
+    term_set_title(title);
+}
+
 /* Usado pelo modo replay: fixa o tamanho sem um console real. */
 void term_set_size(int cols, int rows)
 {

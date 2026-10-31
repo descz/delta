@@ -49,6 +49,7 @@ int  term_poll_paste_hotkey(void);
 /* Apresenta a grade, escrevendo apenas as linhas que mudaram. */
 void term_present(Screen *s);
 void term_set_title(const char *title);
+void term_title_cwd(const char *cwd);   /* Δ Agent - <última pasta> */
 void term_set_size(int cols, int rows);
 /* Consulta se ha entrada pendente. */
 int  term_has_input(void);

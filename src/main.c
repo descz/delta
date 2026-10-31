@@ -2277,6 +2277,7 @@ static void handle_command(const char *raw)
             return;
         }
         agent_set_cwd(&app.agent, path);
+        term_title_cwd(path);           /* a aba acompanha a pasta do projeto */
         free(app.cfg.project_dir);
         app.cfg.project_dir = str_dup(path);
         config_save(&app.cfg);
@@ -4613,11 +4614,7 @@ int main(int argc, char **argv)
         return 1;
     }
     if (use_altscreen) term_alt_enter();
-    {
-        char title[128];
-        snprintf(title, sizeof title, "Delta Agent - %s", app.cfg.model ? app.cfg.model : "");
-        term_set_title(title);
-    }
+    term_title_cwd(app.agent.cwd);   /* Δ Agent - <última pasta> */
     tools_set_tick(tools_tick_ui, NULL);
     g_tui_ativa = 1;                            /* agora pode perguntar (picker) */
     provider_set_wait_tick(provider_tick_ui, NULL);
