@@ -2,6 +2,6 @@ type ola mundo do teste
 mouse 2 20 drag
 mouse 8 20 drag
 edsel
-key backspace
+mouse 50 3 click
 edsel
-dump depois_do_backspace
+dump depois_do_clique_fora

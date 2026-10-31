@@ -3559,22 +3559,26 @@ static void handle_event(const Event *ev)
             render();
             return;
         }
-        /* clique no editor: cursor vai para a posicao; selecao do prompt some */
+        /* clique em QUALQUER lugar da tela limpa a selecao do editor; o
+           cursor so' anda quando o clique caiu dentro da caixa de prompt */
+        int limpou = 0;
+        if (!app.menu_visible && !app.picker && app.ed_sel_ativa) {
+            ed_sel_clear();
+            limpou = 1;
+        }
         if (!app.menu_visible && !app.picker && !app.working &&
             g_ed_row0 >= 0 && ev->my >= g_ed_row0) {
             size_t b = ed_byte_at(ev->my, ev->mx);
-            if (b != (size_t)-1) {
-                app.cursor = b;
-                ed_sel_clear();
-            }
+            if (b != (size_t)-1) app.cursor = b;
             render();
             return;
         }
-        /* clique no transcript: limpa a selecao (nao seleciona mensagem) */
+        /* clique no transcript: limpa a selecao do chat tambem */
         if (!app.menu_visible && !app.picker && app.sel_active) {
             sel_clear();
-            render();
+            limpou = 1;
         }
+        if (limpou) render();
         return;
     }
 
