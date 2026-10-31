@@ -24,7 +24,7 @@ You talk in natural language and it does the work: reads and writes files, runs 
 git, searches the web, keeps memory and explains what it found — with the model you choose.
 
 It is a **single executable written in C11, with no dependencies at all**: no Node, Python, npm, pip
-or framework installer. On Windows it is **544 KB** and about **1.7 MB of private memory**.
+or framework installer. On Windows it is **636 KB** and about **1.7 MB of private memory**.
 
 ---
 
