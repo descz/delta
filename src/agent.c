@@ -856,11 +856,26 @@ static void agent_stream_trampoline(void *ud, int kind, const char *s, size_t n)
     if (ab || st) provider_stream_abort = 1;
 }
 
+/* Teto de passos do turno. 200 por padrao: tarefa longa (migracao, suite
+   inteira) nao morre no passo 60 no meio do trabalho. DELTA_MAX_STEPS
+   ajusta sem recompilar (0/negativo = padrao). */
+static int agent_max_steps(void)
+{
+    int n = 200;
+    char *v = env_get("DELTA_MAX_STEPS");
+    if (v && *v) {
+        int x = atoi(v);
+        if (x > 0) n = x;
+    }
+    free(v);
+    return n;
+}
+
 int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
 {
     if (user_text && *user_text) agent_push_user(a, user_text);
 
-    const int MAX_STEPS = 60;
+    const int MAX_STEPS = agent_max_steps();
     for (int step = 0; step < MAX_STEPS; step++) {
         /* intervalo entre thinking/tools: injeta mensagens enfileiradas */
         if (cb && cb->on_interval) cb->on_interval(cb->ud);
@@ -975,6 +990,6 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
         turn_free(&turn);
     }
 
-    if (err) str_adds(err, "limite de passos atingido");
-    return 1;
+    if (err) str_addf(err, "limite de passos (%d) atingido - diga continue para seguir", MAX_STEPS);
+    return 0;
 }

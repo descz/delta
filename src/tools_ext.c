@@ -610,7 +610,7 @@ static int shell_op(JValue *a, const char *cwd, ToolResult *res)
     if (str_eq(op, "run")) {
         const char *cmd = arg_s(a, "command");
         if (!*cmd) { err_out(res, "Erro: 'command' e' obrigatorio."); return 0; }
-        int timeout = arg_i(a, "timeout_seconds", 120);
+        int timeout = arg_i(a, "timeout_seconds", 600);
         uint64_t t0 = now_ms();
         int code = 0;
         if (!tools_exec(cwd, cmd, timeout, &res->output, &code)) {
@@ -1946,6 +1946,151 @@ static const char WEB_SCHEMA[] =
 /* ------------------------------------------------------------------ */
 /* memory                                                              */
 /* ------------------------------------------------------------------ */
+#define MEM_MAX_CONTENT 4000
+#define MEM_MAX_TITLE   200
+#define MEM_MAX_NOTES   1000
+
+/* Prefixos de credencial conhecidos. So' conta no inicio de um token para
+   nao redigir pedaco de palavra comum ("task-list", "risk-..."). */
+static size_t mem_secret_prefix(const char *p, const char *base)
+{
+    static const char *const pre[] = {
+        "sk-", "sk_", "oc_sk_", "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
+        "github_pat_", "xoxb-", "xoxp-", "xapp-", "AIza", "AKIA", "ASIA",
+        "ck_", "ak_", NULL
+    };
+    int boundary = p == base ||
+                   !((p[-1] >= 'a' && p[-1] <= 'z') || (p[-1] >= 'A' && p[-1] <= 'Z') ||
+                     (p[-1] >= '0' && p[-1] <= '9') || p[-1] == '_' || p[-1] == '-');
+    if (!boundary) return 0;
+    for (int i = 0; pre[i]; i++) {
+        size_t n = strlen(pre[i]);
+        if (ci_ncmp(p, pre[i], n) == 0) return n;
+    }
+    return 0;
+}
+
+static int mem_tok_char(char c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == '+';
+}
+
+/* Chaves cujo valor e' segredo ("api_key": "...", token=..., password: ...). */
+static size_t mem_secret_key(const char *p, const char *base)
+{
+    static const char *const keys[] = {
+        "api_key", "apikey", "api-key", "access_token", "auth_token", "token",
+        "secret", "password", "passwd", "authorization", NULL
+    };
+    int boundary = p == base ||
+                   !((p[-1] >= 'a' && p[-1] <= 'z') || (p[-1] >= 'A' && p[-1] <= 'Z') ||
+                     (p[-1] >= '0' && p[-1] <= '9') || p[-1] == '_');
+    if (!boundary) return 0;
+    for (int i = 0; keys[i]; i++) {
+        size_t n = strlen(keys[i]);
+        if (ci_ncmp(p, keys[i], n) != 0) continue;
+        const char *q = p + n;
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q == '"' || *q == '\'') q++;
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q == '=' || *q == ':') {
+            q++;
+            while (*q == ' ' || *q == '\t') q++;
+            return (size_t)(q - p);   /* posicao do valor */
+        }
+    }
+    return 0;
+}
+
+/* Copia `in` para `out` trocando credenciais por [REDACTED]. */
+static void mem_redact(const char *in, Str *out)
+{
+    if (!in) return;
+    const char *p = in;
+    while (*p) {
+        size_t plen = mem_secret_prefix(p, in);
+        if (plen) {
+            const char *q = p;
+            while (*q && *q != ' ' && *q != '\t' && *q != '\r' && *q != '\n' &&
+                   *q != '"' && *q != '\'' && *q != ',' && *q != ';' &&
+                   *q != ')' && *q != ']' && *q != '}')
+                q++;
+            if ((size_t)(q - p) >= plen + 6) {
+                str_adds(out, "[REDACTED]");
+                p = q;
+                continue;
+            }
+        }
+        if ((p == in || !mem_tok_char(p[-1])) && ci_ncmp(p, "Bearer ", 7) == 0) {
+            str_adds(out, "Bearer ");
+            p += 7;
+            while (*p == ' ' || *p == '\t') p++;
+            while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' &&
+                   *p != '"' && *p != '\'' && *p != ',' && *p != ';' &&
+                   *p != ')' && *p != ']' && *p != '}')
+                p++;
+            str_adds(out, "[REDACTED]");
+            continue;
+        }
+        size_t vpos = mem_secret_key(p, in);
+        if (vpos) {
+            char quote = 0;
+            const char *v = p + vpos;
+            if (*v == '"' || *v == '\'') quote = *v;
+            const char *fim = v;
+            if (quote) {
+                fim++;
+                while (*fim && *fim != quote) fim++;
+                if (*fim == quote) fim++;
+            } else {
+                while (*fim && !(*fim == ' ' || *fim == '\t' || *fim == '\n' ||
+                                 *fim == '\r' || *fim == ',' || *fim == ';' ||
+                                 *fim == '}' || *fim == ']')) fim++;
+            }
+            str_add(out, p, (size_t)(v - p));
+            str_adds(out, quote == '"' ? "\"[REDACTED]\"" : "[REDACTED]");
+            p = fim;
+            continue;
+        }
+        str_addc(out, *p++);
+    }
+}
+
+/* Redige e limita o texto que vai para o disco. */
+static void mem_clean(const char *in, size_t max, Str *out)
+{
+    Str tmp; str_init(&tmp);
+    mem_redact(in ? in : "", &tmp);
+    if (tmp.len > max) {
+        str_add(out, tmp.data, max);
+        str_adds(out, "...[truncado]");
+    } else {
+        str_add(out, tmp.data ? tmp.data : "", tmp.len);
+    }
+    str_free(&tmp);
+}
+
+static int mem_contains_ci(const char *hay, const char *needle)
+{
+    if (!hay || !needle || !*needle) return 0;
+    size_t nl = strlen(needle);
+    for (const char *p = hay; *p; p++)
+        if (!ci_ncmp(p, needle, nl)) return 1;
+    return 0;
+}
+
+static int mem_note_has(JValue *n, const char *q)
+{
+    if (mem_contains_ci(json_str(json_get(n, "title")), q) ||
+        mem_contains_ci(json_str(json_get(n, "content")), q))
+        return 1;
+    JValue *tags = json_get(n, "tags");
+    for (size_t i = 0; tags && i < tags->count; i++)
+        if (mem_contains_ci(json_str(tags->items[i]), q)) return 1;
+    return 0;
+}
+
 static char *memory_path(void)
 {
     char *dir = delta_home();
@@ -1975,18 +2120,30 @@ static int memory_save(JValue *arr)
         JValue *n = arr->items[i];
         if (i) str_addc(&out, ',');
         str_addc(&out, '{');
-        const char *keys[] = { "id", "title", "content", "kind", "scope", "tags", "created" };
+        const char *keys[] = { "id", "title", "content", "kind", "scope", "tags", "created", "updated" };
         int first = 1;
-        for (int k = 0; k < 7; k++) {
+        for (int k = 0; k < 8; k++) {
             JValue *v = json_get(n, keys[k]);
             if (!v) continue;
             if (!first) str_addc(&out, ',');
             first = 0;
             json_write_string(&out, keys[k], strlen(keys[k]));
             str_addc(&out, ':');
-            if (v->kind == J_STR) json_write_string(&out, v->str, strlen(v->str));
-            else if (v->kind == J_ARR) json_write_string(&out, "[]", 2);
-            else json_write_string(&out, "", 0);
+            if (v->kind == J_STR) {
+                json_write_string(&out, v->str, v->str ? strlen(v->str) : 0);
+            } else if (v->kind == J_ARR) {
+                str_addc(&out, '[');
+                for (size_t j = 0; j < v->count; j++) {
+                    JValue *tag = v->items[j];
+                    if (j) str_addc(&out, ',');
+                    if (tag && tag->kind == J_STR)
+                        json_write_string(&out, tag->str, tag->str ? strlen(tag->str) : 0);
+                    else str_adds(&out, "\"\"");
+                }
+                str_addc(&out, ']');
+            } else {
+                json_write_string(&out, "", 0);
+            }
         }
         str_addc(&out, '}');
     }
@@ -1998,10 +2155,48 @@ static int memory_save(JValue *arr)
     return ok;
 }
 
+static void mem_set(JValue *obj, const char *key, const char *val)
+{
+    JValue *pair = json_get(obj, key);
+    if (!pair) return;
+    free(pair->str);
+    pair->str = str_dup(val ? val : "");
+}
+
+static void mem_replace(JValue *obj, const char *key, JValue *nv)
+{
+    for (size_t i = 0; i < obj->count; i++) {
+        if (str_eq(obj->pairs[i].key, key)) {
+            json_free(obj->pairs[i].val);
+            obj->pairs[i].val = nv;
+            return;
+        }
+    }
+    json_free(nv);
+}
+
+/* "[\"a\",\"b\"]" -> array de strings (invalido/ausente vira []). */
+static JValue *mem_tags(const char *tags_json)
+{
+    JValue *arr = (*tags_json) ? json_parse_cstr(tags_json) : NULL;
+    if (!arr || arr->kind != J_ARR) {
+        if (arr) json_free(arr);
+        return json_parse_cstr("[]");
+    }
+    size_t n = 0;
+    for (size_t i = 0; i < arr->count; i++) {
+        JValue *tag = arr->items[i];
+        if (tag->kind != J_STR || !tag->str || !*tag->str) { json_free(tag); continue; }
+        arr->items[n++] = tag;
+        if (n >= 8) { for (size_t j = i + 1; j < arr->count; j++) json_free(arr->items[j]); break; }
+    }
+    arr->count = n;
+    return arr;
+}
+
 static JValue *memory_new_note(const char *title, const char *content, const char *kind,
                                const char *scope, const char *tags_json)
 {
-    (void)tags_json;
     char id[40];
     uuid_v4(id);
     char shortid[9];
@@ -2011,15 +2206,24 @@ static JValue *memory_new_note(const char *title, const char *content, const cha
     iso_now(ts);
 
     JValue *v;
-    v = json_parse_cstr("{\"id\":\"\",\"title\":\"\",\"content\":\"\",\"kind\":\"\",\"scope\":\"\",\"tags\":[],\"created\":\"\"}");
-    /* preenche por ponteiro (o parser ja criou as chaves) */
-    JValue *pair;
-    if ((pair = json_get(v, "id"))) { free(pair->str); pair->str = str_dup(shortid); }
-    if ((pair = json_get(v, "title"))) { free(pair->str); pair->str = str_dup(title); }
-    if ((pair = json_get(v, "content"))) { free(pair->str); pair->str = str_dup(content); }
-    if ((pair = json_get(v, "kind"))) { free(pair->str); pair->str = str_dup(*kind ? kind : "note"); }
-    if ((pair = json_get(v, "scope"))) { free(pair->str); pair->str = str_dup(*scope ? scope : "global"); }
-    if ((pair = json_get(v, "created"))) { free(pair->str); pair->str = str_dup(ts); }
+    v = json_parse_cstr("{\"id\":\"\",\"title\":\"\",\"content\":\"\",\"kind\":\"\","
+                        "\"scope\":\"\",\"tags\":[],\"created\":\"\",\"updated\":\"\"}");
+    Str t, c;
+    str_init(&t); str_init(&c);
+    mem_clean(title, MEM_MAX_TITLE, &t);
+    mem_clean(content, MEM_MAX_CONTENT, &c);
+
+    mem_set(v, "id", shortid);
+    mem_set(v, "title", t.data ? t.data : "");
+    mem_set(v, "content", c.data ? c.data : "");
+    mem_set(v, "kind", *kind ? kind : "note");
+    mem_set(v, "scope", *scope ? scope : "global");
+    mem_set(v, "created", ts);
+    mem_set(v, "updated", ts);
+    mem_replace(v, "tags", mem_tags(tags_json));
+
+    str_free(&t);
+    str_free(&c);
     return v;
 }
 
@@ -2032,10 +2236,23 @@ static void note_print(Str *out, JValue *n)
                  json_str(json_get(n, "content")));
         return;
     }
-    str_addf(out, "- [%s] %s (%s/%s)\n  %s\n",
+    Str tags; str_init(&tags);
+    JValue *tv = json_get(n, "tags");
+    for (size_t i = 0; tv && i < tv->count; i++) {
+        const char *tag = json_str(tv->items[i]);
+        if (!*tag) continue;
+        if (tags.len) str_adds(&tags, ",");
+        str_adds(&tags, tag);
+    }
+    Str sufixo; str_init(&sufixo);
+    if (tags.len) str_addf(&sufixo, " [%s]", tags.data);
+    str_addf(out, "- [%s] %s (%s/%s)%s\n  %s\n",
              json_str(json_get(n, "id")), json_str(json_get(n, "title")),
              kind, json_str(json_get(n, "scope")),
+             sufixo.data ? sufixo.data : "",
              json_str(json_get(n, "content")));
+    str_free(&sufixo);
+    str_free(&tags);
 }
 
 static int memory_op(JValue *a, const char *cwd, ToolResult *res)
@@ -2051,13 +2268,45 @@ static int memory_op(JValue *a, const char *cwd, ToolResult *res)
         const char *title = arg_s(a, "title");
         const char *content = arg_s(a, "content");
         if (!*title && !*content) { err_out(res, "Erro: informe 'title' ou 'content'."); json_free(arr); return 0; }
-        JValue *n = memory_new_note(title, content, arg_s(a, "kind"), arg_s(a, "scope"), arg_s(a, "tags_json"));
-        /* empilha no array */
-        arr->items = (JValue **)realloc(arr->items, (arr->count + 1) * sizeof(JValue *));
-        arr->items[arr->count++] = n;
-        ok = memory_save(arr);
-        if (ok) str_addf(&res->output, "Memory stored: %s\n", json_str(json_get(n, "id")));
-        else err_out(res, "Erro: falha ao gravar a memoria.");
+        const char *kind = *arg_s(a, "kind") ? arg_s(a, "kind") : "note";
+        /* dedupe: mesmo conteudo + kind atualiza a nota existente em vez de
+           empilhar outra igual (a auto-memoria repetia a mesma preferencia) */
+        Str cc; str_init(&cc);
+        mem_clean(content, MEM_MAX_CONTENT, &cc);
+        JValue *exist = NULL;
+        for (size_t i = 0; i < arr->count; i++) {
+            JValue *n = arr->items[i];
+            if (str_eq(json_str(json_get(n, "kind")), kind) &&
+                str_ieq(json_str(json_get(n, "content")), cc.data ? cc.data : "")) {
+                exist = n;
+                break;
+            }
+        }
+        str_free(&cc);
+        if (exist) {
+            if (*title) {
+                Str tt; str_init(&tt);
+                mem_clean(title, MEM_MAX_TITLE, &tt);
+                mem_set(exist, "title", tt.data ? tt.data : "");
+                str_free(&tt);
+            }
+            if (*arg_s(a, "scope")) mem_set(exist, "scope", arg_s(a, "scope"));
+            if (*arg_s(a, "tags_json")) mem_replace(exist, "tags", mem_tags(arg_s(a, "tags_json")));
+            char ts[32]; iso_now(ts);
+            mem_set(exist, "updated", ts);
+            ok = memory_save(arr);
+            if (ok) str_addf(&res->output, "Memory updated: %s (same content)\n",
+                             json_str(json_get(exist, "id")));
+            else err_out(res, "Erro: falha ao gravar a memoria.");
+        } else {
+            JValue *n = memory_new_note(title, content, kind, arg_s(a, "scope"), arg_s(a, "tags_json"));
+            /* empilha no array */
+            arr->items = (JValue **)realloc(arr->items, (arr->count + 1) * sizeof(JValue *));
+            arr->items[arr->count++] = n;
+            ok = memory_save(arr);
+            if (ok) str_addf(&res->output, "Memory stored: %s\n", json_str(json_get(n, "id")));
+            else err_out(res, "Erro: falha ao gravar a memoria.");
+        }
     } else if (str_eq(op, "update")) {
         const char *id = arg_s(a, "id");
         JValue *n = NULL;
@@ -2068,22 +2317,27 @@ static int memory_op(JValue *a, const char *cwd, ToolResult *res)
         for (int k = 0; k < 4; k++) {
             JValue *v = json_get(a, fields[k]);
             if (v && v->kind == J_STR) {
-                JValue *dst = json_get(n, fields[k]);
-                if (dst) { free(dst->str); dst->str = str_dup(v->str); }
+                Str t; str_init(&t);
+                mem_clean(v->str, k == 0 ? MEM_MAX_TITLE : MEM_MAX_CONTENT, &t);
+                mem_set(n, fields[k], t.data ? t.data : "");
+                str_free(&t);
             }
         }
+        if (*arg_s(a, "tags_json")) mem_replace(n, "tags", mem_tags(arg_s(a, "tags_json")));
+        char ts[32]; iso_now(ts);
+        mem_set(n, "updated", ts);
         ok = memory_save(arr);
         if (ok) str_addf(&res->output, "Memory updated: %s\n", id);
         else err_out(res, "Erro: falha ao gravar a memoria.");
     } else if (str_eq(op, "search") || str_eq(op, "query")) {
         const char *q = str_eq(op, "search") ? arg_s(a, "query") : "";
+        const char *scope = arg_s(a, "scope");
         int limit = arg_i(a, "limit", 20);
         int n = 0;
-        for (size_t i = 0; i < arr->count && n < limit; i++) {
-            JValue *note = arr->items[i];
-            const char *title = json_str(json_get(note, "title"));
-            const char *content = json_str(json_get(note, "content"));
-            if (!*q || strstr(title, q) || strstr(content, q)) { note_print(&res->output, note); n++; }
+        for (size_t i = arr->count; i > 0 && n < limit; ) {
+            JValue *note = arr->items[--i];
+            if (*scope && !str_eq(json_str(json_get(note, "scope")), scope)) continue;
+            if (!*q || mem_note_has(note, q)) { note_print(&res->output, note); n++; }
         }
         if (n == 0) str_adds(&res->output, "(nenhuma memoria encontrada)\n");
         ok = 1;
@@ -2091,8 +2345,8 @@ static int memory_op(JValue *a, const char *cwd, ToolResult *res)
         const char *scope = arg_s(a, "scope");
         int limit = arg_i(a, "limit", 50);
         int n = 0;
-        for (size_t i = 0; i < arr->count && n < limit; i++) {
-            JValue *note = arr->items[i];
+        for (size_t i = arr->count; i > 0 && n < limit; ) {
+            JValue *note = arr->items[--i];
             if (*scope && !str_eq(json_str(json_get(note, "scope")), scope)) continue;
             note_print(&res->output, note);
             n++;
@@ -3371,24 +3625,19 @@ static int mcp_op(JValue *a, const char *cwd, ToolResult *res)
 /* ------------------------------------------------------------------ */
 /* memoria automatica: roda quando o usuario manda a mensagem          */
 /* ------------------------------------------------------------------ */
-static int contem_ci(const char *hay, const char *needle)
-{
-    if (!hay || !needle || !*needle) return 0;
-    size_t nl = strlen(needle);
-    for (const char *p = hay; *p; p++)
-        if (!ci_ncmp(p, needle, nl)) return 1;
-    return 0;
-}
-
 static int memoria_tem(const JValue *arr, const char *texto, const char *kind)
 {
-    for (size_t i = 0; i < arr->count; i++) {
+    Str limpo; str_init(&limpo);
+    mem_clean(texto, MEM_MAX_CONTENT, &limpo);
+    int achou = 0;
+    for (size_t i = 0; i < arr->count && !achou; i++) {
         JValue *n = arr->items[i];
-        if (str_eq(json_str(json_get(n, "content")), texto) &&
-            str_eq(json_str(json_get(n, "kind")), kind))
-            return 1;
+        if (str_eq(json_str(json_get(n, "kind")), kind) &&
+            str_ieq(json_str(json_get(n, "content")), limpo.data ? limpo.data : ""))
+            achou = 1;
     }
-    return 0;
+    str_free(&limpo);
+    return achou;
 }
 
 static void memoria_add(JValue *arr, const char *title, const char *content, const char *kind, const char *scope)
@@ -3399,7 +3648,8 @@ static void memoria_add(JValue *arr, const char *title, const char *content, con
     arr->items[arr->count++] = n;
 }
 
-/* guarda a mensagem do usuario e extrai o que parece duradouro */
+/* Extrai o que parece duradouro. A mensagem crua NAO vira memoria: ela ja'
+   esta' no JSONL da sessao; memory.json guarda fato que vale entre sessoes. */
 void tools_auto_memorize(const char *texto)
 {
     if (!texto || !*texto) return;
@@ -3407,17 +3657,21 @@ void tools_auto_memorize(const char *texto)
 
     JValue *arr = memory_load();
 
-    /* 1) diario: a mensagem crua (limitada) */
-    char resumo[120];
-    size_t k = 0;
-    for (const char *p = texto; *p && k + 1 < sizeof resumo; p++) {
-        if (*p == '\n' || *p == '\r') break;
-        resumo[k++] = *p;
+    /* 1) limpa o diario das versoes antigas (kind=user/scope=session) */
+    size_t k2 = 0;
+    int removeu = 0;
+    for (size_t i = 0; i < arr->count; i++) {
+        JValue *n = arr->items[i];
+        if (str_eq(json_str(json_get(n, "kind")), "user") &&
+            str_eq(json_str(json_get(n, "scope")), "session")) {
+            json_free(n);
+            removeu = 1;
+            continue;
+        }
+        arr->items[k2++] = n;
     }
-    resumo[k] = 0;
-    char corpo[2048];
-    snprintf(corpo, sizeof corpo, "%.2000s", texto);
-    memoria_add(arr, resumo[0] ? resumo : "(mensagem)", corpo, "user", "session");
+    arr->count = k2;
+    size_t antes = arr->count;
 
     /* 2) heuristicas de fato duravel */
     static const char *marcas[] = {
@@ -3433,7 +3687,7 @@ void tools_auto_memorize(const char *texto)
         size_t ll = (size_t)(fim - p);
         if (ll >= 12 && ll < 400) {
             for (int i = 0; marcas[i]; i++) {
-                if (contem_ci(p, marcas[i])) {
+                if (mem_contains_ci(p, marcas[i])) {
                     char frase[420];
                     snprintf(frase, sizeof frase, "%.400s", p);
                     memoria_add(arr, "preferencia", frase, "preference", "global");
@@ -3444,25 +3698,22 @@ void tools_auto_memorize(const char *texto)
         p = *fim ? fim + 1 : fim;
     }
 
-    /* 3) poda o diario: mantem as 300 mensagens mais recentes */
-    int users = 0;
-    for (size_t i = 0; i < arr->count; i++)
-        if (str_eq(json_str(json_get(arr->items[i], "kind")), "user")) users++;
-    if (users > 300) {
-        int remover = users - 300;
-        size_t k2 = 0;
+    /* 3) teto geral: remove as notas mais antigas (links ficam por ultimo) */
+    if (arr->count > MEM_MAX_NOTES) {
+        size_t excesso = arr->count - MEM_MAX_NOTES;
+        size_t w = 0;
         for (size_t i = 0; i < arr->count; i++) {
-            if (remover > 0 && str_eq(json_str(json_get(arr->items[i], "kind")), "user")) {
+            if (excesso > 0 && !str_eq(json_str(json_get(arr->items[i], "kind")), "link")) {
                 json_free(arr->items[i]);
-                remover--;
+                excesso--;
                 continue;
             }
-            arr->items[k2++] = arr->items[i];
+            arr->items[w++] = arr->items[i];
         }
-        arr->count = k2;
+        arr->count = w;
     }
 
-    memory_save(arr);
+    if (removeu || arr->count != antes) memory_save(arr);
     json_free(arr);
 }
 

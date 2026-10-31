@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 #ifdef _WIN32
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -24,6 +25,9 @@
 #endif
 
 #define VERSION DELTA_VERSION
+
+/* Diagnostico de morte inesperada (definido junto do main). */
+static void diag_write(const char *what, const char *extra);
 
 /* ================================================================== */
 /* Modelo da conversa                                                  */
@@ -2169,6 +2173,7 @@ static void handle_command(const char *raw)
     }
 
     if (str_eq(cmd, "/quit") || str_eq(cmd, "/exit") || str_eq(cmd, "/q")) {
+        diag_write("quit: comando /quit", NULL);
         app.quit = 1;
         return;
     }
@@ -3705,7 +3710,7 @@ static void handle_event(const Event *ev)
                     }
                     render();
                 } else if (ev->cp == 'd') {
-                    if (app.input.len == 0) app.quit = 1;
+                    if (app.input.len == 0) { diag_write("quit: Ctrl+D com editor vazio", NULL); app.quit = 1; }
                     render();
                 } else if (ev->cp == 'l') {
                     app.tr_dirty = 1;
@@ -4276,9 +4281,126 @@ static int started_from_explorer(void)
 #endif
 }
 
+/* ================================================================== */
+/* Diagnostico de morte inesperada                                     */
+/* ================================================================== */
+/* O Delta sumia "do nada" sem deixar rastro. A partir daqui qualquer saida
+   anormal (falta, CRT, ctrl do console) registra o que aconteceu em
+   crash.log dentro de ~/.deltaCore — evidencia antes de consertar. */
+static char g_diag_path[1024];
+
+static void diag_write(const char *what, const char *extra)
+{
+    FILE *f = fopen(g_diag_path[0] ? g_diag_path : "delta-crash.log", "ab");
+    if (!f) return;
+    time_t t = time(NULL);
+    char ts[32];
+    strftime(ts, sizeof ts, "%Y-%m-%d %H:%M:%S", localtime(&t));
+#ifdef _WIN32
+    fprintf(f, "[%s] pid=%lu %s %s\n", ts, (unsigned long)GetCurrentProcessId(),
+            what, extra ? extra : "");
+#else
+    fprintf(f, "[%s] pid=%lu %s %s\n", ts, (unsigned long)getpid(),
+            what, extra ? extra : "");
+#endif
+    fclose(f);
+}
+
+static void diag_sig_unix(int sig);   /* frente para POSIX e SIGABRT do Win */
+
+#ifdef _WIN32
+static void diag_frames(FILE *f, ULONG_PTR *frames, DWORD n)
+{
+    HMODULE mod = NULL;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&diag_frames, &mod);
+    uintptr_t base = mod ? (uintptr_t)mod : 0;
+    fprintf(f, "  modulo base=%p\n", (void *)base);
+    for (DWORD i = 0; i < n; i++)
+        fprintf(f, "  #%lu %p (offset 0x%lx)\n", (unsigned long)i,
+                (void *)frames[i], base ? (unsigned long)((uintptr_t)frames[i] - base) : 0ul);
+}
+
+static LONG WINAPI diag_filter(EXCEPTION_POINTERS *ep)
+{
+    void *frames[32];
+    WORD n = CaptureStackBackTrace(0, 32, frames, NULL);
+    FILE *f = fopen(g_diag_path[0] ? g_diag_path : "delta-crash.log", "ab");
+    if (f) {
+        time_t t = time(NULL);
+        char ts[32];
+        strftime(ts, sizeof ts, "%Y-%m-%d %H:%M:%S", localtime(&t));
+        fprintf(f, "[%s] pid=%lu EXCECAO codigo=0x%08lx endereco=%p\n",
+                ts, (unsigned long)GetCurrentProcessId(),
+                ep->ExceptionRecord ? ep->ExceptionRecord->ExceptionCode : 0,
+                ep->ExceptionRecord ? (void *)ep->ExceptionRecord->ExceptionAddress : NULL);
+        diag_frames(f, (ULONG_PTR *)frames, n);
+        fclose(f);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;   /* mantem o comportamento padrao */
+}
+
+static void __cdecl diag_invalid_param(const wchar_t *expr, const wchar_t *func,
+                                       const wchar_t *file, unsigned int line,
+                                       uintptr_t reserved_unused)
+{
+    (void)expr; (void)func; (void)file; (void)line; (void)reserved_unused;
+    diag_write("CRT: parametro invalido/abort", NULL);
+}
+
+static void diag_sig_unix(int sig)
+{
+    char buf[64];
+    snprintf(buf, sizeof buf, "sinal %d", sig);
+    diag_write("morto por sinal/abort", buf);
+    _exit(128 + sig);
+}
+
+static BOOL WINAPI diag_ctrl(DWORD type)
+{
+    diag_write(type == CTRL_C_EVENT      ? "console: Ctrl+C (sistema)" :
+               type == CTRL_CLOSE_EVENT  ? "console: janela fechada" :
+               type == CTRL_LOGOFF_EVENT ? "console: logoff" :
+               type == CTRL_SHUTDOWN_EVENT ? "console: shutdown" :
+                                           "console: outro evento", NULL);
+    return FALSE;   /* nao segura o processo */
+}
+#endif /* _WIN32 */
+
+static void diag_atexit(void)
+{
+    diag_write("saida limpa (atexit)", NULL);
+}
+
+static void diag_install(void)
+{
+    char *home = delta_home();
+    if (home) {
+        char *p = path_join(home, "crash.log");
+        if (p && strlen(p) < sizeof g_diag_path) snprintf(g_diag_path, sizeof g_diag_path, "%s", p);
+        free(p);
+        free(home);
+    }
+    atexit(diag_atexit);
+#ifdef _WIN32
+    SetUnhandledExceptionFilter(diag_filter);
+    _set_invalid_parameter_handler(diag_invalid_param);
+    signal(SIGABRT, (void (__cdecl *)(int))diag_sig_unix);
+    SetConsoleCtrlHandler(diag_ctrl, TRUE);
+#else
+    signal(SIGABRT, diag_sig_unix);
+    signal(SIGSEGV, diag_sig_unix);
+    signal(SIGBUS,  diag_sig_unix);
+    signal(SIGILL,  diag_sig_unix);
+    signal(SIGFPE,  diag_sig_unix);
+#endif
+}
+
 int main(int argc, char **argv)
 {
     memset(&app, 0, sizeof app);
+    diag_install();              /* crash.log: evidencia de toda saida anormal */
     update_init(argv[0]);        /* argv[0] para achar o proprio exe (POSIX sem /proc) */
     str_init(&app.input);
     str_init(&app.work_msg);

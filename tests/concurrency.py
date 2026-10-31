@@ -34,17 +34,24 @@ def main():
     para = threading.Event()
 
     def ler_uma():
-        # mesmo padrao do file_read(): 20 tentativas de 5 ms
-        for _ in range(20):
+        # mesmo padrao do file_read(): leitura curta/vazia durante a janela de
+        # rename (delete-pending) e' TRANSITORIA — so' conta como corrupcao se
+        # persistir (1 s). Antes, 1 leitura vazia a cada ~240 escritas falhava
+        # o teste sem ser bug do gravador.
+        inicio = time.time()
+        while True:
             try:
                 with open(MEM, encoding="utf-8") as f:
                     json.load(f)
                 return None
             except json.JSONDecodeError as e:
-                return e
-            except (PermissionError, FileNotFoundError):
+                if time.time() - inicio > 1.0:
+                    return e
                 time.sleep(0.005)
-        return "nao abriu"
+            except (PermissionError, FileNotFoundError):
+                if time.time() - inicio > 1.0:
+                    return "nao abriu"
+                time.sleep(0.005)
 
     def leitor():
         while not para.is_set():
@@ -64,7 +71,7 @@ def main():
     def escritor(i):
         for k in range(POR_PROC):
             corpo = json.dumps({"op": "remember", "title": "stress-%d-%d" % (i, k),
-                                "content": "x" * 400})
+                                "content": "x" * 400 + "-%d-%d" % (i, k)})
             subprocess.run([BIN, "--tool", "memory", corpo],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 

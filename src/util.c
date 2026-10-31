@@ -334,41 +334,56 @@ static char *file_read_shared(const char *path, size_t *out_len)
     WCHAR *w = win_path(path);
     if (!w) return NULL;
 
-    HANDLE h = INVALID_HANDLE_VALUE;
-    for (int tentativa = 0; tentativa < 20; tentativa++) {
-        h = CreateFileW(w, GENERIC_READ,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (h != INVALID_HANDLE_VALUE) break;
-        DWORD err = GetLastError();
-        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) {
-            free(w);
-            return NULL;          /* nao existe mesmo: nao insiste */
+    /* O rename troca o arquivo no meio: entre GetFileSizeEx e ReadFile o
+       handle pode cair em delete-pending e a leitura vem vazia/curta (medido:
+       1 leitura vazia a cada ~240 escritas concorrentes). Quem le por cima
+       disso perde provedor/chave e a sessao "para do nada". Entao leitura
+       curta ou vazia NAO e' resposta: reabre e tenta de novo. */
+    for (int rodada = 0; rodada < 10; rodada++) {
+        HANDLE h = INVALID_HANDLE_VALUE;
+        for (int tentativa = 0; tentativa < 20; tentativa++) {
+            h = CreateFileW(w, GENERIC_READ,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                            NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (h != INVALID_HANDLE_VALUE) break;
+            DWORD err = GetLastError();
+            if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) {
+                free(w);
+                return NULL;          /* nao existe mesmo: nao insiste */
+            }
+            msleep(5);
         }
+        if (h == INVALID_HANDLE_VALUE) { free(w); return NULL; }
+
+        LARGE_INTEGER sz;
+        if (!GetFileSizeEx(h, &sz) || sz.QuadPart < 0 || sz.QuadPart > (LONGLONG)512 * 1024 * 1024) {
+            CloseHandle(h);
+            free(w);
+            return NULL;
+        }
+        size_t n = (size_t)sz.QuadPart;
+        char *buf = (char *)malloc(n + 1);
+        if (!buf) { CloseHandle(h); free(w); return NULL; }
+        size_t done = 0;
+        while (done < n) {
+            DWORD falta = (DWORD)((n - done) > ((size_t)1 << 30) ? ((size_t)1 << 30) : (n - done));
+            DWORD got = 0;
+            if (!ReadFile(h, buf + done, falta, &got, NULL) || got == 0) break;
+            done += got;
+        }
+        CloseHandle(h);
+        if (done == n) {              /* leitura completa: serve */
+            buf[done] = 0;
+            if (out_len) *out_len = done;
+            free(w);
+            return buf;
+        }
+        /* cortou (arquivo trocado sob os pés): pausa curta e comeca de novo */
+        free(buf);
         msleep(5);
     }
     free(w);
-    if (h == INVALID_HANDLE_VALUE) return NULL;
-
-    LARGE_INTEGER sz;
-    if (!GetFileSizeEx(h, &sz) || sz.QuadPart < 0 || sz.QuadPart > (LONGLONG)512 * 1024 * 1024) {
-        CloseHandle(h);
-        return NULL;
-    }
-    size_t n = (size_t)sz.QuadPart;
-    char *buf = (char *)malloc(n + 1);
-    if (!buf) { CloseHandle(h); return NULL; }
-    size_t done = 0;
-    while (done < n) {
-        DWORD falta = (DWORD)((n - done) > ((size_t)1 << 30) ? ((size_t)1 << 30) : (n - done));
-        DWORD got = 0;
-        if (!ReadFile(h, buf + done, falta, &got, NULL) || got == 0) break;
-        done += got;
-    }
-    CloseHandle(h);
-    buf[done] = 0;
-    if (out_len) *out_len = done;
-    return buf;
+    return NULL;
 }
 #endif
 

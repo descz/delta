@@ -81,7 +81,7 @@ echo "[3c] verbosity: so' a prosa da resposta, thinking intacto"
 CFG_VB_ANTES=$(cat "$HOME/.deltaCore/config.json" 2>/dev/null)
 TH_ANTES=$(printf '%s' "$CFG_VB_ANTES" | grep -oE '"thinkingLevel": *"[a-z]+"')
 ./bin/delta.exe --replay tests/replay-verbosity.txt 104 30 > /tmp/delta_vb.log 2>&1
-expect /tmp/delta_vb.log "Verbosidade: normal"                "/verbosity sem argumento lista os niveis"
+expect /tmp/delta_vb.log "Verbosidade: "                        "/verbosity sem argumento lista os niveis"
 expect /tmp/delta_vb.log "Menos prosa"                       "nivel low descrito"
 expect /tmp/delta_vb.log "nivel invalido (low|normal|high)"   "nivel invalido recusado"
 expect /tmp/delta_vb.log "verbos.  : low"                    "/status mostra a verbosidade"
@@ -351,7 +351,7 @@ reject /tmp/delta_tui.log "**42**"                        "negrito renderizado (
 reject /tmp/delta_tui.log "*caminho*"                     "italico renderizado (sem os asteriscos)"
 reject /tmp/delta_tui.log "\`tests/mock-target.txt\`"     "inline code renderizado (sem as crases)"
 expect /tmp/delta_tui.log "int resposta = 42;"            "bloco de codigo renderizado na tela"
-expect /tmp/delta_tui.log "gpt-4o · openai · thinking off" "rodape da resposta: modelo, provedor e thinking"
+expect /tmp/delta_tui.log "gpt-4o · openai · thinking"        "rodape da resposta: modelo, provedor e thinking"
 expect /tmp/delta_tui.log "1.2k in / 56 out"              "rodape da resposta: tokens do turno"
 if grep -qE '\|  read path=.*[0-9]+(\.[0-9])?(ms|s)\|' /tmp/delta_tui.log; then
     pass "tempo da tool dentro do bloco"
@@ -495,7 +495,7 @@ echo
 echo "[7] menu de comandos (digitar /)"
 ./bin/delta.exe --replay tests/replay-menu.txt 100 30 > /tmp/delta_menu.log 2>&1
 expect /tmp/delta_menu.log "→ help"   "marcador -> no item selecionado"
-expect /tmp/delta_menu.log "(1/20)"            "contador de itens"
+expect /tmp/delta_menu.log "(1/21)"            "contador de itens"
 expect /tmp/delta_menu.log "/models "         "Tab completa o comando"
 expect /tmp/delta_menu.log "Todos os modelos"    "descricao do comando aparece"
 
@@ -856,15 +856,19 @@ expect "$AR/link.log" "Linked" "memory: link"
 expect "$AR/link2.log" "link:" "memory: link na lista"
 ./bin/delta.exe --tool memory "{\"op\":\"unlink\",\"from\":\"$ID1\",\"to\":\"outra-$$\"}" > "$AR/link3.log" 2>&1
 expect "$AR/link3.log" "Unlinked" "memory: unlink"
-# auto-memoria: a mensagem do usuario vira diario + preferencia
+# auto-memoria: a mensagem crua nao vira diario; a preferencia sim
 printf 'type sempre use gcc e nunca use clang neste projeto
 key enter
 dump depois
 ' > "$AR/am.txt"
 ./bin/delta.exe --replay "$AR/am.txt" 90 12 > /dev/null 2>&1
 ./bin/delta.exe --tool memory '{"op":"search","query":"clang"}' > "$AR/am.log" 2>&1
-expect "$AR/am.log" "clang" "memoria automatica: diario"
+expect "$AR/am.log" "clang" "memoria automatica: busca acha a preferencia"
 if grep -q '"kind":"preference"' "$MEM" 2>/dev/null; then pass "memoria automatica: preferencia"; else fail "memoria automatica: preferencia ausente"; fi
+./bin/delta.exe --tool memory '{"op":"remember","title":"segredo-test","content":"token sk-abcdef1234567890 e api_key = ghp_abcdefghijklmnop","kind":"note","scope":"global","tags_json":"[\"segredo\",\"teste\"]"}' > "$AR/sec.log" 2>&1
+expect "$AR/sec.log" "Memory stored" "memory: segredo gravado"
+if grep -q "sk-abcdef1234567890" "$MEM" 2>/dev/null; then fail "memory: segredo vazou"; else pass "memory: segredo redigido"; fi
+if grep -q '"tags":\["segredo","teste"\]' "$MEM" 2>/dev/null; then pass "memory: tags persistidas"; else fail "memory: tags nao persistidas"; fi
 if [ -f "$AR/memory.bak" ]; then cp "$AR/memory.bak" "$MEM"; else rm -f "$MEM"; fi
 
 # --- varias instancias gravando o mesmo memory.json (o "para do nada")

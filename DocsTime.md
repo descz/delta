@@ -9,16 +9,16 @@
 ## 1. O que é o Delta
 
 **Delta Agent** é um agente de codificação de terminal escrito em **C11 puro, sem nenhuma
-dependência** — um único executável (544 KB no Windows) que fala com o provedor de modelo escolhido
+dependência** — um único executável (608.738 bytes ≈ 595 KB no build de referência Windows) que fala com o provedor de modelo escolhido
 e executa o trabalho: lê e edita arquivos, roda comandos, resolve git, consulta a web, usa skills,
 MCP, memória e um grafo do projeto.
 
 - Repositório público: <https://github.com/descz/delta> (branch `main`)
 - Site (GitHub Pages, em inglês): <https://descz.github.io/delta/> (`docs/`)
-- Releases: <https://github.com/descz/delta/releases> — **`v0.1.0` é o *latest***; o `v1.0.0`
+- Releases: <https://github.com/descz/delta/releases> — **`v0.1.11` é o *latest*** (release de 2026-10-30); o `v1.0.0`
   ficou marcado como **pre-release** (a numeração recomeçou por decisão do dono).
-  **Atenção:** `version_cmp` compara números, então `1.0.0 > 0.1.0` — quem já tem o `1.0.0`
-  instalado **não** é avisado do `0.1.0` (e `delta update` nele continuaria vendo o `0.1.0` como
+  **Atenção:** `version_cmp` compara números, então `1.0.0 > 0.1.11` — quem já tem o `1.0.0`
+  instalado **não** é avisado do `0.1.11` (e `delta update` nele continuaria vendo o `0.1.11` como
   "mais antigo"). Para esses, reinstalar pelo instalador ou `delta --setup`. O `1.0.0` precisa
   continuar como *pre-release*: como release normal ele voltaria a ser o "latest" da API.
 - Licença: **source-available, não comercial** — proíbe venda e clone, exige crédito. Ver `LICENSE`.
@@ -35,8 +35,8 @@ página do instalador e `LEIA-ME` estão em **inglês** por decisão do dono.
 
 | arquivo | papel |
 |---|---|
-| `main.c` | TUI: eventos, editor, transcript, comandos (`/login`, `/projects`, `/terminal`, `/forlimit`, `/undo`…), replay |
-| `agent.c` | loop do agente, sessões JSONL, montagem do prompt de sistema, config/auth, limite de tools por turno |
+| `main.c` | TUI: eventos, editor, transcript, comandos (`/login`, `/projects`, `/terminal`, `/verbosity`, `/update`, `/undo`…), replay |
+| `agent.c` | loop do agente (`MAX_STEPS` padrão 200, `DELTA_MAX_STEPS` ajusta), sessões JSONL, montagem do prompt de sistema, config/auth |
 | `provider.c` | streaming: WinHTTP (Windows) / `curl` (POSIX), SSE, tool calls, uso de tokens |
 | `codegraph.c` | grafo do projeto: varre o código uma vez, guarda arquivos/hash/símbolos/imports em `<core>/graphs/<slug>.graph` |
 | `tools.c` | ferramentas base: read/write/edit/bash/ls/grep/glob/diff + `graph` + `undo` |
@@ -75,7 +75,7 @@ package.bat               # dist\Delta.exe + zip
 Testes (sem framework, tudo em bash):
 
 ```bash
-bash tests/run_all.sh     # Windows: ~70 checagens (replay da TUI, mock de provedor, instalador, steer, grafo, undo, MCP stdio)
+bash tests/run_all.sh     # Windows: 283 checagens (replay da TUI, mock de provedor, instalador, steer, grafo, undo, MCP stdio)
 bash tests/run_posix.sh   # Linux/macOS: build, núcleo, replay, streaming real via curl, instalador, docs
 ```
 
@@ -194,7 +194,7 @@ Pré-requisito: `gh` autenticado como **descz** (`gh auth status`).
 
 ```bash
 # 1. versão (aparece em --version, no /status e no release)
-#    src/util.h:  #define DELTA_VERSION "0.1.0"   ->  "0.2.0"
+#    src/util.h:  #define DELTA_VERSION "0.1.11"  ->  "0.1.12"
 
 # 2. compilar e empacotar (Windows)
 taskkill //F //IM delta.exe 2>/dev/null
@@ -220,11 +220,11 @@ PY
 
 # 6. commit + push
 git add -A
-git -c user.name="descz" -c user.email="deszczfc@gmail.com" commit -m "release: v1.1.0 — <o que mudou>"
+git -c user.name="descz" -c user.email="deszczfc@gmail.com" commit -m "release: v0.1.12 — <o que mudou>"
 git push
 
 # 7. release
-gh release create v1.1.0 --repo descz/delta --title "Delta Agent 1.1.0" --notes-file build/RELEASE.md \
+gh release create v0.1.12 --repo descz/delta --title "Delta Agent 0.1.12" --notes-file build/RELEASE.md \
   "dist/Delta.exe#Delta.exe (Windows x64)" \
   "dist/Delta-windows-x64.zip#Delta-windows-x64.zip" \
   "dist/delta-linux-x86_64.run#delta-linux-x86_64.run (Linux x86_64)" \
@@ -233,11 +233,11 @@ gh release create v1.1.0 --repo descz/delta --title "Delta Agent 1.1.0" --notes-
   "dist/SHA256SUMS.txt#SHA256SUMS.txt"
 
 # 8. ou, para refazer os assets de um release existente:
-gh release upload v1.0.0 dist/Delta.exe dist/SHA256SUMS.txt --repo descz/delta --clobber
+gh release upload v0.1.11 dist/Delta.exe dist/SHA256SUMS.txt --repo descz/delta --clobber
 ```
 
 Notas do release: escreva em `build/RELEASE.md` (não versionado) — o modelo atual está no release
-`v1.0.0`; mantenha o formato (o que é, tabela de downloads, destaques, verificação, requisitos).
+`v0.1.11`; mantenha o formato (o que é, tabela de downloads, destaques, verificação, requisitos).
 
 **Notas de release são em inglês** (README, site e a página do instalador também). O texto que vira
 release fica em `build/RELEASE.md` (não versionado): escreva em inglês, com a tabela de downloads e a
@@ -255,10 +255,51 @@ v1.0.0) foram padronizados em inglês em 2026-10-28 via `gh release edit --notes
 |---|---|
 | **Windows 10/11 x64** | plataforma de referência — 283 checks de ponta a ponta + instalador e `delta update` exercitados à mão |
 | **Linux x86_64** | compila e roda (gcc 13, WSL, 32 checks: build, núcleo, replay, streaming real, instalador, self-update). **Nada de desktop** foi exercitado: `.desktop`, favoritos do GNOME, clipboard via `wl-copy`/`xclip` |
-| **macOS 11+** | **só código-fonte, nunca executado** (não há Mac). Camada nativa (`osascript`, `.app`, Dock) sem teste. Não prometa binário |
+| **macOS 11+** | **só código-fonte, nunca executado** (não há Mac) e **hoje não compila**: string com quebra crua em `setup.c` (ver seção 7). Camada nativa (`osascript`, `.app`, Dock) sem teste. Não prometa binário |
 
 Não mude o README, o site nem as notas para "works on macOS" sem rodar num Mac de verdade — a seção
 "What has actually been tested" existe justamente para isso.
+
+## 5c. Memória e tarefas longas (estado atual)
+
+**Arquivo único:** `~/.deltaCore/memory.json` — um array JSON reescrito inteiro (atômico) a cada
+gravação. `memory_save` (`tools_ext.c`) grava oito chaves: `id`, `title`, `content`, `kind`,
+`scope`, `tags`, `created`, `updated`. As tags agora são persistidas de verdade (até 8 por nota).
+
+**Sem diário automático:** `tools_auto_memorize()` (`main.c:1819` no replay e `1885` na TUI) **não
+grava mais a mensagem crua** — a conversa já está no JSONL da sessão. Ele remove notas legadas
+`kind=user`/`scope=session` e grava só frases com marca de fato durável (`sempre`, `nunca`,
+`prefiro`, `regra`…) como `kind=preference`, `scope=global`, deduplicando por conteúdo.
+
+**Redação:** `memory_new_note` e `update` passam por `mem_redact`: prefixos `sk-`, `oc_sk_`,
+`ghp_`, `github_pat_`, `xox[bp]-`, `AIza`, `AKIA`, `Bearer` e valores de
+`api_key`/`token`/`secret`/`password` viram `[REDACTED]`. Título 200 chars, conteúdo 4000.
+
+**Gravação:** `remember` deduplica por conteúdo+kind e atualiza a nota existente
+(`Memory updated: … (same content)`); `update` aceita `tags_json` e carimba `updated`. Teto de
+1000 notas: remove as mais antigas e preserva `kind=link`.
+
+**Consulta:** `search`/`query` é substring **sem caixa** em `title`/`content`/`tags`, aceita
+`scope` opcional, limite 20 e devolve da mais nova para a mais antiga; `list` idem, limite 50.
+
+**Tarefas longas:** `agent_run` usa **200 passos** por padrão (`DELTA_MAX_STEPS` ajusta); ao bater o
+teto o turno termina como erro visível (`limite de passos (N) atingido - diga continue para
+seguir`) — não é mais um retorno silencioso. `shell run` usa **600 s** por padrão (o modelo pode
+passar `timeout_seconds`). Sessões JSONL continuam gravando cada mensagem, `steer` retoma no mesmo
+turno, subagentes morrem em 900 s e escrevem em `<core>/jobs/*.out`.
+
+**Pendências:** escopo por pasta, migração das notas antigas que já têm segredo gravado (rodar com
+backup), busca por relevância e consolidação de notas vencidas.
+
+## 5d. Delta update (revisão)
+
+`update.c` consulta `releases/latest` (8 s, cache de 24 h em `<core>/update.json`), escolhe
+`Delta.exe` (Windows) ou `delta-linux-x86_64.tar.gz` (Linux), baixa e troca o executável em uso;
+macOS só avisa que não há binário. Windows renomeia para `.old` e **apaga o `.old` na hora** — se o
+binário novo não abrir, não há rollback automático; Linux grava `.new` e troca com `rename()`
+atômico. Não há verificação de SHA256 (o release publica `SHA256SUMS.txt`). `version_cmp` ignora
+sufixo (`-beta`), então o `1.0.0` prerelease ainda "vence" o `0.1.11` para quem o tem instalado.
+`DELTA_UPDATE_URL` aponta a consulta para um release falso nos testes.
 
 ## 6. Checklist antes de dizer "pronto"
 
@@ -302,6 +343,8 @@ Não mude o README, o site nem as notas para "works on macOS" sem rodar num Mac 
 | sessões de todas as pastas misturadas | `cwd_slug()` era stub; hoje gera slug real + migração |
 | `.exe` parado na tela antiga | faltou regerar `src/installer_html.h` e recompilar |
 | C quebrado com `'\\'` | escape perdido ao gerar arquivo via Python/sed; use `chr(92)` |
+| macOS não compila (`missing terminating "`) | `src/setup.c:389-394` tem string literal com quebra de linha crua no bloco `#ifdef __APPLE__`; o MinGW ignora o bloco, o clang quebra. Troque por `\n` explícito. |
+| memória virava diário e vazava segredo | até a 0.1.11 o `tools_auto_memorize` gravava toda mensagem crua (`kind=user`) sem redigir; `memory_save` descartava `tags` e não tinha `updated`. Hoje não grava mensagem crua, redige credenciais e remove as notas legadas `kind=user` no próximo turno. |
 
 ---
 
