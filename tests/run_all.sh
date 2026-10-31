@@ -392,7 +392,7 @@ reject /tmp/delta_cita.log "| col A | col B |"            "tabela: não vira lin
 echo
 echo "[3-edsel] seleção no editor: arrasto seleciona, backspace apaga"
 ./bin/delta.exe --replay tests/replay-edsel.txt 100 24 > /tmp/delta_edsel.log 2>&1
-expect /tmp/delta_edsel.log "edsel: ativa [0,6) texto='ola mu'" "editor: arrasto seleciona"
+expect /tmp/delta_edsel.log "edsel: ativa [0,6) texto='ola mu' fg=000000 bg=FFFFFF" "editor: arrasto seleciona (letra preta, fundo branco)"
 expect /tmp/delta_edsel.log "edsel: inativa"                 "editor: apagar limpa a seleção"
 expect /tmp/delta_edsel.log "|│ ndo do teste"               "editor: backspace apagou o selecionado"
 expect /tmp/delta_tui.log "1.2k in / 56 out"              "rodape da resposta: tokens do turno"

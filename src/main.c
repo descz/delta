@@ -28,6 +28,10 @@
 
 /* Diagnostico de morte inesperada (definido junto do main). */
 static void diag_write(const char *what, const char *extra);
+static void ed_sel_clear(void);
+static void ed_sel_delete_range(void);
+static void ed_copy_selection(void);
+static void notify_status(const char *fmt, ...);
 
 /* ================================================================== */
 /* Modelo da conversa                                                  */
@@ -347,7 +351,27 @@ static void ed_sel_delete_range(void)
     app.cursor = a;
 }
 
-/* pinta a selecao do editor por cima do que o ui_editor desenhou */
+/* Ctrl+C com selecao no editor: copia e limpa a selecao */
+static void ed_copy_selection(void)
+{
+    size_t a = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_a : app.ed_sel_b;
+    size_t b = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_b : app.ed_sel_a;
+    if (a > app.input.len) a = app.input.len;
+    if (b > app.input.len) b = app.input.len;
+    if (a == b) return;
+    Str t; str_init(&t);
+    str_add(&t, app.input.data + a, b - a);
+    if (clipboard_write_text(t.data ? t.data : ""))
+        notify_status("seleção copiada (%d caracteres)", (int)strn_width(app.input.data + a, b - a));
+    else
+        notify_status("não deu para copiar (clipboard ocupado?)");
+    str_free(&t);
+    ed_sel_clear();
+}
+
+/* pinta a selecao do editor por cima do que o ui_editor desenhou:
+   RECOLORE as celulas no lugar (fundo branco, letra PRETA) — pintar um
+   espaco por cima apagava o glifo e a selecao virava uma barra branca */
 static void ed_paint_selection(void)
 {
     if (!app.ed_sel_ativa || !g_ed_st || !g_ed_en || g_ed_rows == 0) return;
@@ -355,7 +379,6 @@ static void ed_paint_selection(void)
     size_t b = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_b : app.ed_sel_a;
     if (a > app.input.len || b > app.input.len || a == b) return;
 
-    Style sel = { 0x000000u, 0xFFFFFFu, 0 };       /* fundo branco, letra preta */
     for (size_t k = 0; k < g_ed_rows && (int)k < ED_MAX_ROWS; k++) {
         size_t idx = g_ed_first + k;
         if (idx >= g_ed_rows) break;
@@ -370,16 +393,20 @@ static void ed_paint_selection(void)
             if (c <= 0) break;
             int cw2 = cp_width(cp);
             int x = 2 + col;
-            for (int j = 0; j < cw2 && x + j < app.screen.cols - 2; j++)
-                screen_put(&app.screen, x + j, g_ed_row0 + (int)k, ' ', sel);
+            for (int j = 0; j < cw2; j++) {
+                size_t cel = (size_t)(g_ed_row0 + (int)k) * (size_t)app.screen.cols + (size_t)(x + j);
+                if (x + j >= app.screen.cols - 2) break;
+                app.screen.fg[cel] = 0x000000u;
+                app.screen.bg[cel] = 0xFFFFFFu;
+                app.screen.at[cel] &= (uint8_t)~ATTR_INVERSE;
+                app.screen.at[cel] &= (uint8_t)~ATTR_DIM;
+            }
             col += cw2;
             i += (size_t)c;
         }
     }
 }
 
-static void ed_sel_clear(void);
-static void ed_sel_delete_range(void);
 static void open_picker(int kind);
 /* Rola a conversa: +1 = roda para cima (conteudo mais antigo). */
 static void scroll_wheel(int shift);
@@ -1552,6 +1579,8 @@ static void ui_poll_input(void)
         if (!term_read(&ev, 0)) break;
         steer_dbg("ev type=%d cp=%u working=%d", (int)ev.type, (unsigned)ev.cp, app.working);
         if (ev.type == EV_CTRL && ev.cp == 'c') {
+            /* selecao no editor: Ctrl+C copia (nao interrompe o turno) */
+            if (app.ed_sel_ativa) { ed_copy_selection(); render(); continue; }
             /* selecao ativa: Ctrl+C copia (nao interrompe o turno) */
             if (app.sel_active && sel_has_text()) {
                 copy_selection();
@@ -3500,7 +3529,12 @@ static void handle_event(const Event *ev)
         }
         return;
     }
-    if (ev->type == EV_RELEASE) return;   /* soltar nao copia: o Ctrl+C copia */
+    if (ev->type == EV_RELEASE) {
+        /* soltar nao copia: o Ctrl+C copia. Soltar sem arrasto nenhum
+           (clique com jitter) nao pode deixar "selecao" vazia pendurada */
+        if (app.ed_sel_ativa && app.ed_sel_a == app.ed_sel_b) ed_sel_clear();
+        return;
+    }
     if (ev->type == EV_WHEEL) {
         int n = (int)g_items_n;
         if ((app.menu_visible || app.picker) && n > 0) {
@@ -3756,9 +3790,14 @@ static void handle_event(const Event *ev)
                     free(dir);
                     render();
                 } else if (ev->cp == 'c') {
-                    /* Ctrl+C nunca fecha o app: com selecao no transcript,
-                       copia; sem selecao, interrompe a geracao ou limpa o
-                       editor. Sair e' /quit ou Ctrl+D. */
+                    /* Ctrl+C nunca fecha o app: com selecao no editor copia;
+                       com selecao no transcript, copia; sem selecao, interrompe
+                       a geracao ou limpa o editor. Sair e' /quit ou Ctrl+D. */
+                    if (app.ed_sel_ativa) {
+                        ed_copy_selection();
+                        render();
+                        break;
+                    }
                     if (app.sel_active && sel_has_text()) {
                         copy_selection();
                         render();
@@ -4185,9 +4224,15 @@ static int run_replay(const char *path, int cols, int rows, int force_offline)
                 size_t a = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_a : app.ed_sel_b;
                 size_t b = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_b : app.ed_sel_a;
                 if (b > app.input.len) b = app.input.len;
-                printf("edsel: ativa [%zu,%zu) texto='%.*s'\n", a, b,
+                render();
+                /* cores da primeira celula pintada (prova do fundo branco/letra preta) */
+                size_t idx0 = g_ed_first;
+                int col0 = (a > g_ed_st[idx0]) ? strn_width(app.input.data + g_ed_st[idx0], a - g_ed_st[idx0]) : 0;
+                size_t cel = (size_t)(g_ed_row0) * (size_t)app.screen.cols + (size_t)(2 + col0);
+                printf("edsel: ativa [%zu,%zu) texto='%.*s' fg=%06X bg=%06X\n", a, b,
                        (int)(b > a ? b - a : 0),
-                       app.input.data ? app.input.data + a : "");
+                       app.input.data ? app.input.data + a : "",
+                       app.screen.fg[cel], app.screen.bg[cel]);
             }
         } else if (str_eq(line, "sel")) {
             /* sel - estado da selecao, cores da primeira celula e o texto que
