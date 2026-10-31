@@ -715,7 +715,10 @@ static void build_system_prompt(Agent *a)
         "- The unified families cover the rest: fs (files), shell (commands and background jobs), "
         "git, web, skills, mcp, memory, code, assert, agent and extend — each takes an \"op\" field.\n"
         "- Durable facts from the user are saved automatically in memory (search it before asking again). "
-        "When a workflow repeats, save it as a skill with the skills tool.\n");
+        "When a workflow repeats, save it as a skill with the skills tool.\n"
+        "- Complex or multi-step request: FIRST create a plan with the agent tool (op=plan, markdown "
+        "with \"- [ ]\" checkboxes), keep it updated while you work (mark \"- [x]\" the moment an item "
+        "is done), and when every item is checked the plan closes itself — no need to delete it.\n");
 
     {
         char *idx = tools_skills_index(a->cwd, 2400);
@@ -728,6 +731,24 @@ static void build_system_prompt(Agent *a)
             str_adds(&s, "Se a tarefa se repetir, salve o jeito de fazer como skill (skills op=create).\n");
         }
         free(idx);
+    }
+
+    /* relato vivo da sessao: o fio da conversa vem do memory a cada passo,
+      entao as saidas antigas podem sair do request sem o modelo se perder.
+      Detalhe especifico fica sob demanda: memory op=search por palavras-chave
+      (nao leia a sessao inteira — busque so' o que precisar). */
+    {
+        char *rel = tools_session_report();
+        if (rel && *rel) {
+            str_adds(&s,
+                "\nRelato desta sessão (o fio da conversa, mantido no memory):\n");
+            str_adds(&s, rel);
+            str_addc(&s, '\n');
+            str_adds(&s,
+                "Para detalhes que sairam do contexto, use memory op=search por "
+                "palavras-chave em vez de pedir para repetir algo.\n");
+        }
+        free(rel);
     }
 
     str_adds(&s, "\nEnvironment:\n");
@@ -871,6 +892,52 @@ static int agent_max_steps(void)
     return n;
 }
 
+/* Teto de saídas de ferramenta no request. Task longa não pode crescer sem
+   controle: cada passo reenvia a conversa inteira, e saída de read/bash antiga
+   já foi processada — acima do teto, as saídas fora das últimas KEEP viram um
+   marcador curto. O fio da conversa está no relato vivo (memory, injetado no
+   system prompt), então o modelo não se perde. A sessão em disco guarda tudo.
+   DELTA_TRIM_CHARS / DELTA_TRIM_KEEP ajustam sem recompilar. */
+static void agent_trim_tool_outputs(MsgList *msgs)
+{
+    long teto = 60000;
+    int keep = 12;
+    char *e = env_get("DELTA_TRIM_CHARS");
+    if (e && *e) { long x = atol(e); if (x >= 0) teto = x; }
+    free(e);
+    e = env_get("DELTA_TRIM_KEEP");
+    if (e && *e) { int x = atoi(e); if (x >= 0) keep = x; }
+    free(e);
+
+    /* indices das saidas de ferramenta + total de caracteres */
+    size_t *idx = NULL;
+    size_t n_tool = 0, cap = 0;
+    long total = 0;
+    for (size_t i = 0; i < msgs->n; i++) {
+        if (msgs->items[i].role != ROLE_TOOL) continue;
+        if (n_tool == cap) {
+            cap = cap ? cap * 2 : 32;
+            idx = (size_t *)realloc(idx, cap * sizeof(size_t));
+            if (!idx) return;
+        }
+        idx[n_tool++] = i;
+        total += (long)(msgs->items[i].text.len);
+    }
+    if ((long)n_tool <= keep || total <= teto) { free(idx); return; }
+
+    size_t corta_ate = n_tool - (size_t)keep;   /* corta [0, corta_ate) */
+    for (size_t k = 0; k < corta_ate; k++) {
+        Msg *m = &msgs->items[idx[k]];
+        if (m->text.len <= 200) continue;       /* stub maior que a saida: nao compensa */
+        str_clear(&m->text);
+        str_addf(&m->text,
+                 "[Saída de %s omitida — já processada. O histórico completo está na sessão; "
+                 "para recuperar um detalhe, use memory op=search com palavras-chave.]",
+                 m->tool_name ? m->tool_name : "ferramenta");
+    }
+    free(idx);
+}
+
 int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
 {
     if (user_text && *user_text) agent_push_user(a, user_text);
@@ -879,6 +946,7 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
     for (int step = 0; step < MAX_STEPS; step++) {
         /* intervalo entre thinking/tools: injeta mensagens enfileiradas */
         if (cb && cb->on_interval) cb->on_interval(cb->ud);
+        agent_trim_tool_outputs(&a->msgs);
         if (cb && cb->should_abort && cb->should_abort(cb->ud)) {
             if (err) str_adds(err, "interrompido");
             return 0;

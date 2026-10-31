@@ -67,6 +67,14 @@ void  tools_oem_to_utf8(Str *out);   /* console do Windows: cp850 -> UTF-8 */
 /* Salva a mensagem do usuario e os fatos duraveis em ~/.deltaCore/memory.json. */
 void  tools_auto_memorize(const char *texto);
 
+/* Relato vivo da sessao (kind=report no memory.json): o fio da conversa,
+   atualizado sem chamar o modelo. O system prompt o reinjeta a cada passo —
+   entao encurtar o contexto nao apaga o fio. Detalhe antigo: memory search. */
+void  tools_report_user(const char *pedido);                    /* antes de responder */
+void  tools_report_tool(const char *nome, const char *alvo, int is_error); /* tool fim */
+void  tools_report_turn_end(const char *status);                /* fecha o turno */
+char *tools_session_report(void);                               /* malloc ou NULL */
+
 /* Indice de skills (skills/, ~/.deltaCore/skills e ~/.agents/skills) para o prompt. */
 char *tools_skills_index(const char *cwd, size_t max_chars);
 

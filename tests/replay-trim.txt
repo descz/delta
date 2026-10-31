@@ -1,0 +1,5 @@
+# Roteiro: tarefa com 12 tool calls de saida grande — o Delta deve encurtar as
+# saidas antigas do request (relato vivo cobre o fio; DELTA_TRIM_CHARS/KEEP no teste).
+type corte o historico
+key enter
+dump resposta_corte

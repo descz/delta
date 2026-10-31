@@ -1,0 +1,4 @@
+# /report sem relato: sessao nova nunca rodou uma mensagem
+type /report
+key enter
+dump report_vazio

@@ -11,6 +11,7 @@ export DELTA_NO_CATALOG_REFRESH=1
 CFG_GLOBAL="$HOME/.deltaCore/config.json"
 cp "$CFG_GLOBAL" "$ROOT/build/cfg-global.bak" 2>/dev/null
 AUTH_GLOBAL="$HOME/.deltaCore/auth.json"
+MEM="$HOME/.deltaCore/memory.json"
 cp "$AUTH_GLOBAL" "$ROOT/build/auth-global.bak" 2>/dev/null
 MEM_GLOBAL="$HOME/.deltaCore/memory.json"
 cp "$MEM_GLOBAL" "$ROOT/build/mem-global.bak" 2>/dev/null
@@ -266,13 +267,13 @@ dump inicio
 ' > build/resume/r2.txt
 (cd build/resume && ../../bin/delta.exe --replay r1.txt 100 40     --provider openai --baseurl "http://127.0.0.1:$((PORT + 11))/v1" --api-key sk-teste     > /dev/null 2>&1)
 (cd build/resume && ../../bin/delta.exe --replay r2.txt 100 40 --resume     --provider openai --baseurl "http://127.0.0.1:$((PORT + 11))/v1" --api-key sk-teste     > /tmp/delta_resume.log 2>&1)
-expect /tmp/delta_resume.log "sessao retomada"      "retoma a sessao da pasta"
+expect /tmp/delta_resume.log "sessão retomada"      "retoma a sessao da pasta"
 expect /tmp/delta_resume.log "leia mock-target.txt" "historico anterior reconstruido"
 # `delta` sem nenhuma flag: chat novo (nao retoma nada)
 (cd build/resume && ../../bin/delta.exe --replay r2.txt 100 40     --provider openai --baseurl "http://127.0.0.1:$((PORT + 11))/v1" --api-key sk-teste     > /tmp/delta_new.log 2>&1)
-reject /tmp/delta_new.log "sessao retomada"         "delta sem flag nao retoma (chat novo)"
+reject /tmp/delta_new.log "sessão retomada"         "delta sem flag não retoma (chat novo)"
 (cd build/resume && ../../bin/delta.exe --replay r2.txt 100 40 continue     --provider openai --baseurl "http://127.0.0.1:$((PORT + 11))/v1" --api-key sk-teste     > /tmp/delta_cont.log 2>&1)
-expect /tmp/delta_cont.log "sessao retomada"        "delta continue retoma a sessao"
+expect /tmp/delta_cont.log "sessão retomada"        "delta continue retoma a sessao"
 # o thinking tem que sobreviver ao resume (nao pode sumir do transcript)
 if grep -q "pensando\|thinking\|Vou ler" /tmp/delta_cont.log; then
     pass "thinking reconstruido ao retomar"
@@ -352,6 +353,26 @@ reject /tmp/delta_tui.log "*caminho*"                     "italico renderizado (
 reject /tmp/delta_tui.log "\`tests/mock-target.txt\`"     "inline code renderizado (sem as crases)"
 expect /tmp/delta_tui.log "int resposta = 42;"            "bloco de codigo renderizado na tela"
 expect /tmp/delta_tui.log "gpt-4o · openai · thinking"        "rodape da resposta: modelo, provedor e thinking"
+
+echo
+echo "[4-relato] relato vivo no memory (o fio da conversa)"
+expect "$MEM" '"kind":"report"'                       "relato: nota no memory"
+expect "$MEM" 'Pedidos: leia tests/mock-target.txt'   "relato: pedido do usuario registrado"
+expect "$MEM" 'read(tests/mock-target.txt; ok)'        "relato: ferramenta concluida no relato"
+expect build/mock-last-request.json "Relato desta sessão" "relato injetado no system prompt"
+
+echo
+echo "[4-trim] encurtamento de saídas antigas (task longa não degrada)"
+DELTA_TRIM_CHARS=500 DELTA_TRIM_KEEP=2 ./bin/delta.exe --replay tests/replay-trim.txt 100 24 \
+    --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$PORT/v1" --api-key sk-teste > /tmp/delta_trim.log 2>&1
+expect /tmp/delta_trim.log "corte ok"                 "tarefa com 12 tools termina"
+expect build/mock-last-request.json "[Saída de shell omitida" "saída antiga vira marcador no request"
+
+echo
+echo "[3-report] /report mostra o relato da sessão"
+./bin/delta.exe --replay tests/replay-report.txt 100 24 > /tmp/delta_report.log 2>&1
+expect /tmp/delta_report.log "Sem relato ainda"       "/report sem relato ainda"
 expect /tmp/delta_tui.log "1.2k in / 56 out"              "rodape da resposta: tokens do turno"
 if grep -qE '\|  read path=.*[0-9]+(\.[0-9])?(ms|s)\|' /tmp/delta_tui.log; then
     pass "tempo da tool dentro do bloco"
@@ -495,7 +516,7 @@ echo
 echo "[7] menu de comandos (digitar /)"
 ./bin/delta.exe --replay tests/replay-menu.txt 100 30 > /tmp/delta_menu.log 2>&1
 expect /tmp/delta_menu.log "→ help"   "marcador -> no item selecionado"
-expect /tmp/delta_menu.log "(1/21)"            "contador de itens"
+expect /tmp/delta_menu.log "(1/22)"            "contador de itens"
 expect /tmp/delta_menu.log "/models "         "Tab completa o comando"
 expect /tmp/delta_menu.log "Todos os modelos"    "descricao do comando aparece"
 
@@ -563,9 +584,9 @@ echo "[10] /thinking + lista de modelos  "
 CFG_ANTES=$(cat "$HOME/.deltaCore/config.json" 2>/dev/null)
 AUTH_ANTES2=$(cat "$HOME/.deltaCore/auth.json" 2>/dev/null)
 ./bin/delta.exe --replay tests/replay-thinking.txt 108 30 > /tmp/delta_think.log 2>&1
-expect /tmp/delta_think.log "nao anuncia raciocinio no models.dev" "avisa quando o modelo nao anuncia reasoning"
+expect /tmp/delta_think.log "não anuncia raciocínio no models.dev" "avisa quando o modelo nao anuncia reasoning"
 expect /tmp/delta_think.log "o modelo aceita: low, high, max"      "so os niveis que o modelo aceita"
-expect /tmp/delta_think.log "Desliga o raciocinio"                 "niveis listados no seletor"
+expect /tmp/delta_think.log "Desliga o raciocínio"                 "niveis listados no seletor"
 expect /tmp/delta_think.log "Pensamento curto"                     "descricao de cada nivel"
 expect /tmp/delta_think.log "(3/4)"                                "navegacao move o destaque"
 expect /tmp/delta_think.log "deepseek/deepseek-flash"              "lista como provedor/modelo"
@@ -617,7 +638,7 @@ expect /tmp/delta_logout.log "Select provider to disconnect:" "lista de desconex
 expect /tmp/delta_logout.log "env: DEEPSEEK_API_KEY"          "mostra como cada um esta conectado"
 expect /tmp/delta_logout.log "stored"                         "mostra a chave salva"
 expect /tmp/delta_logout.log "(2/2)"                          "roda do mouse move a selecao"
-expect /tmp/delta_logout.log "nao ha o que remover"           "chave de ambiente nao some"
+expect /tmp/delta_logout.log "não há o que remover"           "chave de ambiente nao some"
 if grep -q "groq" "$HOME/.deltaCore/auth.json" 2>/dev/null; then
     fail "groq deveria ter sido desconectado"
 else
@@ -884,6 +905,10 @@ PLAN="$HOME/.deltaCore/plan.md"
 [ -f "$PLAN" ] && cp "$PLAN" "$AR/plan.bak"
 ./bin/delta.exe --tool agent '{"op":"plan","plan_markdown":"- [x] um\n- [ ] dois\n"}' > "$AR/plan.log" 2>&1
 expect "$AR/plan.log" "1 pendentes, 1 concluidos" "agent: plan"
+./bin/delta.exe --tool agent '{"op":"plan","plan_markdown":"- [x] um\n- [x] dois\n"}' > "$AR/plan2.log" 2>&1
+expect "$AR/plan2.log" "painel encerrado"             "agent: plano completo encerra o painel"
+if [ ! -f "$PLAN" ]; then pass "plano concluido: plan.md saiu da tela"
+else fail "plan.md deveria sumir quando tudo concluido"; fi
 if ./bin/delta.exe --tool agent '{"op":"skill"}' > "$AR/skill.log" 2>&1; then
     pass "agent: skill index"
 else

@@ -98,6 +98,26 @@ class Handler(BaseHTTPRequestHandler):
 
         tem_resultado = any(m.get("role") == "tool" for m in body.get("messages", []))
 
+        if "corte" in ultimo:
+            # encurtamento de saidas antigas: 12 tool_calls de shell com saida
+            # grande; nas 2 ultimas o Delta responde texto.
+            n_tools = sum(1 for m in body.get("messages", []) if m.get("role") == "tool")
+            if n_tools < 12:
+                self.responder_eventos([
+                    {"id": "c", "choices": [{"index": 0, "delta": {"tool_calls": [
+                        {"index": 0, "id": "call_c%d" % n_tools, "type": "function",
+                         "function": {"name": "shell",
+                                      "arguments": json.dumps({"op": "run",
+                                             "command": "echo " + ("x" * 240)})}}]}}]},
+                    {"id": "c", "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+                ])
+            else:
+                self.responder_eventos([
+                    {"id": "c", "choices": [{"index": 0, "delta": {"content": "corte ok"}}]},
+                    {"id": "c", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+                ])
+            return
+
         if "acentos" in ultimo and not tem_resultado:
             # pede um comando cuja saida tem acentos (pagina OEM no Windows)
             self.responder_eventos([

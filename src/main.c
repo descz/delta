@@ -140,7 +140,8 @@ static const char *const CMD_KEYS[] = {
     "cmd.help", "cmd.login", "cmd.logout", "cmd.models", "cmd.thinking",
     "cmd.verbosity", "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new",
     "cmd.clear", "cmd.skills", "cmd.extensions", "cmd.translator",
-    "cmd.reload", "cmd.quit", "cmd.subagentmodel", "cmd.deltagroup", "cmd.undo", "cmd.update"
+    "cmd.reload", "cmd.quit", "cmd.subagentmodel", "cmd.deltagroup", "cmd.undo", "cmd.update",
+    "cmd.report"
 };
 
 
@@ -157,7 +158,7 @@ static const Cmd COMMANDS[] = {
     { "session",   "Informações da sessão",                           NULL,                 0 },
     { "new",       "Começa uma sessão nova",                          NULL,                 0 },
     { "clear",     "Limpa a conversa",                                NULL,                 0 },
-    { "skills",    "Lista as skills disponiveis",                      NULL,                 0 },
+    { "skills",    "Lista as skills disponíveis",                      NULL,                 0 },
     { "extensions","Painel de extensões (ou /extensions <pedido> cria)", NULL,               1 },
     { "translator","Troca o idioma da interface",                      "pt-BR|pt|en|es|zh|ja", 1 },
     { "reload",    "Recarrega config e tema do disco",                NULL,                 0 },
@@ -166,6 +167,7 @@ static const Cmd COMMANDS[] = {
     { "deltagroup", "Grupo do Delta no Telegram · convite e avisos",    NULL,                 0 },
     { "undo",      "Restaura o conteúdo anterior de um arquivo",       "[arquivo]",          1 },
     { "update",    "Instala a versão mais nova do GitHub",              "[--check]",          1 },
+    { "report",    "Mostra o relato da sessão no memory",              NULL,                 0 },
 };
 #define N_COMMANDS ((int)(sizeof COMMANDS / sizeof COMMANDS[0]))
 
@@ -536,7 +538,7 @@ static int fill_providers(const char *filter)
 
 /* Niveis de raciocinio (mesmos nomes dos tokens de tema do Delta). */
 static const struct { const char *id; const char *desc; } THINKING_LEVELS[] = {
-    { "off",     "Desliga o raciocinio" },
+    { "off",     "Desliga o raciocínio" },
     { "minimal", "Pensamento minimo" },
     { "low",     "Pensamento curto" },
     { "medium",  "Equilibrado" },
@@ -637,7 +639,7 @@ static const char *menu_title(void)
             }
             snprintf(extra, sizeof extra, " · o modelo aceita: %s", *vals ? vals : "?");
         } else if (m && m->think_kind == 2) {
-            snprintf(extra, sizeof extra, " · o modelo so liga/desliga");
+            snprintf(extra, sizeof extra, " · o modelo só liga/desliga");
         } else if (m && m->think_kind == 3) {
             if (m->budget_max > 0)
                 snprintf(extra, sizeof extra, " · orcamento de %d a %d tokens",
@@ -906,7 +908,7 @@ static void update_boot_notice(void)
     Block *b = block_add(B_INFO);
     str_adds(&b->text, aviso);
     free(aviso);
-    notify_status("versao nova disponivel \u00b7 /update instala");
+    notify_status("versão nova disponível \u00b7 /update instala");
     app.tr_dirty = 1;
     render();
 }
@@ -1452,6 +1454,8 @@ static void cb_on_turn_start(void *ud)
     str_adds(&app.work_msg, "Working...");
 }
 
+static const char *relato_alvo(const char *args);
+
 static void cb_on_tool_start(void *ud, const char *name, const char *args)
 {
     (void)ud;
@@ -1473,8 +1477,8 @@ static void cb_on_tool_end(void *ud, const char *name, const char *output, size_
                            int is_error, double secs)
 {
     (void)ud;
-    (void)name;
     (void)out_len;
+    const char *alvo = NULL;
     for (size_t i = app.n_blocks; i > 0; i--) {
         Block *b = &app.blocks[i - 1];
         if (b->kind == B_TOOL && b->tool_state == 0) {
@@ -1483,10 +1487,35 @@ static void cb_on_tool_end(void *ud, const char *name, const char *output, size_
             str_clear(&b->tool_output);
             str_adds(&b->tool_output, output ? output : "");
             tr_touch(i - 1);
+            alvo = relato_alvo(b->tool_args);   /* p/ o relato no memory */
             break;
         }
     }
+    tools_report_tool(name, alvo, is_error);
+    plan_refresh();                     /* painel do plano ao vivo: o agente pode ter
+                                           marcado um item (- [x]) nesta ferramenta */
     maybe_render(1);
+}
+
+/* Alvo curto de uma tool call para o relato: valor do primeiro campo
+   reconhecivel (path/command/op/query/url), truncado — o relato e' um
+   parágrafo, nao um log. */
+static const char *relato_alvo(const char *args)
+{
+    static char alvo[128];
+    alvo[0] = 0;
+    if (!args || !*args) return alvo;
+    JValue *v = json_parse_cstr(args);
+    if (!v || v->kind != J_OBJ) { json_free(v); return alvo; }
+    static const char *chaves[] = { "path", "command", "op", "query", "url", "skill", NULL };
+    for (int i = 0; chaves[i]; i++) {
+        JValue *pair = json_get(v, chaves[i]);
+        if (!pair) continue;
+        const char *s = json_str(pair);
+        if (s && *s) { snprintf(alvo, sizeof alvo, "%.120s", s); break; }
+    }
+    json_free(v);
+    return alvo;
 }
 
 /* Le o teclado enquanto o agente trabalha: rolar a conversa, digitar e
@@ -1549,7 +1578,7 @@ static int cb_should_abort(void *ud)
     if (app.working && app.last_activity_ms && !app.stall_warned &&
         now_ms() - app.last_activity_ms > (uint64_t)stall_ms()) {
         app.stall_warned = 1;
-        notify("sem dados do provedor ha' %d s \u00b7 Ctrl+C cancela (pode ser fila do provedor)",
+        notify("sem dados do provedor há %d s \u00b7 Ctrl+C cancela (pode ser fila do provedor)",
                (stall_ms() + 999) / 1000);
         render();
     }
@@ -1604,7 +1633,7 @@ static int ext_json_extrair(const char *txt, Str *out)
 static int ext_criar_com_modelo(const char *pedido)
 {
     if (!app.cfg.api_key) {
-        notify("sem API key: use /login antes de criar extensao");
+        notify("sem API key: use /login antes de criar extensão");
         render();
         return 0;
     }
@@ -1683,13 +1712,13 @@ static int ext_criar_com_modelo(const char *pedido)
             if (v) json_free(v);
         } else {
             Block *b = block_add(B_INFO);
-            str_adds(&b->text, "O modelo nao devolveu um JSON de extensao:\n");
+            str_adds(&b->text, "O modelo não devolveu um JSON de extensão:\n");
             str_add(&b->text, t.text.data ? t.text.data : "", t.text.len);
         }
         str_free(&spec);
     } else {
         Block *b = block_add(B_INFO);
-        str_addf(&b->text, "Falha ao criar extensao: %s", err.data ? err.data : "erro");
+        str_addf(&b->text, "Falha ao criar extensão: %s", err.data ? err.data : "erro");
     }
     str_free(&err);
     turn_free(&t);
@@ -1821,6 +1850,7 @@ static void cb_on_interval(void *ud)
            deixa de ser "na fila" e vira mensagem normal do usuario */
         if (blk < app.n_blocks && app.blocks[blk].kind == B_USER) app.blocks[blk].queued = 0;
         tools_auto_memorize(t.data);
+        tools_report_user(t.data);          /* relato vivo: pedido na fila */
         agent_push_user_imgs(&app.agent, t.data, imgs, n_imgs);
         for (int i = 0; i < n_imgs; i++) free(imgs[i]);
         str_free(&t);
@@ -1887,6 +1917,7 @@ static void submit_input(void)
     }
 
     tools_auto_memorize(text.data);   /* guarda a mensagem + fatos duraveis */
+    tools_report_user(text.data);     /* relato vivo: task comeca com relato */
 
     if (!app.cfg.api_key) {
         Block *ub2 = block_add(B_USER);
@@ -1949,6 +1980,7 @@ static void submit_input(void)
         int ok = agent_run(&app.agent, NULL, &cb, &err);
         app.working = 0;
         if (ok) turn_meta_attach(n0, t0, in0, out0);
+        tools_report_turn_end(ok ? "turno concluído" : "interrompido");
         if (!ok && err.len) {
             Block *b = block_add(B_ERROR);
             str_adds(&b->text, err.data);
@@ -1957,7 +1989,7 @@ static void submit_input(void)
         }
         if (!ok) {
             Block *b = block_add(B_INFO);
-            str_adds(&b->text, "Operacao interrompida.");
+            str_adds(&b->text, "Operação interrompida.");
             if (g_fila_n) {
                 fila_clear();
                 notify("mensagens enfileiradas descartadas");
@@ -2070,7 +2102,7 @@ static void menu_apply(void)
         int de_env = v && *v;
         free(v);
         if (de_env) {
-            notify("%s usa a chave de %s (ambiente); nao ha o que remover",
+            notify("%s usa a chave de %s (ambiente); não há o que remover",
                        it->provider->id, env);
         } else {
             auth_remove_key(it->provider->id);
@@ -2172,6 +2204,18 @@ static void handle_command(const char *raw)
         if (raw[i] == ' ') rest = raw + i + 1;
     }
 
+    if (str_eq(cmd, "/report")) {
+        Block *b = block_add(B_INFO);
+        char *rel = tools_session_report();
+        if (rel && *rel) str_adds(&b->text, rel);
+        else str_adds(&b->text, "Sem relato ainda: mande uma mensagem e o relato da sessão "
+                                "nasce no memory (e é injetado no prompt a cada passo).");
+        free(rel);
+        app.tr_dirty = 1;
+        render();
+        return;
+    }
+
     if (str_eq(cmd, "/quit") || str_eq(cmd, "/exit") || str_eq(cmd, "/q")) {
         diag_write("quit: comando /quit", NULL);
         app.quit = 1;
@@ -2229,7 +2273,7 @@ static void handle_command(const char *raw)
         char *path = tools_resolve(app.agent.cwd, raw);
         free(raw);
         if (!path || !path_is_dir(path)) {
-            notify("pasta nao encontrada: %s", path ? path : rest);
+            notify("pasta não encontrada: %s", path ? path : rest);
             free(path);
             render();
             return;
@@ -2240,7 +2284,7 @@ static void handle_command(const char *raw)
         config_save(&app.cfg);
         Block *b = block_add(B_INFO);
         str_addf(&b->text, "projeto: %s", path);
-        str_adds(&b->text, "\n(salvo na config; a sessao atual continua, as proximas ja abrem aqui)\n");
+        str_adds(&b->text, "\n(salvo na config; a sessão atual continua, as próximas já abrem aqui)\n");
         app.tr_dirty = 1;
         notify("projeto: %s", path);
         free(path);
@@ -2290,7 +2334,7 @@ static void handle_command(const char *raw)
     /* /update [--check]: consulta os releases do GitHub e troca o binario */
     if (str_eq(cmd, "/update") || str_eq(cmd, "/atualizar")) {
         Block *b = block_add(B_INFO);
-        str_adds(&b->text, "procurando versoes novas no GitHub...");
+        str_adds(&b->text, "procurando versões novas no GitHub...");
         app.tr_dirty = 1;
         render();
 
@@ -2298,20 +2342,20 @@ static void handle_command(const char *raw)
         int ok = update_check(&u, 0);
         str_clear(&b->text);
         if (!ok) {
-            str_addf(&b->text, "nao consegui consultar os releases: %s",
+            str_addf(&b->text, "não consegui consultar os releases: %s",
                      u.err[0] ? u.err : "sem conexao");
             if (u.available)
-                str_addf(&b->text, "\n(pelo cache, a versao %s esta disponivel: %s)\n",
+                str_addf(&b->text, "\n(pelo cache, a versão %s está disponível: %s)\n",
                          u.latest, u.page);
             else
                 str_addc(&b->text, '\n');
         } else if (!u.available) {
-            str_addf(&b->text, "voce ja esta na versao mais nova (%s).", u.current);
+            str_addf(&b->text, "você já está na versão mais nova (%s).", u.current);
         } else if (str_istarts(rest, "--check")) {
-            str_addf(&b->text, "nova versao %s (a sua: %s)\n%s\n", u.latest, u.current, u.page);
+            str_addf(&b->text, "nova versão %s (a sua: %s)\n%s\n", u.latest, u.current, u.page);
         } else {
             Str msg; str_init(&msg);
-            str_addf(&b->text, "nova versao %s (a sua: %s)\n", u.latest, u.current);
+            str_addf(&b->text, "nova versão %s (a sua: %s)\n", u.latest, u.current);
             int trocou = update_apply(&u, &msg);
             if (msg.len) str_addf(&b->text, "%s\n", msg.data);
             if (!trocou && u.page[0]) str_addf(&b->text, "pagina do release: %s\n", u.page);
@@ -2376,7 +2420,7 @@ static void handle_command(const char *raw)
         msglist_free(&app.agent.msgs);
         msglist_init(&app.agent.msgs);
         session_start(app.agent.cwd);
-        notify("nova sessao %s", session_id());
+        notify("nova sessão %s", session_id());
         render();
         return;
     }
@@ -2433,10 +2477,10 @@ static void handle_command(const char *raw)
                     if (agora > 0 && (size_t)agora != total_models)
                         str_addf(&b->text, " (o models.dev publica %zu no total)", total_models);
                     if (antes > 0 && agora != antes)
-                        str_addf(&b->text, " · %+ld desde o inicio da sessao", agora - antes);
+                        str_addf(&b->text, " · %+ld desde o início da sessão", agora - antes);
                     str_addc(&b->text, 10);
                 } else {
-                    str_addf(&b->text, "nao consegui atualizar (%s)",
+                    str_addf(&b->text, "não consegui atualizar (%s)",
                              e.len ? e.data : "sem conexao");
                     if (catalog_load_cached(&app.catalog)) {
                         app.catalog_loaded = 1;
@@ -2489,7 +2533,7 @@ static void handle_command(const char *raw)
         if (!aplicado) {
             if (app.catalog_loaded && app.cfg.provider &&
                 !catalog_model(&app.catalog, app.cfg.provider, rest)) {
-                notify("'%s' nao existe em %s (use /model para listar)", rest, app.cfg.provider);
+                notify("'%s' não existe em %s (use /model para listar)", rest, app.cfg.provider);
                 render();
                 return;
             }
@@ -2515,7 +2559,7 @@ static void handle_command(const char *raw)
                     if (str_ieq(app.catalog.providers[i].name, rest)) { p = &app.catalog.providers[i]; break; }
             }
             if (!p) {
-                notify("provedor '%s' nao encontrado (use /login para listar)", rest);
+                notify("provedor '%s' não encontrado (use /login para listar)", rest);
                 render();
                 return;
             }
@@ -2537,7 +2581,7 @@ static void handle_command(const char *raw)
                 if (app.cfg.provider && str_eq(app.cfg.provider, rest)) refresh_api_key();
                 notify("desconectado de %s", rest);
             } else {
-                notify("%s nao tinha chave salva", rest);
+                notify("%s não tinha chave salva", rest);
             }
             render();
             return;
@@ -2578,7 +2622,7 @@ static void handle_command(const char *raw)
                     return;
                 }
             }
-            notify("nivel invalido (use /thinking para ver a lista)");
+            notify("nível inválido (use /thinking para ver a lista)");
             render();
             return;
         }
@@ -2593,7 +2637,7 @@ static void handle_command(const char *raw)
                 free(app.cfg.thinking_level);
                 app.cfg.thinking_level = str_dup("off");
                 config_save(&app.cfg);
-                notify("%s nao anuncia raciocinio no models.dev · thinking off", app.cfg.model);
+                notify("%s não anuncia raciocínio no models.dev · thinking off", app.cfg.model);
                 render();
                 return;
             }
@@ -2625,7 +2669,7 @@ static void handle_command(const char *raw)
         Block *b = block_add(B_INFO);
         str_adds(&b->text, "Verbosidade: " );
         str_adds(&b->text, atual);
-        str_adds(&b->text, "  (o thinking e o trabalho nao mudam; so' a prosa)\n\n");
+        str_adds(&b->text, "  (o thinking e o trabalho não mudam; só a prosa)\n\n");
         for (int i = 0; i < N_VERBOSITY; i++)
             str_addf(&b->text, "  %-7s %s%s\n", VERBOSITY_LEVELS[i].id, VERBOSITY_LEVELS[i].desc,
                      str_eq(atual, VERBOSITY_LEVELS[i].id) ? "  <-" : "");
@@ -2692,7 +2736,7 @@ static void handle_command(const char *raw)
 
     if (str_eq(cmd, "/session")) {
         Block *b = block_add(B_INFO);
-        str_addf(&b->text, "sessao   : %s\ncwd      : %s\nmensagens: %zu\n",
+        str_addf(&b->text, "sessão   : %s\ncwd      : %s\nmensagens: %zu\n",
                  session_id(), app.agent.cwd, app.agent.msgs.n);
         app.tr_dirty = 1;
         render();
@@ -2732,8 +2776,8 @@ static void handle_command(const char *raw)
                  app.theme_name ? app.theme_name : "mono",
                  ctx > 0 ? "" : "(desconhecido) ",
                  ctx,
-                 app.cfg.supports_image ? "sim (Ctrl+V cola imagem)" : "nao",
-                 app.catalog_loaded ? "models.dev carregado" : "nao carregado",
+                 app.cfg.supports_image ? "sim (Ctrl+V cola imagem)" : "não",
+                 app.catalog_loaded ? "models.dev carregado" : "não carregado",
                  app.agent.cwd, session_id());
         app.tr_dirty = 1;
         render();
@@ -3161,7 +3205,7 @@ static void copy_selection(void)
     if (clipboard_write_text(t.data))
         notify_status("selecao copiada (%d caracteres)", (int)utf8_len(t.data));
     else
-        notify_status("nao deu para copiar (clipboard ocupado?)");
+        notify_status("não deu para copiar (clipboard ocupado?)");
     str_free(&t);
 }
 
@@ -3206,7 +3250,7 @@ static int run_print_mode(const char *prompt)
         size_t n = 0;
         lido = file_read(prompt + 1, &n);
         if (lido) prompt = lido;
-        else fprintf(stderr, "delta: nao consegui ler '%s'\n", prompt + 1);
+        else fprintf(stderr, "delta: não consegui ler '%s'\n", prompt + 1);
     }
     Str err; str_init(&err);
     AgentCB cb;
@@ -3744,7 +3788,7 @@ static void handle_event(const Event *ev)
                         }
                         str_free(&t);
                     } else {
-                        notify("a fila esta vazia");
+                        notify("a fila está vazia");
                     }
                     render();
                 }
@@ -3868,7 +3912,7 @@ static void inserir_colagem(const Clip *c)
         input_insert_text(limpo, strlen(limpo));
         input_insert_text(" ", 1);
         if (!app.cfg.supports_image)
-            notify("%s nao aceita imagem: so o caminho vai no texto (use /models para um com visao)",
+            notify("%s não aceita imagem: só o caminho vai no texto (use /models para um com visão)",
                    app.cfg.model ? app.cfg.model : "o modelo");
     } else if (c->kind == CLIP_FILES && c->path) {
         char buf[1400];
@@ -3965,7 +4009,7 @@ static int run_replay(const char *path, int cols, int rows, int force_offline)
     size_t len = 0;
     char *text = file_read(path, &len);
     if (!text) {
-        fprintf(stderr, "delta: nao consegui ler o roteiro '%s'\n", path);
+        fprintf(stderr, "delta: não consegui ler o roteiro '%s'\n", path);
         return 1;
     }
 
@@ -4131,7 +4175,7 @@ static int run_replay(const char *path, int cols, int rows, int force_offline)
                 }
                 Str t; str_init(&t);
                 selection_text(&t);
-                printf("sel: %d,%d -> %d,%d fg=%06X bg=%06X texto=%zu inicio=\"%.60s\"\n",
+                printf("sel: %d,%d -> %d,%d fg=%06X bg=%06X texto=%zu início=\"%.60s\"\n",
                        y0, x0, y1, x1, (unsigned)fg, (unsigned)bg, t.len,
                        t.data ? t.data : "");
                 str_free(&t);
@@ -4212,7 +4256,7 @@ static int run_tool_script(const char *path, const char *dir)
 {
     size_t len = 0;
     char *txt = file_read(path, &len);
-    if (!txt) { fprintf(stderr, "delta: nao consegui ler '%s'\n", path); return 2; }
+    if (!txt) { fprintf(stderr, "delta: não consegui ler '%s'\n", path); return 2; }
     int rc = 0;
     size_t i = 0;
     while (i < len) {
@@ -4249,8 +4293,8 @@ static void usage(void)
         "\n"
         "Uso:\n"
         "  delta                     TUI interativa (sempre um chat novo)\n"
-        "  delta continue            retoma a ultima sessao desta pasta\n"
-        "  delta -p \"<prompt>\"        modo impressao (nao interativo)\n"
+        "  delta continue            retoma a última sessão desta pasta\n"
+        "  delta -p \"<prompt>\"        modo impressão (não interativo)\n"
         "  delta --model <id>        modelo\n"
         "  delta --provider <nome>   anthropic | openai\n"
         "  delta --theme <nome>      dark | light | arquivo.json\n"
@@ -4258,10 +4302,10 @@ static void usage(void)
         "  delta --core <dir>        pasta de dados (padrao: <usuario>/.deltaCore)\n"
         "  delta --setup             instalador com tela (abre no navegador)\n"
         "  delta --install <dir>     instala sem tela (dados em <dir>)\n"
-        "  delta update [--check]    instala a versao mais nova do GitHub\n"
+        "  delta update [--check]    instala a versão mais nova do GitHub\n"
         "  delta --tools             lista as ferramentas\n"
         "  delta --tool <nome> <json>  roda uma ferramenta direto (teste)\n"
-        "  delta --version           versao\n"
+        "  delta --version           versão\n"
         "\n"
         "Ambiente: ANTHROPIC_API_KEY, OPENAI_API_KEY, DELTA_MODEL, DELTA_PROVIDER\n"
         "Config:   ~/.deltaCore/config.json   (skills, mcps, memory, extensions, system)\n"
@@ -4346,7 +4390,7 @@ static void __cdecl diag_invalid_param(const wchar_t *expr, const wchar_t *func,
                                        uintptr_t reserved_unused)
 {
     (void)expr; (void)func; (void)file; (void)line; (void)reserved_unused;
-    diag_write("CRT: parametro invalido/abort", NULL);
+    diag_write("CRT: parametro inválido/abort", NULL);
 }
 
 static void diag_sig_unix(int sig)
@@ -4558,7 +4602,7 @@ int main(int argc, char **argv)
         if (retomou > 0) {
             blocks_from_msgs();
             Block *b = block_add(B_INFO);
-            str_addf(&b->text, "sessao retomada · %d mensagens · continue de onde parou "
+            str_addf(&b->text, "sessão retomada · %d mensagens · continue de onde parou "
                                "(/new começa outra)", retomou);
             app.tr_dirty = 1;
         } else if (!opt_no_session) {
@@ -4595,14 +4639,14 @@ int main(int argc, char **argv)
 
     if (!term_is_tty()) {
         fprintf(stderr, "delta: a TUI precisa de um terminal interativo.\n"
-                        "Use -p \"<prompt>\" para o modo nao interativo.\n");
+                        "Use -p \"<prompt>\" para o modo não interativo.\n");
         agent_free(&app.agent);
         config_free(&app.cfg);
         return 1;
     }
 
     if (!term_init()) {
-        fprintf(stderr, "delta: nao foi possivel inicializar o terminal.\n");
+        fprintf(stderr, "delta: não foi possível inicializar o terminal.\n");
         return 1;
     }
     if (use_altscreen) term_alt_enter();

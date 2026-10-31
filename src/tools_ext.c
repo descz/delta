@@ -2873,6 +2873,24 @@ static int agent_op(JValue *a, const char *cwd, ToolResult *res)
     if (str_eq(op, "plan")) {
         const char *plan = arg_s(a, "plan_markdown");
         char *p = plan_path();
+        /* plano totalmente concluido: sai da tela — remove o arquivo e encerra
+           o painel (o historico fica no transcript e na sessao) */
+        {
+            int pend = 0, done = 0;
+            for (const char *c = plan; (c = strstr(c, "- [")) != NULL; c += 3) {
+                if (c[4] == ']') {
+                    if (c[3] == 'x' || c[3] == 'X') done++;
+                    else pend++;
+                }
+            }
+            if (done > 0 && pend == 0) {
+                remove(p);
+                str_addf(&res->output, "Plan finished: %d/%d concluidos — painel encerrado.\n",
+                         done, done);
+                free(p);
+                return 1;
+            }
+        }
         int ok = file_write_atomic(p, plan, strlen(plan));
         free(p);
         if (!ok) { err_out(res, "Erro: nao foi possivel gravar o plano."); return 0; }
@@ -3715,6 +3733,200 @@ void tools_auto_memorize(const char *texto)
 
     if (removeu || arr->count != antes) memory_save(arr);
     json_free(arr);
+}
+
+/* ------------------------------------------------------------------ */
+/* relato vivo da sessao: o fio da conversa no memory (kind=report)    */
+/* ------------------------------------------------------------------ */
+/* Um parágrafo por sessao, atualizado SEM chamar o modelo: pedidos do
+   usuario, ferramentas concluidas e o fechamento do turno. Se o processo
+   morrer no meio de uma task longa, o relato sobrevive — e o system prompt
+   o reinjeta a cada passo, entao encurtar o contexto nao apaga o fio.
+   Detalhe antigo fica sob demanda: memory op=search por palavras-chave. */
+
+#define RELATO_TRABALHO_TETO 1100
+#define RELATO_PEDIDO_TETO   160
+#define RELATO_PEDIDOS_MAX   3
+
+static Str  g_relato_pedidos;    /* "p1 | p2 | p3" (ultimos 3)              */
+static Str  g_relato_trabalho;   /* "read(main.c ok); bash(make ok)" (cauda) */
+static int  g_relato_pronto = 0; /* ja carregou de sessao retomada?          */
+static int  g_relato_turnos = 0;
+
+static void relato_init(void)
+{
+    if (g_relato_pronto) return;
+    g_relato_pronto = 1;
+    str_init(&g_relato_pedidos);
+    str_init(&g_relato_trabalho);
+
+    /* `delta continue`: retoma o relato da sessao anterior com o mesmo id */
+    const char *sid = session_id();
+    if (!sid || !*sid) return;
+    JValue *arr = memory_load();
+    for (size_t i = 0; i < arr->count; i++) {
+        JValue *n = arr->items[i];
+        if (!str_eq(json_str(json_get(n, "kind")), "report")) continue;
+        const char *titulo = json_str(json_get(n, "title"));
+        if (!titulo || !strstr(titulo, sid)) continue;
+        const char *c = json_str(json_get(n, "content"));
+        if (!c || !*c) break;
+        const char *trab = strstr(c, "\nTrabalho: ");
+        if (trab) {
+            if (strncmp(c, "Pedidos: ", 9) == 0)
+                str_add(&g_relato_pedidos, c + 9, (size_t)(trab - (c + 9)));
+            const char *status = strstr(trab + 1, "\nStatus: ");
+            if (status) str_add(&g_relato_trabalho, trab + 11, (size_t)(status - (trab + 11)));
+            else str_adds(&g_relato_trabalho, trab + 11);
+        }
+        break;
+    }
+    json_free(arr);
+}
+
+/* mantem a cauda: quando passa do teto, corta do comeco ate o proximo "; " */
+static void relato_cauda(Str *s, size_t teto)
+{
+    while (s->len > teto) {
+        const char *sep = strstr(s->data, "; ");
+        if (!sep) { str_clear(s); break; }
+        size_t corte = (size_t)(sep - s->data) + 2;
+        memmove(s->data, s->data + corte, s->len - corte);
+        s->len -= corte;
+        s->data[s->len] = 0;
+    }
+}
+
+static void relato_salvar(const char *status)
+{
+    const char *sid = session_id();
+    if (!sid || !*sid) return;                   /* subagente sem sessao */
+
+    JValue *arr = memory_load();
+    char titulo[96];
+    snprintf(titulo, sizeof titulo, "Relato da sessao %s", sid);
+
+    JValue *nota = NULL;
+    for (size_t i = 0; i < arr->count && !nota; i++) {
+        JValue *n = arr->items[i];
+        if (str_eq(json_str(json_get(n, "kind")), "report") &&
+            str_eq(json_str(json_get(n, "title")), titulo)) nota = n;
+    }
+    if (!nota) {
+        nota = memory_new_note(titulo, "", "report", "session", "[]");
+        arr->items = (JValue **)realloc(arr->items, (arr->count + 1) * sizeof(JValue *));
+        arr->items[arr->count++] = nota;
+    }
+
+    Str c; str_init(&c);
+    str_adds(&c, "Pedidos: ");
+    str_add(&c, g_relato_pedidos.data ? g_relato_pedidos.data : "", g_relato_pedidos.len);
+    str_adds(&c, "\nTrabalho: ");
+    str_add(&c, g_relato_trabalho.data ? g_relato_trabalho.data : "", g_relato_trabalho.len);
+    str_addf(&c, "\nStatus: %s", status ? status : "em andamento");
+
+    Str limpo; str_init(&limpo);
+    mem_clean(c.data, MEM_MAX_CONTENT, &limpo);
+    mem_set(nota, "content", limpo.data ? limpo.data : "");
+    {
+        char ts[32];
+        iso_now(ts);
+        mem_set(nota, "updated", ts);
+    }
+    str_free(&limpo);
+    str_free(&c);
+
+    memory_save(arr);
+    json_free(arr);
+}
+
+/* antes de responder: registra o que o usuario pediu (a task comeca com
+   um relato no memory — se morrer no meio, o progresso nao se perde) */
+void tools_report_user(const char *pedido)
+{
+    if (!pedido || !*pedido || pedido[0] == '/') return;
+    relato_init();
+    const char *sid = session_id();
+    if (!sid || !*sid) return;
+
+    /* sem duplicar o mesmo pedido em sequencia (reenvio/fila) */
+    size_t plen = strlen(pedido);
+    if (g_relato_pedidos.len >= plen + 2 &&
+        strncmp(g_relato_pedidos.data + g_relato_pedidos.len - plen - 2, " | ", 2) == 0 &&
+        strncmp(g_relato_pedidos.data + g_relato_pedidos.len - plen, pedido, plen) == 0) return;
+
+    Str um; str_init(&um);
+    mem_clean(pedido, RELATO_PEDIDO_TETO, &um);
+    if (g_relato_pedidos.len) str_adds(&g_relato_pedidos, " | ");
+    str_add(&g_relato_pedidos, um.data ? um.data : "", um.len);
+    str_free(&um);
+
+    /* mantem so' os ultimos RELATO_PEDIDOS_MAX pedidos */
+    int pipes = 0;
+    for (const char *p = g_relato_pedidos.data; p && *p; p++)
+        if (strncmp(p, " | ", 3) == 0) pipes++;
+    while (pipes >= RELATO_PEDIDOS_MAX) {
+        const char *sep = strstr(g_relato_pedidos.data, " | ");
+        if (!sep) break;
+        size_t corte = (size_t)(sep - g_relato_pedidos.data) + 3;
+        memmove(g_relato_pedidos.data, g_relato_pedidos.data + corte,
+                g_relato_pedidos.len - corte);
+        g_relato_pedidos.len -= corte;
+        g_relato_pedidos.data[g_relato_pedidos.len] = 0;
+        pipes--;
+    }
+
+    relato_salvar("em andamento");
+}
+
+/* a cada ferramenta concluida: uma linha compacta no relato */
+void tools_report_tool(const char *nome, const char *alvo, int is_error)
+{
+    relato_init();
+    const char *sid = session_id();
+    if (!sid || !*sid) return;
+
+    Str linha; str_init(&linha);
+    str_addf(&linha, "%s(%s", nome ? nome : "?", alvo ? alvo : "");
+    if (linha.len > 120) str_truncate(&linha, 120);
+    str_adds(&linha, is_error ? "; ERRO)" : "; ok)");
+
+    if (g_relato_trabalho.len) str_adds(&g_relato_trabalho, "; ");
+    str_add(&g_relato_trabalho, linha.data, linha.len);
+    str_free(&linha);
+    relato_cauda(&g_relato_trabalho, RELATO_TRABALHO_TETO);
+    relato_salvar("em andamento");
+}
+
+/* fim do turno: fecha o paragrafo com o estado */
+void tools_report_turn_end(const char *status)
+{
+    relato_init();
+    const char *sid = session_id();
+    if (!sid || !*sid) return;
+    g_relato_turnos++;
+    relato_salvar(status ? status : "turno concluido");
+}
+
+/* o relato atual da sessao (malloc, sem \n no fim) ou NULL — para o system
+   prompt: le da nota a cada chamada (outra instancia pode ter atualizado) */
+char *tools_session_report(void)
+{
+    const char *sid = session_id();
+    if (!sid || !*sid) return NULL;
+    char *txt = NULL;
+    JValue *arr = memory_load();
+    for (size_t i = 0; i < arr->count; i++) {
+        JValue *n = arr->items[i];
+        if (!str_eq(json_str(json_get(n, "kind")), "report")) continue;
+        const char *titulo = json_str(json_get(n, "title"));
+        if (!titulo || !strstr(titulo, sid)) continue;
+        const char *c = json_str(json_get(n, "content"));
+        if (c && *c) txt = str_dup(c);
+        break;
+    }
+    json_free(arr);
+    return txt;
 }
 
 
