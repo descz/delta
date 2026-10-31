@@ -1,4 +1,12 @@
+# Editor: arrasto seleciona (letra preta, fundo branco), backspace apaga o
+# selecionado, e clique FORA da caixa tambem limpa a selecao (texto intacto).
 type ola mundo do teste
+mouse 2 20 drag
+mouse 8 20 drag
+edsel
+key backspace
+edsel
+dump depois_do_backspace
 mouse 2 20 drag
 mouse 8 20 drag
 edsel
