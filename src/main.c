@@ -4348,14 +4348,7 @@ static LONG WINAPI diag_filter(EXCEPTION_POINTERS *ep)
     }
     return EXCEPTION_CONTINUE_SEARCH;   /* mantem o comportamento padrao */
 }
-
-static void __cdecl diag_invalid_param(const wchar_t *expr, const wchar_t *func,
-                                       const wchar_t *file, unsigned int line,
-                                       uintptr_t reserved_unused)
-{
-    (void)expr; (void)func; (void)file; (void)line; (void)reserved_unused;
-    diag_write("CRT: parametro inválido/abort", NULL);
-}
+#endif /* _WIN32 */
 
 static void diag_sig_unix(int sig)
 {
@@ -4363,6 +4356,15 @@ static void diag_sig_unix(int sig)
     snprintf(buf, sizeof buf, "sinal %d", sig);
     diag_write("morto por sinal/abort", buf);
     _exit(128 + sig);
+}
+
+#ifdef _WIN32
+static void __cdecl diag_invalid_param(const wchar_t *expr, const wchar_t *func,
+                                       const wchar_t *file, unsigned int line,
+                                       uintptr_t reserved_unused)
+{
+    (void)expr; (void)func; (void)file; (void)line; (void)reserved_unused;
+    diag_write("CRT: parametro inválido/abort", NULL);
 }
 
 static BOOL WINAPI diag_ctrl(DWORD type)
