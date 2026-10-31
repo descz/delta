@@ -59,8 +59,6 @@ typedef struct {
     Block   *blocks;
     size_t   n_blocks;
 
-    Str      plan;              /* ~/.deltaCore/plan.md (agent op=plan) */
-
     Str      input;
     size_t   cursor;
     Str      paste_text;        /* texto real por tras do {paste N caracteres} */
@@ -117,6 +115,11 @@ typedef struct {
     int      sel_active;
     int      sel_ax, sel_ay;    /* ancora (onde o arrasto comecou) */
     int      sel_hx, sel_hy;    /* cabeca (onde o mouse esta) */
+
+    /* selecao no editor de prompt: arrasto seleciona; Backspace/Delete apaga */
+    int      ed_sel_ativa;
+    size_t   ed_sel_a, ed_sel_b;
+
     int      tr_start;          /* linha do transcript que aparece na linha 0 da tela */
     int      tr_view;           /* linhas visiveis do transcript */
     int      tr_total_prev;     /* linhas do transcript no frame anterior (ancora do scroll) */
@@ -259,85 +262,6 @@ static int fill_commands(const char *filter)
 /* ================================================================== */
 /* Catalogo models.dev (carregado sob demanda)                         */
 /* ================================================================== */
-/* ================================================================== */
-/* Plano (agent op=plan grava ~/.deltaCore/plan.md)                      */
-/* ================================================================== */
-static void plan_refresh(void)
-{
-    char *home = home_get();
-    char *p = path_join(delta_home(), "plan.md");
-    size_t n = 0;
-    char *txt = file_read(p, &n);
-    free(p);
-    free(home);
-
-    if (txt) {
-        if (!app.plan.data || app.plan.len != n || memcmp(app.plan.data, txt, n) != 0) {
-            str_clear(&app.plan);
-            str_add(&app.plan, txt, n);
-            app.tr_dirty = 1;
-        }
-        free(txt);
-    } else if (app.plan.len) {
-        str_clear(&app.plan);
-        app.tr_dirty = 1;
-    }
-}
-
-/* Conta "- [x]" / "- [ ]" no plano. */
-static void plan_counts(int *pend, int *done)
-{
-    int p = 0, d = 0;
-    const char *c = app.plan.data ? app.plan.data : "";
-    while ((c = strstr(c, "- [")) != NULL) {
-        if (c[4] == ']') {
-            if (c[3] == 'x' || c[3] == 'X') d++;
-            else p++;
-        }
-        c += 3;
-    }
-    if (pend) *pend = p;
-    if (done) *done = d;
-}
-
-/* Desenha o painel do plano no topo da conversa. Retorna linhas usadas. */
-static int plan_draw(Screen *s, int y, int width)
-{
-    if (app.plan.len == 0) return 0;
-    int pend = 0, done = 0, linhas = 0;
-    plan_counts(&pend, &done);
-
-    Style st_t = { tcolor_hex(theme_tok(&app.theme, TK_ACCENT)), COL_DEFAULT, ATTR_BOLD };
-    Style st_i = { tcolor_hex(theme_tok(&app.theme, TK_TEXT)), COL_DEFAULT, 0 };
-    Style st_d = { tcolor_hex(theme_tok(&app.theme, TK_DIM)), COL_DEFAULT, ATTR_STRIKE };
-
-    char hdr[96];
-    snprintf(hdr, sizeof hdr, "Plano  %d/%d", done, done + pend);
-    screen_text(s, 2, y, hdr, strlen(hdr), st_t, width - 4);
-    y++;
-    linhas++;
-
-    const char *p = app.plan.data;
-    while (p && *p && linhas <= 8) {
-        const char *eol = strchr(p, '\n');
-        size_t ll = eol ? (size_t)(eol - p) : strlen(p);
-        while (ll && (p[ll - 1] == '\r' || p[ll - 1] == ' ')) ll--;
-        if (ll) {
-            int feito = (ll > 4 && p[0] == '-' && p[1] == ' ' && p[2] == '[' && p[3] == ']');
-            screen_text(s, 2, y, p, ll, feito ? st_d : st_i, width - 4);
-            y++;
-            linhas++;
-        }
-        p = eol ? eol + 1 : NULL;
-    }
-    if (p && *p) {
-        screen_text(s, 2, y, "...", 3, st_i, 3);
-        y++;
-        linhas++;
-    }
-    return linhas;
-}
-
 static void ext_panel_draw(Screen *s, int ey, int cols);
 static int  fila_count(void);
 static void render(void);
@@ -352,6 +276,110 @@ static char *paste_dir(void);
 static void expand_paste(Str *text);
 static void inserir_colagem(const Clip *c);
 static void input_insert_text(const char *t, size_t n);
+static void input_kill(size_t from, size_t to);   /* usada pela selecao do editor */
+/* ================================================================== */
+/* Selecao no editor de prompt (arrasto seleciona; Backspace/Delete     */
+/* apaga; digitar substitui; Esc limpa)                                 */
+/* ================================================================== */
+static size_t *g_ed_st = NULL, *g_ed_en = NULL;  /* offsets por linha visual   */
+static size_t  g_ed_rows = 0;                    /* linhas no layout inteiro   */
+static int     g_ed_row0 = -1;                   /* linha da tela da 1a linha  */
+static int     g_ed_cw = 0;                      /* largura util do editor     */
+static size_t  g_ed_first = 0;                   /* 1a linha visivel (rolagem) */
+
+#define ED_MAX_ROWS 8
+
+static void ed_cache_update(int row0, int cw, const char *text, size_t len, size_t cursor)
+{
+    size_t cur_row = 0;
+    free(g_ed_st);
+    free(g_ed_en);
+    g_ed_st = g_ed_en = NULL;
+    g_ed_rows = (size_t)ui_input_layout(text, len, cw, cursor, &cur_row, &g_ed_st, &g_ed_en);
+    g_ed_row0 = row0;
+    g_ed_cw = cw;
+    /* mesma rolagem do ui_editor: nunca deixa o cursor sair da vista */
+    g_ed_first = 0;
+    if ((int)g_ed_rows > ED_MAX_ROWS && (int)cur_row >= ED_MAX_ROWS)
+        g_ed_first = cur_row - (ED_MAX_ROWS - 1);
+}
+
+static void ed_sel_clear(void)
+{
+    app.ed_sel_ativa = 0;
+}
+
+/* byte no app.input correspondente a posicao do mouse (ou -1 se fora) */
+static size_t ed_byte_at(int my, int mx)
+{
+    if (!g_ed_st || !g_ed_en || g_ed_rows == 0 || g_ed_row0 < 0) return (size_t)-1;
+    if (my < g_ed_row0) return (size_t)-1;
+    size_t k = (size_t)(my - g_ed_row0);
+    size_t vis = g_ed_rows - g_ed_first;
+    if (vis > ED_MAX_ROWS) vis = ED_MAX_ROWS;
+    if (k >= vis) return (size_t)-1;               /* fora do editor visivel */
+    size_t idx = g_ed_first + k;
+    size_t s = g_ed_st[idx], e = g_ed_en[idx];
+    int col = mx - 2;
+    if (col < 0) col = 0;
+    size_t i = s;
+    int used = 0;
+    while (i < e) {
+        uint32_t cp;
+        int c = utf8_decode(app.input.data + i, e - i, &cp);
+        if (c <= 0) break;
+        int cw2 = cp_width(cp);
+        if (used + cw2 > col) return i;            /* caiu no meio: pega o byte */
+        used += cw2;
+        i += (size_t)c;
+    }
+    return e;                                       /* fim da linha */
+}
+
+static void ed_sel_delete_range(void)
+{
+    size_t a = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_a : app.ed_sel_b;
+    size_t b = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_b : app.ed_sel_a;
+    if (a > app.input.len) a = app.input.len;
+    if (b > app.input.len) b = app.input.len;
+    if (a == b) return;
+    input_kill(a, b);
+    app.cursor = a;
+}
+
+/* pinta a selecao do editor por cima do que o ui_editor desenhou */
+static void ed_paint_selection(void)
+{
+    if (!app.ed_sel_ativa || !g_ed_st || !g_ed_en || g_ed_rows == 0) return;
+    size_t a = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_a : app.ed_sel_b;
+    size_t b = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_b : app.ed_sel_a;
+    if (a > app.input.len || b > app.input.len || a == b) return;
+
+    Style sel = { 0x000000u, 0xFFFFFFu, 0 };       /* fundo branco, letra preta */
+    for (size_t k = 0; k < g_ed_rows && (int)k < ED_MAX_ROWS; k++) {
+        size_t idx = g_ed_first + k;
+        if (idx >= g_ed_rows) break;
+        size_t s = g_ed_st[idx], e = g_ed_en[idx];
+        if (b <= s || a >= e) continue;
+        size_t ini = a > s ? a : s;
+        size_t fim = b < e ? b : e;
+        int col = strn_width(app.input.data + s, ini - s);
+        for (size_t i = ini; i < fim; ) {
+            uint32_t cp;
+            int c = utf8_decode(app.input.data + i, fim - i, &cp);
+            if (c <= 0) break;
+            int cw2 = cp_width(cp);
+            int x = 2 + col;
+            for (int j = 0; j < cw2 && x + j < app.screen.cols - 2; j++)
+                screen_put(&app.screen, x + j, g_ed_row0 + (int)k, ' ', sel);
+            col += cw2;
+            i += (size_t)c;
+        }
+    }
+}
+
+static void ed_sel_clear(void);
+static void ed_sel_delete_range(void);
 static void open_picker(int kind);
 /* Rola a conversa: +1 = roda para cima (conteudo mais antigo). */
 static void scroll_wheel(int shift);
@@ -1052,10 +1080,6 @@ static void render_transcript(int width, size_t from)
             y += 1;
         }
         y += 1;
-        if (app.plan.len) {
-            y += plan_draw(s, y, width);
-            y += 1;
-        }
         app.tr_done = 0;
     } else {
         if (from > app.n_blocks) from = app.n_blocks;
@@ -1242,9 +1266,12 @@ static void render(void)
         mostrar_status = 1;
     }
     if (fila_vis > 0) (void)0;
+    if (app.picker && app.ed_sel_ativa) app.ed_sel_ativa = 0;   /* selecao era do input */
     ui_editor(&app.screen, ey, cols, &app.theme, edit_text, edit_len, edit_cur,
               app.working || mostrar_status, wm,
               spin, 0, 8, (const char **)app.imgs, app.n_imgs);
+    ed_cache_update(ey + 1, cols - 4, edit_text, edit_len, edit_cur);
+    ed_paint_selection();
     if (app.ext_mode) ext_panel_draw(&app.screen, ey, cols);
     if (app.picker) {
         const char *titulo = menu_title();
@@ -1490,8 +1517,6 @@ static void cb_on_tool_end(void *ud, const char *name, const char *output, size_
         }
     }
     tools_report_tool(name, alvo, is_error);
-    plan_refresh();                     /* painel do plano ao vivo: o agente pode ter
-                                           marcado um item (- [x]) nesta ferramenta */
     maybe_render(1);
 }
 
@@ -3444,6 +3469,19 @@ static void handle_event(const Event *ev)
     /* -------- mouse: arrasto seleciona; clique limpa; roda rola a conversa -------- */
     if (ev->type == EV_DRAG) {
         if (app.menu_visible || app.picker) return;
+        /* arrasto dentro do editor: selecao do PROMPT (nao do transcript) */
+        if (ev->my >= g_ed_row0 && !app.working) {
+            size_t b = ed_byte_at(ev->my, ev->mx);
+            if (b == (size_t)-1) return;
+            if (!app.ed_sel_ativa) {
+                app.ed_sel_ativa = 1;
+                app.ed_sel_a = app.ed_sel_b = b;
+            } else if (b != app.ed_sel_b) {
+                app.ed_sel_b = b;
+            }
+            render();
+            return;
+        }
         if (ev->my < 0 || ev->my >= app.tr_view) return;
         int ty = app.tr_start + ev->my;
         if (ty >= app.tr.rows || app.tr.cols <= 0) return;
@@ -3483,6 +3521,17 @@ static void handle_event(const Event *ev)
             if (idx >= 0 && idx < n) {
                 if (idx == app.menu_sel) menu_apply();   /* clicar de novo confirma */
                 else app.menu_sel = idx;
+            }
+            render();
+            return;
+        }
+        /* clique no editor: cursor vai para a posicao; selecao do prompt some */
+        if (!app.menu_visible && !app.picker && !app.working &&
+            g_ed_row0 >= 0 && ev->my >= g_ed_row0) {
+            size_t b = ed_byte_at(ev->my, ev->mx);
+            if (b != (size_t)-1) {
+                app.cursor = b;
+                ed_sel_clear();
             }
             render();
             return;
@@ -3630,6 +3679,7 @@ static void handle_event(const Event *ev)
                 render();
                 break;
             case EV_CHAR:
+                if (app.ed_sel_ativa) { ed_sel_delete_range(); ed_sel_clear(); }
                 input_insert(ev->cp);
                 app.menu_suppressed = 0;
                 app.menu_sel = 0;
@@ -3638,6 +3688,7 @@ static void handle_event(const Event *ev)
                 break;
             case EV_ENTER:
                 if (ev->shift) {
+                    if (app.ed_sel_ativa) { ed_sel_delete_range(); ed_sel_clear(); }
                     input_insert('\n');
                     render();
                 } else if (app.working) {
@@ -3647,12 +3698,17 @@ static void handle_event(const Event *ev)
                 }
                 break;
             case EV_BACKSPACE:
-                input_backspace();
+                if (app.ed_sel_ativa) { ed_sel_delete_range(); ed_sel_clear(); }
+                else input_backspace();
                 app.menu_suppressed = 0;
                 app.menu_sel = 0;
                 render();
                 break;
-            case EV_DELETE:    input_delete(); render(); break;
+            case EV_DELETE:
+                if (app.ed_sel_ativa) { ed_sel_delete_range(); ed_sel_clear(); }
+                else input_delete();
+                render();
+                break;
             case EV_LEFT:      input_left(); render(); break;
             case EV_RIGHT:     input_right(); render(); break;
             case EV_HOME:      app.cursor = 0; render(); break;
@@ -3670,9 +3726,10 @@ static void handle_event(const Event *ev)
                 render();
                 break;
             case EV_ESC:
-                /* cascata: selecao, rolagem, e so' no fim o texto do editor
-                   (antes o ESC fazia tudo de uma vez e apagava o que estava
-                   sendo digitado) */
+                /* cascata: selecao do editor, selecao do transcript, rolagem,
+                   e so' no fim o texto do editor (antes o ESC fazia tudo de uma
+                   vez e apagava o que estava sendo digitado) */
+                if (app.ed_sel_ativa) { ed_sel_clear(); render(); break; }
                 if (app.sel_active) { sel_clear(); render(); break; }
                 if (app.scroll > 0) { app.scroll = 0; render(); break; }
                 if (app.input.len) { str_clear(&app.input); app.cursor = 0; }
@@ -3867,9 +3924,7 @@ static void inserir_colagem(const Clip *c)
         for (char *q = limpo; *q; q++) if (*q == '/') *q = '\\';
 #endif
         str_free(&app.ultimo_colado_img);
-    str_free(&app.plan);
         str_init(&app.ultimo_colado_img);
-    str_init(&app.plan);
         str_adds(&app.ultimo_colado_img, c->path);
         app.ultimo_colado_img_ms = now_ms();
         if (app.n_imgs < 8) app.imgs[app.n_imgs++] = str_dup(limpo);
@@ -4120,6 +4175,19 @@ static int run_replay(const char *path, int cols, int rows, int force_offline)
                 handle_event(&ev);
             } else {
                 fprintf(stderr, "replay: mouse <x> <y> [click|drag|release]\n");
+            }
+        } else if (str_eq(line, "edsel")) {
+            /* edsel - estado da selecao do EDITOR (gancho dos testes) */
+            render();
+            if (!app.ed_sel_ativa) {
+                printf("edsel: inativa\n");
+            } else {
+                size_t a = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_a : app.ed_sel_b;
+                size_t b = app.ed_sel_a < app.ed_sel_b ? app.ed_sel_b : app.ed_sel_a;
+                if (b > app.input.len) b = app.input.len;
+                printf("edsel: ativa [%zu,%zu) texto='%.*s'\n", a, b,
+                       (int)(b > a ? b - a : 0),
+                       app.input.data ? app.input.data + a : "");
             }
         } else if (str_eq(line, "sel")) {
             /* sel - estado da selecao, cores da primeira celula e o texto que
@@ -4410,6 +4478,12 @@ static void diag_install(void)
 int main(int argc, char **argv)
 {
     memset(&app, 0, sizeof app);
+#ifdef _WIN32
+    /* console em UTF-8 desde o inicio: os caminhos CLI (update, tool, -p)
+       imprimem acentos antes de qualquer term_init. */
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
     diag_install();              /* crash.log: evidencia de toda saida anormal */
     update_init(argv[0]);        /* argv[0] para achar o proprio exe (POSIX sem /proc) */
     str_init(&app.input);
@@ -4557,7 +4631,6 @@ int main(int argc, char **argv)
         if (lg >= 0) i18n_set(lg);
     }
     agent_init(&app.agent, &app.cfg, cwd);
-    plan_refresh();               /* painel do plano (agent op=plan) */
     /* `delta` sempre comeca um chat novo. `delta continue` retoma a ultima
        sessao desta pasta. Subagentes rodam com --no-session para nao sujar
        a lista de sessoes da pasta do pai. */
@@ -4629,7 +4702,6 @@ int main(int argc, char **argv)
         screen_init(&app.screen, cols, rows);
     }
 
-    plan_refresh();
     app.tr_dirty = 1;
     render();
 

@@ -95,6 +95,10 @@ int ui_tool_box(Screen *s, int y, int width, const Theme *t, int state,
 
 /* Quantas linhas visiveis um texto ocupa no editor (quebra automatica). */
 int ui_input_rows(const char *text, size_t len, int width);
+/* Layout do editor: linhas visuais com os offsets (em bytes) de inicio/fim de
+   cada linha — o main.c usa para mapear o mouse na selecao do editor. */
+int ui_input_layout(const char *text, size_t len, int w, size_t cursor,
+                    size_t *cur_row, size_t **starts, size_t **ends);
 
 /* Barra de status embutida na borda do editor.
  * spin_frame < 0 desenha o rotulo sem spinner (aviso passageiro). */

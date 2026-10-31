@@ -128,6 +128,24 @@ class Handler(BaseHTTPRequestHandler):
             ])
             return
 
+        if "cita-teste" in ultimo and not tem_resultado:
+            txt = ("> citacao de exemplo linha um\n"
+                   "> linha dois com **negrito**\n"
+                   "\n"
+                   "| col A | col B |\n"
+                   "|---|---|\n"
+                   "| um | dois |\n"
+                   "\n"
+                   "- item um\n"
+                   "  - aninhado a\n"
+                   "\n"
+                   "fim do teste\n")
+            self.responder_eventos([
+                {"id": "q", "choices": [{"index": 0, "delta": {"content": txt}}]},
+                {"id": "q", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            ])
+            return
+
         if "cria-extensao" in ultimo and not tem_resultado:
             spec = ('{"kind":"command","name":"teste-criado",'
                     '"desc":"criado pelo modelo","arg":"Diga ola ao chefe"}')

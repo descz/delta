@@ -663,6 +663,159 @@ void md_layout(const Theme *t, const char *text, size_t n, int width, Style base
             }
         }
 
+        /* tabela: linhas consecutivas comecando com | (a separadora |---| da o cabecalho) */
+        {
+            size_t off0 = 0;
+            while (off0 < ll && (ls[off0] == ' ' || ls[off0] == '\t')) off0++;
+            if (off0 < ll && ls[off0] == '|' && ll - off0 >= 2) {
+                if (para.n) { flush_wrapped(out, &para, width, 0, 0, base); ul_free(&para); }
+
+                #define MD_TBL_COLS 32
+                int larguras[MD_TBL_COLS];
+                int ncols = 0;
+                memset(larguras, 0, sizeof larguras);
+
+                size_t scan = pos;
+                int ncols_tbl = 0;
+                while (scan <= n) {
+                    size_t eol2 = scan;
+                    while (eol2 < n && text[eol2] != '\n') eol2++;
+                    const char *l2 = text + scan;
+                    size_t l2n = (size_t)(eol2 - scan);
+                    while (l2n > 0 && l2[l2n - 1] == '\r') l2n--;
+                    size_t o2 = 0;
+                    while (o2 < l2n && (l2[o2] == ' ' || l2[o2] == '\t')) o2++;
+                    if (o2 >= l2n || l2[o2] != '|' || l2n - o2 < 2) break;
+                    scan = eol2 + 1;
+                    /* separadora: so' tem - : | e espaco */
+                    int separadora = 1;
+                    for (size_t k = o2; k < l2n; k++) {
+                        if (l2[k] != '-' && l2[k] != ':' && l2[k] != '|' && l2[k] != ' ') { separadora = 0; break; }
+                    }
+                    if (separadora) continue;
+
+                    /* fatia a linha em celulas: entre | (o | final nao gera celula vazia) */
+                    int nc = 0;
+                    size_t k = o2 + 1;
+                    for (;;) {
+                        size_t ini = k;
+                        while (k < l2n && l2[k] != '|') k++;
+                        if (k >= l2n && ini == k) break;   /* nada depois do ultimo | */
+                        size_t fim2 = k;
+                        while (fim2 > ini && l2[fim2 - 1] == ' ') fim2--;
+                        size_t ii = ini;
+                        while (ii < fim2 && l2[ii] == ' ') ii++;
+                        if (nc < MD_TBL_COLS) {
+                            ULine cel; memset(&cel, 0, sizeof cel);
+                            if (fim2 > ii) il_parse(l2 + ii, fim2 - ii, base, t, &cel);
+                            else ul_push(&cel, ' ', base);
+                            if ((int)cel.n > larguras[nc]) larguras[nc] = (int)cel.n;
+                            nc++;
+                            ul_free(&cel);
+                        }
+                        if (k >= l2n) break;
+                        k++;   /* pula o | */
+                    }
+                    if (nc > ncols_tbl) ncols_tbl = nc;
+                    scan = eol2 + 1;
+                }
+
+                if (ncols_tbl > 0) {
+                    int total = 1;
+                    for (int c2 = 0; c2 < ncols_tbl; c2++) total += larguras[c2] + 3;
+                    if (total > width) {              /* aperta colunas para caber */
+                        while (total > width) {
+                            int mai = 0;
+                            for (int c2 = 1; c2 < ncols_tbl; c2++) if (larguras[c2] > larguras[mai]) mai = c2;
+                            if (larguras[mai] <= 1) break;
+                            larguras[mai]--;
+                            total--;
+                        }
+                    }
+                    /* reimprime as linhas com as larguras finais: refaz varrendo de novo */
+                    size_t ini_tbl = pos;
+                    int primeira = 1;
+                    while (ini_tbl <= n) {
+                        size_t eol3 = ini_tbl;
+                        while (eol3 < n && text[eol3] != '\n') eol3++;
+                        const char *l3 = text + ini_tbl;
+                        size_t l3n = (size_t)(eol3 - ini_tbl);
+                        while (l3n > 0 && l3[l3n - 1] == '\r') l3n--;
+                        size_t o3 = 0;
+                        while (o3 < l3n && (l3[o3] == ' ' || l3[o3] == '\t')) o3++;
+                        if (o3 >= l3n || l3[o3] != '|' || l3n - o3 < 2) break;
+
+                        ULine lin; memset(&lin, 0, sizeof lin);
+                        /* separadora logo depois da primeira linha com conteudo */
+                        int sep3 = 1;
+                        for (size_t k = o3; k < l3n; k++)
+                            if (l3[k] != '-' && l3[k] != ':' && l3[k] != '|' && l3[k] != ' ') { sep3 = 0; break; }
+
+                        if (sep3) {
+                            ul_push(&lin, 0x251C, fg_hr);            /* ├ */
+                            for (int c2 = 0; c2 < ncols_tbl; c2++) {
+                                for (int j = 0; j < larguras[c2] + 2; j++) ul_push(&lin, 0x2500, fg_hr);
+                                ul_push(&lin, c2 == ncols_tbl - 1 ? 0x2524 : 0x252C, fg_hr); /* ┤ ┬ */
+                            }
+                            doc_add(out, &lin);
+                            ini_tbl = eol3 + 1;
+                            continue;
+                        }
+
+                        ul_push(&lin, 0x2502, fg_hr);                /* │ */
+                        int c2 = 0;
+                        size_t k = o3 + 1;
+                        for (;;) {
+                            size_t ini4 = k;
+                            while (k < l3n && l3[k] != '|') k++;
+                            if (k >= l3n && ini4 == k) break;  /* nada depois do ultimo | */
+                            size_t fim4 = k;
+                            while (fim4 > ini4 && l3[fim4 - 1] == ' ') fim4--;
+                            size_t ii = ini4;
+                            while (ii < fim4 && l3[ii] == ' ') ii++;
+
+                            ULine cel; memset(&cel, 0, sizeof cel);
+                            if (fim4 > ii) il_parse(l3 + ii, fim4 - ii, base, t, &cel);
+                            else ul_push(&cel, ' ', base);
+
+                            ul_push(&lin, ' ', base);
+                            int usados = 0;
+                            for (size_t j = 0; j < cel.n; j++) {
+                                if (c2 < ncols_tbl && usados >= larguras[c2]) break;
+                                ul_push(&lin, cel.cp[j], cel.st[j]);
+                                usados++;
+                            }
+                            while (usados < (c2 < ncols_tbl ? larguras[c2] : usados)) {
+                                ul_push(&lin, ' ', base);
+                                usados++;
+                            }
+                            ul_push(&lin, ' ', base);
+                            ul_push(&lin, 0x2502, fg_hr);      /* fecha a celula */
+                            ul_free(&cel);
+                            if (k >= l3n) break;
+                            k++;
+                            c2++;
+                            if (c2 >= ncols_tbl) break;
+                        }
+                        while (c2 < ncols_tbl) {                     /* celulas faltantes */
+                            ul_push(&lin, ' ', base);
+                            for (int j = 0; j < larguras[c2]; j++) ul_push(&lin, ' ', base);
+                            ul_push(&lin, ' ', base);
+                            ul_push(&lin, 0x2502, fg_hr);
+                            c2++;
+                        }
+                        doc_add(out, &lin);
+                        (void)primeira;
+                        ini_tbl = eol3 + 1;
+                    }
+                    pos = scan;
+                    if (is_last) break;
+                    continue;
+                }
+                /* nao era tabela (nenhuma linha util): cai no fluxo normal */
+            }
+        }
+
         /* blockquote */
         if (ll >= 1 && ls[0] == '>') {
             if (para.n) { flush_wrapped(out, &para, width, 0, 0, base); ul_free(&para); }
@@ -920,6 +1073,18 @@ static int input_layout(const char *text, size_t len, int w, size_t cursor,
     return rows;
 }
 
+/* Versao exportada do layout do editor: main.c usa para mapear posicao do
+   mouse -> byte no texto (selecao no editor) e pintar a selecao. */
+int ui_input_layout(const char *text, size_t len, int w, size_t cursor,
+                    size_t *cur_row, size_t **starts, size_t **ends)
+{
+    size_t *st = NULL, *en = NULL;
+    int rows = input_layout(text, len, w, cursor, cur_row, NULL, &st, &en);
+    if (starts) *starts = st; else free(st);
+    if (ends) *ends = en; else free(en);
+    return rows;
+}
+
 int ui_input_rows(const char *text, size_t len, int width)
 {
     size_t *st = NULL, *en = NULL;
@@ -1035,7 +1200,12 @@ int ui_editor(Screen *s, int y, int width, const Theme *t,
         int cy = row + (int)(cur_row - first);
         if (cx > s->cols - 3) cx = s->cols - 3;
         if (cx < 2) cx = 2;
-        screen_put(s, cx, cy, ' ', st_cur);
+        /* desenha o caractere de baixo (nao um espaco): cursor no meio do
+           texto nao pode esconder a letra */
+        uint32_t cp_cur = ' ';
+        if (cursor < text_len && text[cursor] != '\n')
+            utf8_decode(text + cursor, text_len - cursor, &cp_cur);
+        screen_put(s, cx, cy, cp_cur, st_cur);
     }
     row += maxr;
 

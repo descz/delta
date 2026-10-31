@@ -401,6 +401,15 @@ int term_read(Event *ev, int timeout_ms)
 int term_poll_paste_hotkey(void)
 {
     static int prev_v_down = 0, prev_ctrl_down = 0;
+    /* GetAsyncKeyState e GLOBAL: com duas abas do Delta abertas, as duas
+       processos veem o mesmo Ctrl+V e colam o clipboard DUAS VEZES (a imagem
+       entrava nas duas sessoes). So colhe o atalho se ESTE console esta com
+       foco — a outra aba tem o teclado, nao e a nossa vez. */
+    HWND nosso = GetConsoleWindow();
+    if (!nosso || nosso != GetForegroundWindow()) {
+        prev_v_down = prev_ctrl_down = 0;   /* sem foco: nao acumula borda */
+        return 0;
+    }
     SHORT cs = GetAsyncKeyState(VK_CONTROL);
     SHORT vs = GetAsyncKeyState('V');
     int v_down = (vs & 0x8000) != 0;

@@ -373,6 +373,28 @@ echo
 echo "[3-report] /report mostra o relato da sessão"
 ./bin/delta.exe --replay tests/replay-report.txt 100 24 > /tmp/delta_report.log 2>&1
 expect /tmp/delta_report.log "Sem relato ainda"       "/report sem relato ainda"
+
+echo
+echo "[3-cita] markdown: tabela renderiza como tabela (e citação como citação)"
+python tests/mock_openai.py $((PORT + 30)) > /dev/null 2>&1 &
+CMOCK=$!
+sleep 2
+./bin/delta.exe --replay tests/replay-cita.txt 100 24 \
+    --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 30))/v1" --api-key sk-teste > /tmp/delta_cita.log 2>&1
+kill $CMOCK 2>/dev/null
+expect /tmp/delta_cita.log "│ citacao de exemplo"       "citação renderiza com a barra"
+expect /tmp/delta_cita.log "│ col A │ col B │"            "tabela: cabeçalho com colunas"
+expect /tmp/delta_cita.log "├───────┬───────┤"            "tabela: separadora do cabeçalho"
+expect /tmp/delta_cita.log "│ um    │ dois  │"            "tabela: linha de dados alinhada"
+reject /tmp/delta_cita.log "| col A | col B |"            "tabela: não vira linha crua de pipes"
+
+echo
+echo "[3-edsel] seleção no editor: arrasto seleciona, backspace apaga"
+./bin/delta.exe --replay tests/replay-edsel.txt 100 24 > /tmp/delta_edsel.log 2>&1
+expect /tmp/delta_edsel.log "edsel: ativa [0,6) texto='ola mu'" "editor: arrasto seleciona"
+expect /tmp/delta_edsel.log "edsel: inativa"                 "editor: apagar limpa a seleção"
+expect /tmp/delta_edsel.log "|│ ndo do teste"               "editor: backspace apagou o selecionado"
 expect /tmp/delta_tui.log "1.2k in / 56 out"              "rodape da resposta: tokens do turno"
 if grep -qE '\|  read path=.*[0-9]+(\.[0-9])?(ms|s)\|' /tmp/delta_tui.log; then
     pass "tempo da tool dentro do bloco"
@@ -793,8 +815,9 @@ PLAN2="$HOME/.deltaCore/plan.md"
 - [ ] web
 "}' > /dev/null 2>&1
 ./bin/delta.exe --replay tests/replay-commands.txt 84 22 > "$AR/planui.log" 2>&1
-expect "$AR/planui.log" "Plano  1/2" "plano desenhado no topo"
-expect "$AR/planui.log" "- [ ] web" "plano lista os itens"
+reject "$AR/planui.log" "Plano  1/2" "plano não renderiza na TUI (só orientação do agente)"
+if [ -f "$PLAN2" ]; then pass "plano: plan.md continua gravado para o agente"
+else fail "plan.md deveria existir para o agente se orientar"; fi
 if [ -f "$AR/plan2.bak" ]; then cp "$AR/plan2.bak" "$PLAN2"; else rm -f "$PLAN2"; fi
 sleep 1
 rm -rf "$AR" 2>/dev/null; mkdir -p "$AR"
