@@ -516,7 +516,7 @@ echo
 echo "[7] menu de comandos (digitar /)"
 ./bin/delta.exe --replay tests/replay-menu.txt 100 30 > /tmp/delta_menu.log 2>&1
 expect /tmp/delta_menu.log "→ help"   "marcador -> no item selecionado"
-expect /tmp/delta_menu.log "(1/22)"            "contador de itens"
+expect /tmp/delta_menu.log "(1/21)"            "contador de itens"
 expect /tmp/delta_menu.log "/models "         "Tab completa o comando"
 expect /tmp/delta_menu.log "Todos os modelos"    "descricao do comando aparece"
 
@@ -1257,7 +1257,7 @@ printf 'update-check\ndump aviso\n' > "$UPD/aviso.txt"
 env $UPDATE_ON DELTA_UPDATE_URL="$UPD9" DELTA_CORE="$UPD/core" \
     ./bin/delta.exe --replay "$UPD/aviso.txt" 100 30 > "$UPD/aviso.log" 2>&1
 expect "$UPD/aviso.log" "99.9.9"                 "update: aviso de versao nova na inicializacao"
-expect "$UPD/aviso.log" "use /update"            "update: aviso ensina o comando"
+expect "$UPD/aviso.log" 'rode `delta update`'   "update: aviso ensina o comando"
 
 # b) o cache de 24 h evita nova consulta: com a URL quebrada o aviso continua
 env $UPDATE_ON DELTA_UPDATE_URL="http://127.0.0.1:1/latest" DELTA_CORE="$UPD/core" \
@@ -1285,7 +1285,7 @@ else fail "update: tamanho diferente do release"; fi
 # e) ja' atualizado
 DELTA_UPDATE_URL="$UPD1" DELTA_CORE="$UPD/core2" \
     ./bin/delta.exe update > "$UPD/atual.log" 2>&1
-expect "$UPD/atual.log" "versao mais nova"        "update: reconhece que ja esta atualizado"
+expect "$UPD/atual.log" "versão mais nova"        "update: reconhece que já está atualizado"
 
 # f) sem binario para a plataforma (release so' com codigo-fonte)
 (python tests/update_fake.py $((PORT + 9)) v99.9.9 Delta-macos-source.zip "$UPD/novo.bin" > /dev/null 2>&1 &
@@ -1294,7 +1294,7 @@ sleep 2
 rm -rf "$UPD/core3"
 DELTA_UPDATE_URL="http://127.0.0.1:$((PORT + 9))/latest" DELTA_CORE="$UPD/core3" \
     ./bin/delta.exe update > "$UPD/mac.log" 2>&1
-expect "$UPD/mac.log" "nao publica binario"      "update: avisa quando nao ha binario"
+expect "$UPD/mac.log" "não publica binário"      "update: avisa quando nao ha binario"
 
 kill "$(cat "$UPD/upd.pid")" "$(cat "$UPD/atual.pid")" "$(cat "$UPD/mac.pid")" 2>/dev/null
 wait "$(cat "$UPD/upd.pid")" 2>/dev/null

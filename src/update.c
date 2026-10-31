@@ -249,7 +249,7 @@ int update_check(UpdateInfo *out, int cache_ok)
     JValue *v = json_parse_cstr(corpo.data ? corpo.data : "");
     str_free(&corpo);
     if (!v) {
-        copia(out->err, sizeof out->err, "resposta invalida do GitHub");
+        copia(out->err, sizeof out->err, "resposta inválida do GitHub");
         return 0;
     }
 
@@ -280,7 +280,7 @@ char *update_notice(int allow_network)
     if (!u.available || !u.latest[0]) return NULL;
 
     Str s; str_init(&s);
-    str_addf(&s, "nova versao %s disponivel (voce esta na %s) \u00b7 use /update ou `delta update`",
+    str_addf(&s, "nova versão %s disponível (você está na %s) \u00b7 rode `delta update`",
              u.latest, u.current);
     return str_steal(&s);
 }
@@ -298,7 +298,7 @@ static int trocar_exe(const char *exe, const char *novo, Str *msg)
 
     /* 1. tira o exe em uso do caminho (renomear pode, apagar nao) */
     if (!MoveFileExA(exe, velho.data, MOVEFILE_REPLACE_EXISTING)) {
-        str_addf(msg, "nao consegui renomear o executavel em uso (erro %lu)",
+        str_addf(msg, "não consegui renomear o executável em uso (erro %lu)",
                  (unsigned long)GetLastError());
         str_free(&velho);
         return 0;
@@ -306,7 +306,7 @@ static int trocar_exe(const char *exe, const char *novo, Str *msg)
     /* 2. poe o novo no lugar */
     if (!MoveFileExA(novo, exe, MOVEFILE_REPLACE_EXISTING)) {
         MoveFileExA(velho.data, exe, MOVEFILE_REPLACE_EXISTING);   /* volta atras */
-        str_addf(msg, "nao consegui gravar o novo executavel (erro %lu)",
+        str_addf(msg, "não consegui gravar o novo executável (erro %lu)",
                  (unsigned long)GetLastError());
         str_free(&velho);
         return 0;
@@ -352,7 +352,7 @@ static int trocar_exe(const char *exe, const char *novo, Str *msg)
 {
     size_t len = 0;
     char *dados = file_read(novo, &len);
-    if (!dados) { str_adds(msg, "nao consegui ler o binario baixado"); return 0; }
+    if (!dados) { str_adds(msg, "não consegui ler o binário baixado"); return 0; }
 
     Str dest; str_init(&dest);
     str_addf(&dest, "%s.new", exe);
@@ -365,7 +365,7 @@ static int trocar_exe(const char *exe, const char *novo, Str *msg)
     }
     chmod(dest.data, 0755);
     if (rename(dest.data, exe) != 0) {
-        str_addf(msg, "nao consegui trocar o executavel em %s", exe);
+        str_addf(msg, "não consegui trocar o executável em %s", exe);
         remove(dest.data);
         str_free(&dest);
         return 0;
@@ -382,11 +382,11 @@ int update_apply(const UpdateInfo *info, Str *msg)
     str_clear(msg);
 
     if (!info->available) {
-        str_adds(msg, "ja esta na versao mais nova.");
+        str_adds(msg, "já está na versão mais nova.");
         return 0;
     }
     if (!info->url[0]) {
-        str_addf(msg, "o release %s nao publica binario para esta plataforma; baixe em %s",
+        str_addf(msg, "o release %s não publica binário para esta plataforma; baixe em %s",
                  info->latest, info->page);
         return 0;
     }
@@ -394,7 +394,7 @@ int update_apply(const UpdateInfo *info, Str *msg)
     Str corpo; str_init(&corpo);
     Str erro; str_init(&erro);
     if (!http_get_text_to(info->url, &corpo, &erro, 300)) {
-        str_addf(msg, "download falhou: %s", erro.len ? erro.data : "sem conexao");
+        str_addf(msg, "download falhou: %s", erro.len ? erro.data : "sem conexão");
         str_free(&corpo);
         str_free(&erro);
         return 0;
@@ -414,11 +414,11 @@ int update_apply(const UpdateInfo *info, Str *msg)
 #ifdef _WIN32
     /* sanity check: tem que ser um PE ("MZ") */
     if (corpo.data[0] != 'M' || corpo.data[1] != 'Z') {
-        str_adds(msg, "o arquivo baixado nao parece um executavel do Windows");
+        str_adds(msg, "o arquivo baixado não parece um executável do Windows");
         goto fim;
     }
     novo = (char *)malloc(strlen(exe) + 5);
-    if (!novo) { str_adds(msg, "sem memoria"); goto fim; }
+    if (!novo) { str_adds(msg, "sem memória"); goto fim; }
     sprintf(novo, "%s.new", exe);
     if (!file_write(novo, corpo.data, corpo.len)) {
         str_addf(msg, "sem permissao para gravar em %s (rode como administrador)", exe);
@@ -429,7 +429,7 @@ int update_apply(const UpdateInfo *info, Str *msg)
 #else
     /* o release do Linux vem como .tar.gz */
     if ((unsigned char)corpo.data[0] != 0x1f || (unsigned char)corpo.data[1] != 0x8b) {
-        str_adds(msg, "o pacote baixado nao e' um .tar.gz");
+        str_adds(msg, "o pacote baixado não é um .tar.gz");
         goto fim;
     }
     {
@@ -438,7 +438,7 @@ int update_apply(const UpdateInfo *info, Str *msg)
         dir_make(tmp.data);
         char *pkg = path_join(tmp.data, "pkg.tar.gz");
         if (!file_write(pkg, corpo.data, corpo.len)) {
-            str_adds(msg, "nao consegui gravar o pacote em /tmp");
+            str_adds(msg, "não consegui gravar o pacote em /tmp");
             free(pkg);
             str_free(&tmp);
             goto fim;
@@ -456,7 +456,7 @@ int update_apply(const UpdateInfo *info, Str *msg)
         }
         novo = acha_binario(tmp.data);
         if (!novo) {
-            str_adds(msg, "o pacote nao tem o binario delta");
+            str_adds(msg, "o pacote não tem o binário delta");
             remove(pkg);
             free(pkg);
             str_free(&tmp);
@@ -479,10 +479,10 @@ fim:
 
     if (ok) {
         str_clear(msg);
-        str_addf(msg, "atualizado para %s (reinicie o delta para usar a versao nova)",
+        str_addf(msg, "atualizado para %s (reinicie o delta para usar a versão nova)",
                  info->latest);
     } else if (msg->len == 0) {
-        str_adds(msg, "nao consegui atualizar");
+        str_adds(msg, "não consegui atualizar");
     }
     return ok;
 }
@@ -499,33 +499,33 @@ int update_cli(int argc, char **argv)
         else if (str_eq(argv[i], "--help") || str_eq(argv[i], "-h")) {
             printf("uso: delta update [--check]\n\n"
                    "  consulta o release mais novo em github.com/" DELTA_REPO " e troca este\n"
-                   "  executavel pela versao baixada (reinicie o delta depois).\n"
-                   "  --check                   so' mostra se ha' versao nova\n"
+                   "  executavel pela versão baixada (reinicie o delta depois).\n"
+                   "  --check                   só mostra se há versão nova\n"
                    "  DELTA_NO_UPDATE_CHECK=1   desliga o aviso automatico na TUI\n"
                    "  updateCheck:false         o mesmo, no config.json\n");
             return 0;
         }
     }
 
-    printf("Delta Agent %s - procurando versoes novas...\n", DELTA_VERSION);
+    printf("Delta Agent %s - procurando versões novas...\n", DELTA_VERSION);
     fflush(stdout);
 
     UpdateInfo u;
     int ok = update_check(&u, 0);
     if (!ok) {
         if (u.available)
-            printf("aviso: sem conexao agora, mas a ultima consulta viu a versao %s\n", u.latest);
-        fprintf(stderr, "delta update: %s\n", u.err[0] ? u.err : "nao consegui consultar os releases");
+            printf("aviso: sem conexao agora, mas a última consulta viu a versão %s\n", u.latest);
+        fprintf(stderr, "delta update: %s\n", u.err[0] ? u.err : "não consegui consultar os releases");
         return 1;
     }
     if (!u.available) {
-        printf("ja' esta na versao mais nova (%s).\n", u.current);
+        printf("já está na versão mais nova (%s).\n", u.current);
         return 0;
     }
 
-    printf("nova versao: %s (a sua: %s)\n", u.latest, u.current);
+    printf("nova versão: %s (a sua: %s)\n", u.latest, u.current);
     if (so_checar) {
-        printf("pagina do release: %s\n", u.page);
+        printf("página do release: %s\n", u.page);
         return 0;
     }
     if (u.url[0]) printf("baixando %s...\n", u.asset);
@@ -533,7 +533,7 @@ int update_cli(int argc, char **argv)
     Str msg; str_init(&msg);
     int trocou = update_apply(&u, &msg);
     if (msg.len) printf("%s\n", msg.data);
-    if (!trocou && u.page[0]) printf("pagina do release: %s\n", u.page);
+    if (!trocou && u.page[0]) printf("página do release: %s\n", u.page);
     str_free(&msg);
     return trocou ? 0 : 1;
 }

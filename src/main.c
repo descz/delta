@@ -140,8 +140,7 @@ static const char *const CMD_KEYS[] = {
     "cmd.help", "cmd.login", "cmd.logout", "cmd.models", "cmd.thinking",
     "cmd.verbosity", "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new",
     "cmd.clear", "cmd.skills", "cmd.extensions", "cmd.translator",
-    "cmd.reload", "cmd.quit", "cmd.subagentmodel", "cmd.deltagroup", "cmd.undo", "cmd.update",
-    "cmd.report"
+    "cmd.reload", "cmd.quit", "cmd.subagentmodel", "cmd.deltagroup", "cmd.undo", "cmd.report"
 };
 
 
@@ -166,7 +165,6 @@ static const Cmd COMMANDS[] = {
     { "subagentmodel", "Modelo em que os subagentes rodam (ele pergunta antes)", NULL,       0 },
     { "deltagroup", "Grupo do Delta no Telegram · convite e avisos",    NULL,                 0 },
     { "undo",      "Restaura o conteúdo anterior de um arquivo",       "[arquivo]",          1 },
-    { "update",    "Instala a versão mais nova do GitHub",              "[--check]",          1 },
     { "report",    "Mostra o relato da sessão no memory",              NULL,                 0 },
 };
 #define N_COMMANDS ((int)(sizeof COMMANDS / sizeof COMMANDS[0]))
@@ -908,7 +906,7 @@ static void update_boot_notice(void)
     Block *b = block_add(B_INFO);
     str_adds(&b->text, aviso);
     free(aviso);
-    notify_status("versão nova disponível \u00b7 /update instala");
+    notify_status("versão nova disponível \u00b7 rode `delta update`");
     app.tr_dirty = 1;
     render();
 }
@@ -2326,41 +2324,6 @@ static void handle_command(const char *raw)
                  "sendo os seus (provedor + chave). Ctrl+clique no link acima para abrir.\n");
         if (!clipboard_write_text(DELTA_TELEGRAM))
             str_adds(&b->text, "  (n\u00e3o consegui copiar automaticamente: selecione o link acima)\n");
-        app.tr_dirty = 1;
-        render();
-        return;
-    }
-
-    /* /update [--check]: consulta os releases do GitHub e troca o binario */
-    if (str_eq(cmd, "/update") || str_eq(cmd, "/atualizar")) {
-        Block *b = block_add(B_INFO);
-        str_adds(&b->text, "procurando versões novas no GitHub...");
-        app.tr_dirty = 1;
-        render();
-
-        UpdateInfo u;
-        int ok = update_check(&u, 0);
-        str_clear(&b->text);
-        if (!ok) {
-            str_addf(&b->text, "não consegui consultar os releases: %s",
-                     u.err[0] ? u.err : "sem conexao");
-            if (u.available)
-                str_addf(&b->text, "\n(pelo cache, a versão %s está disponível: %s)\n",
-                         u.latest, u.page);
-            else
-                str_addc(&b->text, '\n');
-        } else if (!u.available) {
-            str_addf(&b->text, "você já está na versão mais nova (%s).", u.current);
-        } else if (str_istarts(rest, "--check")) {
-            str_addf(&b->text, "nova versão %s (a sua: %s)\n%s\n", u.latest, u.current, u.page);
-        } else {
-            Str msg; str_init(&msg);
-            str_addf(&b->text, "nova versão %s (a sua: %s)\n", u.latest, u.current);
-            int trocou = update_apply(&u, &msg);
-            if (msg.len) str_addf(&b->text, "%s\n", msg.data);
-            if (!trocou && u.page[0]) str_addf(&b->text, "pagina do release: %s\n", u.page);
-            str_free(&msg);
-        }
         app.tr_dirty = 1;
         render();
         return;
