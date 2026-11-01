@@ -157,19 +157,22 @@ int main(void)
                 conteudo[w++] = (char)b.l[1].cp[k];
             conteudo[w] = 0;
         }
-        ok(b.l[0].n == 3 && b.l[0].cp[0] == '`' && b.n >= 3 && b.l[2].cp[0] == '`',
-           "bloco de codigo abre e fecha com a cerca");
+        ok(b.n >= 2 && b.l[0].n >= 2 && b.l[0].cp[0] == 0x2502 && b.l[1].cp[0] == 0x2502,
+           "bloco de codigo vira citacao (barra na lateral, sem cercas cruas)");
         ok(strstr(conteudo, "static int x = 1;") != NULL, "conteudo do bloco e' preservado");
         doc_free(&b);
 
         /* nada dentro do bloco vira markdown */
         const char *cru = "```\na ** b * c\n```\n";
         Doc c; md_layout(&t, cru, strlen(cru), 40, base, &c);
-        int marcou = 0;
+        int marcou = 0, cerca = 0;
         for (size_t i = 0; i < c.n; i++)
-            for (size_t k = 0; k < c.l[i].n; k++)
+            for (size_t k = 0; k < c.l[i].n; k++) {
                 if (c.l[i].st[k].a & (ATTR_BOLD | ATTR_ITALIC)) marcou = 1;
+                if (c.l[i].cp[k] == '`') cerca = 1;
+            }
         ok(!marcou, "dentro do bloco nada e' interpretado como markdown");
+        ok(!cerca, "os backticks da cerca nao vazam na tela");
         doc_free(&c);
         theme_free(&t);
     }

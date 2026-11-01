@@ -592,14 +592,11 @@ void md_layout(const Theme *t, const char *text, size_t n, int width, Style base
 
         if (in_code) {
             if (ll >= 3 && ls[0] == '`' && ls[1] == '`' && ls[2] == '`') {
-                ULine f = { 0 };
-                for (int k = 0; k < width && k < 3; k++) ul_push(&f, (uint32_t)'`', fg_fence);
-                doc_add(out, &f);
-                in_code = 0;
+                in_code = 0;   /* cerca fecha sem virar texto: o bloco e' desenhado como citacao */
             } else {
                 ULine l = { 0 };
-                ul_push(&l, ' ', fg_codeblk);
-                ul_push(&l, ' ', fg_codeblk);
+                ul_push(&l, 0x2502, fg_fence);   /* │ */
+                ul_push(&l, ' ', fg_fence);
                 for (size_t k = 0; k < ll; k++) {
                     uint32_t cp; int cc = utf8_decode(ls + k, ll - k, &cp);
                     if (cc <= 0) break;
@@ -614,9 +611,21 @@ void md_layout(const Theme *t, const char *text, size_t n, int width, Style base
 
         if (ll >= 3 && ls[0] == '`' && ls[1] == '`' && ls[2] == '`') {
             if (para.n) { flush_wrapped(out, &para, width, 0, 0, base); para.n = 0; free(para.cp); free(para.st); para.cp=NULL; para.st=NULL; }
-            ULine f = { 0 };
-            for (int k = 0; k < width && k < 3; k++) ul_push(&f, (uint32_t)'`', fg_fence);
-            doc_add(out, &f);
+            size_t off = 3;
+            while (off < ll && (ls[off] == ' ' || ls[off] == '\t')) off++;
+            while (ll > off && (ls[ll - 1] == ' ' || ls[ll - 1] == '\t' || ls[ll - 1] == '\r')) ll--;
+            if (off < ll) {   /* rotulo da linguagem abre a citacao: │ c */
+                ULine f = { 0 };
+                ul_push(&f, 0x2502, fg_fence);   /* │ */
+                ul_push(&f, ' ', fg_fence);
+                for (size_t k = off; k < ll; k++) {
+                    uint32_t cp; int cc = utf8_decode(ls + k, ll - k, &cp);
+                    if (cc <= 0) break;
+                    ul_push(&f, cp, fg_fence);
+                    k += (size_t)cc - 1;
+                }
+                doc_add(out, &f);
+            }
             in_code = 1;
             pos = eol + 1;
             continue;
