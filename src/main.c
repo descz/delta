@@ -2350,18 +2350,18 @@ static void dialeto_comando(const char *args)
     str_init(&err);
 
     if (!dialeto_opts(&o, args, &brief, &err)) {
-        dial_info("%s", err.len ? err.data : "argumentos invalidos");
+        dial_info("%s", err.len ? err.data : "argumentos inválidos");
         str_free(&err);
         return;
     }
     if (!brief || !*brief) {
         dial_info("uso: /dialeto [--meta N] [--critico <modelo>] [--sem-copia] [--rodadas N] <objetivo>\n\n"
-                  "O artifice implementa, o critico ataca e testa numa copia isolada,\n"
-                  "o artifice corrige, e assim por diante — com o MESMO modelo que\n"
-                  "voce esta usando nos dois papeis (--critico troca so' o critico).\n"
-                  "SEM --rodadas o loop roda INFINITAMENTE ate voce mandar parar\n"
+                  "O artífice implementa, o crítico ataca e testa numa cópia isolada,\n"
+                  "o artífice corrige, e assim por diante — com o MESMO modelo que\n"
+                  "você está usando nos dois papéis (--critico troca só o crítico).\n"
+                  "SEM --rodadas o loop roda INFINITAMENTE até você mandar parar\n"
                   "(Ctrl+C ou ESC). Com --meta N encerra sozinho quando a nota N se\n"
-                  "mantem estavel. A nota de cada rodada fica em\n"
+                  "mantém estável. A nota de cada rodada fica em\n"
                   ".delta/dialeto/<objetivo>/PLACAR.md e rodar de novo com o mesmo\n"
                   "objetivo RETOMA de onde parou.\n\n"
                   "Custo: 2 turnos de agente por rodada — para quando quiser.");
@@ -2431,12 +2431,12 @@ static void dialeto_comando(const char *args)
     app.dialeto_rodando = 1;   /* Ctrl+C não para o dialeto (só o ESC) */
 
     if (o.rodadas_max > 0)
-        dial_info("dialeto iniciado \u00b7 %d rodadas \u00b7 artifice %s \u00b7 critico %s\n"
+        dial_info("dialeto iniciado \u00b7 %d rodadas \u00b7 artífice %s \u00b7 crítico %s\n"
                   "pastas: %s\nCtrl+C interrompe e ainda grava o relatorio.",
                   o.rodadas_max, app.cfg.model, modelo_crit, ddir);
     else
-        dial_info("dialeto iniciado \u00b7 sem teto (roda ate voce parar com Ctrl+C ou ESC) \u00b7 "
-                  "artifice %s \u00b7 critico %s\n"
+        dial_info("dialeto iniciado \u00b7 sem teto (roda até você parar com Ctrl+C ou ESC) \u00b7 "
+                  "artífice %s \u00b7 crítico %s\n"
                   "pastas: %s\nCtrl+C interrompe e ainda grava o relatorio.",
                   app.cfg.model, modelo_crit, ddir);
     app.tr_dirty = 1;
@@ -2452,7 +2452,7 @@ static void dialeto_comando(const char *args)
             d.motivo = "teto de rodadas";
             break;
         }
-        if (app.abort_requested) { d.motivo = "interrompido pelo usuario"; break; }
+        if (app.abort_requested) { d.motivo = "interrompido pelo usuário"; break; }
         if (o.limite_s && (long)((now_ms() - t0) / 1000u) >= o.limite_s) {
             d.motivo = "limite de tempo";
             break;
@@ -2473,11 +2473,11 @@ static void dialeto_comando(const char *args)
                modelo, e' o usuario mandando parar. */
             int por_usuario = app.abort_requested != 0;
             dial_info(por_usuario
-                          ? "dialeto interrompido pelo usuario na rodada %d do artifice"
-                          : "dialeto interrompido na rodada %d do artifice%s%s",
+                          ? "dialeto interrompido pelo usuário na rodada %d do artífice"
+                          : "dialeto interrompido na rodada %d do artífice%s%s",
                       d.rodada, err.len ? ": " : "", err.len ? err.data : "");
             free(relato);
-            d.motivo = por_usuario ? "interrompido pelo usuario" : "falha no artifice";
+            d.motivo = por_usuario ? "interrompido pelo usuário" : "falha no artífice";
             break;
         }
 
@@ -2506,7 +2506,7 @@ static void dialeto_comando(const char *args)
             Str ce;
             str_init(&ce);
             cdir = dialeto_copia(cwd, c0, &ce);
-            if (!cdir) dial_info("dialeto: copia isolada falhou (%s) \u2014 o critico roda no projeto",
+            if (!cdir) dial_info("dialeto: cópia isolada falhou (%s) \u2014 o crítico roda no projeto",
                                  ce.len ? ce.data : "sem espaco?");
             str_free(&ce);
             ctmp = c0;
@@ -2526,10 +2526,10 @@ static void dialeto_comando(const char *args)
         if (!ok2) {
             int por_usuario = app.abort_requested != 0;
             dial_info(por_usuario
-                          ? "dialeto interrompido pelo usuario na rodada %d do critico"
-                          : "dialeto interrompido na rodada %d do critico%s%s",
+                          ? "dialeto interrompido pelo usuário na rodada %d do crítico"
+                          : "dialeto interrompido na rodada %d do crítico%s%s",
                       d.rodada, err.len ? ": " : "", err.len ? err.data : "");
-            d.motivo = por_usuario ? "interrompido pelo usuario" : "falha no critico";
+            d.motivo = por_usuario ? "interrompido pelo usuário" : "falha no crítico";
             free(critica);
             free(relato);
             free(ds); free(dd);
@@ -2576,7 +2576,7 @@ static void dialeto_comando(const char *args)
             free(p);
         }
 
-        dial_info("dialeto \u00b7 rodada %d/%d \u00b7 nota %.1f (%d bloqueio%s, %d critico%s)%s",
+        dial_info("dialeto \u00b7 rodada %d/%d \u00b7 nota %.1f (%d bloqueio%s, %d crítico%s)%s",
                   d.rodada, o.rodadas_max, n.nota, n.bloqueios, n.bloqueios == 1 ? "" : "s",
                   n.criticos, n.criticos == 1 ? "" : "s",
                   n.parse_ok ? "" : " \u00b7 o critico nao entregou NOTA");
@@ -2602,7 +2602,7 @@ static void dialeto_comando(const char *args)
         dial_info("dialeto encerrado \u00b7 %d rodada(s) \u00b7 melhor %.1f \u00b7 %s\n"
                   "tokens: entrada %ld \u00b7 saida %ld\nrelatorio: %s",
                   rodadas_feitas, d.melhor,
-                  d.motivo && *d.motivo ? d.motivo : "concluido", tin, tout, p);
+                  d.motivo && *d.motivo ? d.motivo : "concluído", tin, tout, p);
         free(p);
         free(rel);
     }
