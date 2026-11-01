@@ -1,5 +1,5 @@
 ctrlc-at 2
 esc-at 6
-type /dialeto --sim --sem-copia tabela-larga
+type /dialeto --sem-copia tabela-larga
 key enter
 dump apos

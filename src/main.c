@@ -177,7 +177,7 @@ static const Cmd COMMANDS[] = {
     { "deltagroup", "Grupo do Delta no Telegram · convite e avisos",    NULL,                 0 },
     { "undo",      "Restaura o conteúdo anterior de um arquivo",       "[arquivo]",          1 },
     { "report",    "Mostra o relato da sessão no memory",              NULL,                 0 },
-    { "dialeto",   "Loop dialético: artífice x crítico, N rodadas de qualidade", "<objetivo> [--rodadas 50] [--sim]", 1 },
+    { "dialeto",   "Loop dialético infinito: artífice x crítico no seu modelo (--meta N encerra sozinho)", "<objetivo> [--meta N]", 1 },
 };
 #define N_COMMANDS ((int)(sizeof COMMANDS / sizeof COMMANDS[0]))
 
@@ -2298,9 +2298,6 @@ static void menu_complete(void)
 /* ================================================================== */
 static Str g_dial_cap;
 
-/* ate' aqui o /dialeto comeca sozinho; acima disso precisa de --sim */
-#define DIALETO_TETO_SEM_SIM 100
-
 static void dial_cb_text(void *ud, const char *s, size_t n)
 {
     cb_on_text(ud, s, n);
@@ -2358,36 +2355,21 @@ static void dialeto_comando(const char *args)
         return;
     }
     if (!brief || !*brief) {
-        dial_info("uso: /dialeto [--rodadas N] [--max N] [--meta 9] [--minutos M]\n"
-                  "           [--critico <modelo>] [--sem-copia] [--sim] <objetivo>\n\n"
+        dial_info("uso: /dialeto [--meta N] [--critico <modelo>] [--sem-copia] [--rodadas N] <objetivo>\n\n"
                   "O artifice implementa, o critico ataca e testa numa copia isolada,\n"
-                  "o artifice corrige, e assim por diante. SEM --rodadas o loop roda\n"
-                  "INFINITAMENTE ate voce mandar parar (Ctrl+C ou ESC). A nota de cada\n"
-                  "rodada fica em .delta/dialeto/<objetivo>/PLACAR.md e rodar de novo\n"
-                  "com o mesmo objetivo RETOMA de onde parou. Teto acima de 100 rodadas\n"
-                  "(ou infinito) exige --sim (o custo vira absurdo).");
-        return;
-    }
-    if (!o.sim && (o.rodadas_max == 0 || o.rodadas_max > DIALETO_TETO_SEM_SIM)) {
-        if (o.rodadas_max == 0)
-            dial_info("dialeto: modo infinito (%d turnos de agente por rodada, ate voce parar com Ctrl+C)\n"
-                      "O custo pode ser absurdamente alto. Se e' mesmo o que voce quer, repita com --sim:\n\n"
-                      "  /dialeto --sim %s",
-                      o.rodadas_max ? o.rodadas_max * 2 : 2, brief);
-        else
-            dial_info("dialeto: %d rodadas = %d turnos de agente (artifice + critico).\n"
-                      "Isso passa de %.1f milhao(oes) de tokens e de um dia de trabalho.\n"
-                      "Se e' mesmo o que voce quer, repita com --sim:\n\n"
-                      "  /dialeto --rodadas %d --sim %s",
-                      o.rodadas_max, o.rodadas_max * 2,
-                      (double)o.rodadas_max * 2.0 * 45.0 / 1000.0, o.rodadas_max, brief);
+                  "o artifice corrige, e assim por diante — com o MESMO modelo que\n"
+                  "voce esta usando nos dois papeis (--critico troca so' o critico).\n"
+                  "SEM --rodadas o loop roda INFINITAMENTE ate voce mandar parar\n"
+                  "(Ctrl+C ou ESC). Com --meta N encerra sozinho quando a nota N se\n"
+                  "mantem estavel. A nota de cada rodada fica em\n"
+                  ".delta/dialeto/<objetivo>/PLACAR.md e rodar de novo com o mesmo\n"
+                  "objetivo RETOMA de onde parou.\n\n"
+                  "Custo: 2 turnos de agente por rodada — para quando quiser.");
         return;
     }
 
     const char *cwd = app.agent.cwd && *app.agent.cwd ? app.agent.cwd : ".";
-    const char *modelo_crit = (o.critico && *o.critico) ? o.critico
-                            : (app.cfg.subagent_model && *app.cfg.subagent_model
-                               ? app.cfg.subagent_model : app.cfg.model);
+    const char *modelo_crit = (o.critico && *o.critico) ? o.critico : app.cfg.model;
 
     char *slug  = dialeto_slug(brief);
     char *d0    = path_join(cwd, ".delta");
