@@ -11,6 +11,7 @@
 #include "i18n.h"
 #include "setup.h"
 #include "update.h"
+#include "dialeto.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -92,6 +93,8 @@ typedef struct {
 
     int      abort_requested;
     int      quit;
+    int      headless;          /* -p "/comando": sem TUI, render() nao pinta */
+    int      dialeto_rodando;   /* /dialeto no ar: Ctrl+C nao para — so' o ESC */
     char    *theme_name;
 
     /* menu de comandos / seletor de modelos */
@@ -147,7 +150,8 @@ static const char *const CMD_KEYS[] = {
     "cmd.help", "cmd.login", "cmd.logout", "cmd.models", "cmd.thinking",
     "cmd.verbosity", "cmd.projects", "cmd.terminal", "cmd.status", "cmd.session", "cmd.new",
     "cmd.clear", "cmd.skills", "cmd.extensions", "cmd.translator",
-    "cmd.reload", "cmd.quit", "cmd.subagentmodel", "cmd.deltagroup", "cmd.undo", "cmd.report"
+    "cmd.reload", "cmd.quit", "cmd.subagentmodel", "cmd.deltagroup", "cmd.undo", "cmd.report",
+    "cmd.dialeto"
 };
 
 
@@ -173,6 +177,7 @@ static const Cmd COMMANDS[] = {
     { "deltagroup", "Grupo do Delta no Telegram · convite e avisos",    NULL,                 0 },
     { "undo",      "Restaura o conteúdo anterior de um arquivo",       "[arquivo]",          1 },
     { "report",    "Mostra o relato da sessão no memory",              NULL,                 0 },
+    { "dialeto",   "Loop dialético: artífice x crítico, N rodadas de qualidade", "<objetivo> [--rodadas 50] [--sim]", 1 },
 };
 #define N_COMMANDS ((int)(sizeof COMMANDS / sizeof COMMANDS[0]))
 
@@ -1192,6 +1197,7 @@ static void blocks_from_msgs(void)
 /* ================================================================== */
 static void render(void)
 {
+    if (app.headless) return;      /* -p "/comando": sem TUI, so' os blocos */
     int cols = 0, rows = 0;
     term_size(&cols, &rows);
     if (app.screen.cols != cols || app.screen.rows != rows)
@@ -1447,6 +1453,17 @@ static void provider_tick_ui(void *ud)
 static int  g_replay_steer_at = -1;
 static char g_replay_steer_text[512];
 static int  g_replay_chunks = 0;
+/* Gancho de teste: simula Ctrl+C no N-esimo pedaco do stream (o agent_run
+   aborta no cb_should_abort, igual a tecla, mas de forma deterministica). */
+static int  g_replay_abort_at = -1;
+static int  g_replay_abort_chunks = 0;
+/* Gancho de teste: simula a TECLA ESC no N-esimo pedaco do stream — passa
+   pelo handle_event de verdade (caminho novo do ESC interromper o agente). */
+static int  g_replay_esc_at = -1;
+static int  g_replay_esc_chunks = 0;
+static int  g_replay_ctrlc_at = -1;
+static int  g_replay_ctrlc_chunks = 0;
+static void ctrlc_durante_turno(void);
 static void enqueue_input(void);
 
 static void cb_on_text(void *ud, const char *s, size_t n)
@@ -1466,6 +1483,20 @@ static void cb_on_text(void *ud, const char *s, size_t n)
         str_adds(&app.input, g_replay_steer_text);
         app.cursor = app.input.len;
         enqueue_input();
+    }
+    if (g_replay_abort_at >= 0 && ++g_replay_abort_chunks >= g_replay_abort_at) {
+        g_replay_abort_at = -1;                      /* dispara uma vez */
+        app.abort_requested = 1;
+    }
+    if (g_replay_esc_at >= 0 && ++g_replay_esc_chunks >= g_replay_esc_at) {
+        g_replay_esc_at = -1;                        /* dispara uma vez */
+        Event ev; memset(&ev, 0, sizeof ev);
+        ev.type = EV_ESC;
+        handle_event(&ev);
+    }
+    if (g_replay_ctrlc_at >= 0 && ++g_replay_ctrlc_chunks >= g_replay_ctrlc_at) {
+        g_replay_ctrlc_at = -1;                      /* dispara uma vez */
+        ctrlc_durante_turno();
     }
     ui_poll_input();
     maybe_render(0);
@@ -1571,6 +1602,28 @@ static const char *relato_alvo(const char *args)
 /* Le o teclado enquanto o agente trabalha: rolar a conversa, digitar e
    enfileirar mensagem continuam funcionando durante o streaming e durante
    as ferramentas (o bash chama isso pelo tick). */
+/* Ctrl+C durante a geracao — o caminho real do ui_poll_input, chamado tb
+   pelo gancho de replay ctrlc-at (testar sem depender do teclado). */
+static void ctrlc_durante_turno(void)
+{
+    /* selecao no editor: Ctrl+C copia (nao interrompe o turno) */
+    if (app.ed_sel_ativa) { ed_copy_selection(); render(); return; }
+    /* selecao ativa: Ctrl+C copia (nao interrompe o turno) */
+    if (app.sel_active && sel_has_text()) {
+        copy_selection();
+        render();
+        return;
+    }
+    /* /dialeto no ar: Ctrl+C NAO para o dialeto — quem para e' o ESC */
+    if (app.dialeto_rodando) {
+        notify("o dialeto não para com Ctrl+C · use ESC para interromper");
+        render();
+        return;
+    }
+    app.abort_requested = 1;
+    notify("Interrompido");
+}
+
 static void ui_poll_input(void)
 {
     steer_dbg("poll has=%d", term_has_input());
@@ -1579,17 +1632,9 @@ static void ui_poll_input(void)
         if (!term_read(&ev, 0)) break;
         steer_dbg("ev type=%d cp=%u working=%d", (int)ev.type, (unsigned)ev.cp, app.working);
         if (ev.type == EV_CTRL && ev.cp == 'c') {
-            /* selecao no editor: Ctrl+C copia (nao interrompe o turno) */
-            if (app.ed_sel_ativa) { ed_copy_selection(); render(); continue; }
-            /* selecao ativa: Ctrl+C copia (nao interrompe o turno) */
-            if (app.sel_active && sel_has_text()) {
-                copy_selection();
-                render();
-                continue;
-            }
-            app.abort_requested = 1;
-            notify("Interrompido");
-            return;
+            ctrlc_durante_turno();
+            if (app.abort_requested) return;
+            continue;
         }
         if (ev.type == EV_RESIZE) { render(); continue; }
         if (ev.type == EV_WHEEL) {
@@ -2246,6 +2291,358 @@ static void menu_complete(void)
     app.menu_suppressed = 1;
 }
 
+/* ================================================================== */
+/* /dialeto — o artifice implementa, o critico ataca, em N rodadas.    */
+/* O estado mora em .delta/dialeto/<slug>/ (BRIEF, PLACAR, rodada-NN,   */
+/* RELATORIO) para sobreviver ao loop e para o usuario ler depois.      */
+/* ================================================================== */
+static Str g_dial_cap;
+
+/* ate' aqui o /dialeto comeca sozinho; acima disso precisa de --sim */
+#define DIALETO_TETO_SEM_SIM 100
+
+static void dial_cb_text(void *ud, const char *s, size_t n)
+{
+    cb_on_text(ud, s, n);
+    str_add(&g_dial_cap, s, n);
+}
+
+static void dial_info(const char *fmt, ...)
+{
+    char buf[4096];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    if (app.headless) {          /* -p "/dialeto": log direto no stdout */
+        printf("%s\n", buf);
+        fflush(stdout);
+        return;
+    }
+    Block *b = block_add(B_INFO);
+    str_adds(&b->text, buf);
+}
+
+static void dial_rodar(Agent *a, Config *cfg, const char *cwd,
+                       const char *quem, const char *modelo, int rodada, int total)
+{
+    agent_free(a);
+    agent_init(a, cfg, cwd);
+    agent_rebuild_prompt(a);
+
+    app.abort_requested = 0;
+    app.working = 1;
+    str_clear(&app.work_msg);
+    if (total > 0) {
+        str_addf(&app.work_msg, "Dialeto %d/%d \u00b7 %s", rodada, total, quem);
+        dial_info("dialeto \u00b7 rodada %d/%d \u00b7 %s (%s)", rodada, total, quem, modelo);
+    } else {
+        str_addf(&app.work_msg, "Dialeto %d \u00b7 %s", rodada, quem);
+        dial_info("dialeto \u00b7 rodada %d \u00b7 %s (%s)", rodada, quem, modelo);
+    }
+    g_cur_assistant = (size_t)-1;
+    g_cur_thinking = (size_t)-1;
+    render();
+}
+
+static void dialeto_comando(const char *args)
+{
+    DialetoOpts o;
+    const char *brief = "";
+    Str err;
+    str_init(&err);
+
+    if (!dialeto_opts(&o, args, &brief, &err)) {
+        dial_info("%s", err.len ? err.data : "argumentos invalidos");
+        str_free(&err);
+        return;
+    }
+    if (!brief || !*brief) {
+        dial_info("uso: /dialeto [--rodadas N] [--max N] [--meta 9] [--minutos M]\n"
+                  "           [--critico <modelo>] [--sem-copia] [--sim] <objetivo>\n\n"
+                  "O artifice implementa, o critico ataca e testa numa copia isolada,\n"
+                  "o artifice corrige, e assim por diante. SEM --rodadas o loop roda\n"
+                  "INFINITAMENTE ate voce mandar parar (Ctrl+C ou ESC). A nota de cada\n"
+                  "rodada fica em .delta/dialeto/<objetivo>/PLACAR.md e rodar de novo\n"
+                  "com o mesmo objetivo RETOMA de onde parou. Teto acima de 100 rodadas\n"
+                  "(ou infinito) exige --sim (o custo vira absurdo).");
+        return;
+    }
+    if (!o.sim && (o.rodadas_max == 0 || o.rodadas_max > DIALETO_TETO_SEM_SIM)) {
+        if (o.rodadas_max == 0)
+            dial_info("dialeto: modo infinito (%d turnos de agente por rodada, ate voce parar com Ctrl+C)\n"
+                      "O custo pode ser absurdamente alto. Se e' mesmo o que voce quer, repita com --sim:\n\n"
+                      "  /dialeto --sim %s",
+                      o.rodadas_max ? o.rodadas_max * 2 : 2, brief);
+        else
+            dial_info("dialeto: %d rodadas = %d turnos de agente (artifice + critico).\n"
+                      "Isso passa de %.1f milhao(oes) de tokens e de um dia de trabalho.\n"
+                      "Se e' mesmo o que voce quer, repita com --sim:\n\n"
+                      "  /dialeto --rodadas %d --sim %s",
+                      o.rodadas_max, o.rodadas_max * 2,
+                      (double)o.rodadas_max * 2.0 * 45.0 / 1000.0, o.rodadas_max, brief);
+        return;
+    }
+
+    const char *cwd = app.agent.cwd && *app.agent.cwd ? app.agent.cwd : ".";
+    const char *modelo_crit = (o.critico && *o.critico) ? o.critico
+                            : (app.cfg.subagent_model && *app.cfg.subagent_model
+                               ? app.cfg.subagent_model : app.cfg.model);
+
+    char *slug  = dialeto_slug(brief);
+    char *d0    = path_join(cwd, ".delta");
+    char *d1    = path_join(d0, "dialeto");
+    char *ddir  = path_join(d1, slug);
+    free(d0);
+    free(d1);
+    dir_make(ddir);
+
+    {
+        char *p = path_join(ddir, "BRIEF.md");
+        Str s;
+        str_init(&s);
+        str_adds(&s, "# Objetivo do dialeto\n\n");
+        str_adds(&s, brief);
+        str_adds(&s, "\n\n## Regras\n\n");
+        str_addf(&s, "- rodadas: %d (piso %d)\n- meta: %.1f\n- critico: %s\n- copia isolada: %s\n",
+                 o.rodadas_max, o.rodadas_min, o.meta, modelo_crit,
+                 o.copia_critico ? "sim" : "nao");
+        file_write(p, s.data ? s.data : "", s.len);
+        str_free(&s);
+        free(p);
+    }
+
+    Dialeto d;
+    dialeto_init(&d, &o);
+
+    /* retomada: /dialeto de novo com o mesmo objetivo continua de onde parou
+       (estado reconstruido do PLACAR; o artifice recebe a ultima critica) */
+    int rodadas_retomadas = dialeto_retomar(&d, ddir, NULL);
+
+    Agent dev, crit;
+    memset(&dev, 0, sizeof dev);
+    memset(&crit, 0, sizeof crit);
+    Config ccfg = app.cfg;
+    ccfg.model = (char *)modelo_crit;
+
+    AgentCB cb;
+    memset(&cb, 0, sizeof cb);
+    cb.on_text       = dial_cb_text;
+    cb.on_thinking   = cb_on_thinking;
+    cb.on_retry      = cb_on_retry;
+    cb.on_turn_start = cb_on_turn_start;
+    cb.on_tool_start = cb_on_tool_start;
+    cb.on_tool_end   = cb_on_tool_end;
+    cb.on_interval   = cb_on_interval;
+    cb.should_abort  = cb_should_abort;
+    cb.has_steer     = cb_has_steer;
+
+    char *ultima_critica = NULL;
+    int   rodadas_feitas = rodadas_retomadas;
+    uint64_t t0 = now_ms();
+
+    if (rodadas_retomadas > 0)
+        dial_info("dialeto retomado · %d rodada(s) já feitas · melhor nota %.1f · "
+                  "continua de onde parou", rodadas_retomadas, d.melhor);
+
+    session_suppress(1);   /* rodadas do dialeto não sujam a sessão do usuário */
+    app.dialeto_rodando = 1;   /* Ctrl+C não para o dialeto (só o ESC) */
+
+    if (o.rodadas_max > 0)
+        dial_info("dialeto iniciado \u00b7 %d rodadas \u00b7 artifice %s \u00b7 critico %s\n"
+                  "pastas: %s\nCtrl+C interrompe e ainda grava o relatorio.",
+                  o.rodadas_max, app.cfg.model, modelo_crit, ddir);
+    else
+        dial_info("dialeto iniciado \u00b7 sem teto (roda ate voce parar com Ctrl+C ou ESC) \u00b7 "
+                  "artifice %s \u00b7 critico %s\n"
+                  "pastas: %s\nCtrl+C interrompe e ainda grava o relatorio.",
+                  app.cfg.model, modelo_crit, ddir);
+    app.tr_dirty = 1;
+    render();
+
+    for (;;) {
+        d.rodada = rodadas_feitas + 1;
+        /* teto antes de gastar a rodada: na retomada (placar ja' no teto)
+           encerra sem rodar mais nada. `>=` aqui: a rodada N do teto ainda
+           roda (o dialeto_parar do fim e' que fecha depois dela).
+           rodadas_max == 0 = infinito: nunca por teto. */
+        if (o.rodadas_max > 0 && rodadas_feitas >= o.rodadas_max) {
+            d.motivo = "teto de rodadas";
+            break;
+        }
+        if (app.abort_requested) { d.motivo = "interrompido pelo usuario"; break; }
+        if (o.limite_s && (long)((now_ms() - t0) / 1000u) >= o.limite_s) {
+            d.motivo = "limite de tempo";
+            break;
+        }
+
+        /* --- artifice ------------------------------------------------ */
+        char *pdev = dialeto_prompt_dev(&d, brief, ultima_critica);
+        dial_rodar(&dev, &app.cfg, cwd, "ARTIFICE", app.cfg.model,
+                   d.rodada, o.rodadas_max);
+        str_clear(&g_dial_cap);
+        str_clear(&err);
+        int ok = agent_run(&dev, pdev, &cb, &err);
+        app.working = 0;
+        free(pdev);
+        char *relato = str_dup(g_dial_cap.data ? g_dial_cap.data : "");
+        if (!ok) {
+            /* Ctrl+C tambem faz agent_run devolver 0: nao e' defeito do
+               modelo, e' o usuario mandando parar. */
+            int por_usuario = app.abort_requested != 0;
+            dial_info(por_usuario
+                          ? "dialeto interrompido pelo usuario na rodada %d do artifice"
+                          : "dialeto interrompido na rodada %d do artifice%s%s",
+                      d.rodada, err.len ? ": " : "", err.len ? err.data : "");
+            free(relato);
+            d.motivo = por_usuario ? "interrompido pelo usuario" : "falha no artifice";
+            break;
+        }
+
+        /* --- diff para o critico julgar ------------------------------ */
+        char *ds, *dd;
+#ifdef _WIN32
+        ds = dialeto_cmd("git -c core.safecrlf=false diff --no-color --stat 2>nul", 4000);
+        dd = dialeto_cmd("git -c core.safecrlf=false diff --no-color 2>nul", 16000);
+#else
+        ds = dialeto_cmd("git -c core.safecrlf=false diff --no-color --stat 2>/dev/null", 4000);
+        dd = dialeto_cmd("git -c core.safecrlf=false diff --no-color 2>/dev/null", 16000);
+#endif
+        Str df;
+        str_init(&df);
+        if (ds && *ds) { str_adds(&df, ds); str_adds(&df, "\n"); }
+        if (dd && *dd) str_adds(&df, dd);
+
+        /* --- copia isolada: o critico testa sem tocar no projeto ----- */
+        char *cdir = NULL;
+        char *ctmp = NULL;
+        if (o.copia_critico) {
+            char nome[64];
+            snprintf(nome, sizeof nome, ".critico-%02d", d.rodada);
+            char *c0 = path_join(ddir, nome);
+            dialeto_copia_remove(c0);
+            Str ce;
+            str_init(&ce);
+            cdir = dialeto_copia(cwd, c0, &ce);
+            if (!cdir) dial_info("dialeto: copia isolada falhou (%s) \u2014 o critico roda no projeto",
+                                 ce.len ? ce.data : "sem espaco?");
+            str_free(&ce);
+            ctmp = c0;
+        }
+
+        /* --- critico ------------------------------------------------- */
+        char *pcrit = dialeto_prompt_critico(&d, brief, relato, df.data,
+                                            cdir ? cdir : NULL);
+        dial_rodar(&crit, &ccfg, cdir ? cdir : cwd, "CRITICO", modelo_crit,
+                   d.rodada, o.rodadas_max);
+        str_clear(&g_dial_cap);
+        str_clear(&err);
+        int ok2 = agent_run(&crit, pcrit, &cb, &err);
+        app.working = 0;
+        free(pcrit);
+        char *critica = str_dup(g_dial_cap.data ? g_dial_cap.data : "");
+        if (!ok2) {
+            int por_usuario = app.abort_requested != 0;
+            dial_info(por_usuario
+                          ? "dialeto interrompido pelo usuario na rodada %d do critico"
+                          : "dialeto interrompido na rodada %d do critico%s%s",
+                      d.rodada, err.len ? ": " : "", err.len ? err.data : "");
+            d.motivo = por_usuario ? "interrompido pelo usuario" : "falha no critico";
+            free(critica);
+            free(relato);
+            free(ds); free(dd);
+            str_free(&df);
+            if (ctmp) { dialeto_copia_remove(ctmp); free(ctmp); }
+            break;
+        }
+
+        DialetoNota n;
+        memset(&n, 0, sizeof n);
+        dialeto_nota(critica, &n);
+        n.rodada = d.rodada;   /* DEPOIS do dialeto_nota: ele zera a struct
+                                  (antes, o placar e o teto de rodadas ficavam
+                                  presos em rodada 0 e o loop nunca acabava) */
+        dialeto_registrar(&d, &n);
+        rodadas_feitas = d.rodada;
+
+        str_clear(&d.pendencias);
+        str_adds(&d.pendencias, critica);
+
+        /* --- artefatos da rodada ------------------------------------- */
+        {
+            char nome[64];
+            snprintf(nome, sizeof nome, "rodada-%02d.md", d.rodada);
+            char *p = path_join(ddir, nome);
+            Str s;
+            str_init(&s);
+            str_addf(&s, "# Rodada %d \u2014 nota %.1f\n\n## Artifice (%s)\n\n%s\n\n## Critica (%s)\n\n%s\n",
+                     d.rodada, n.nota, app.cfg.model,
+                     relato && *relato ? relato : "(sem relato)",
+                     modelo_crit, critica && *critica ? critica : "(sem critica)");
+            file_write(p, s.data ? s.data : "", s.len);
+            str_free(&s);
+            free(p);
+        }
+        {
+            char *p = path_join(ddir, "PLACAR.md");
+            Str s;
+            str_init(&s);
+            str_adds(&s, "| rodada | nota | bloqueios | criticos |\n| --- | --- | --- | --- |\n");
+            str_add(&s, d.placar.data, d.placar.len);
+            file_write(p, s.data ? s.data : "", s.len);
+            str_free(&s);
+            free(p);
+        }
+
+        dial_info("dialeto \u00b7 rodada %d/%d \u00b7 nota %.1f (%d bloqueio%s, %d critico%s)%s",
+                  d.rodada, o.rodadas_max, n.nota, n.bloqueios, n.bloqueios == 1 ? "" : "s",
+                  n.criticos, n.criticos == 1 ? "" : "s",
+                  n.parse_ok ? "" : " \u00b7 o critico nao entregou NOTA");
+
+        free(ds);
+        free(dd);
+        str_free(&df);
+        if (ctmp) { dialeto_copia_remove(ctmp); free(ctmp); }
+        free(relato);
+        free(ultima_critica);
+        ultima_critica = critica;
+
+        if (dialeto_parar(&d)) break;
+    }
+
+    /* --- relatorio final, mesmo interrompido ------------------------ */
+    {
+        char *rel = dialeto_relatorio(&d, brief, rodadas_feitas);
+        char *p = path_join(ddir, "RELATORIO.md");
+        file_write(p, rel, strlen(rel));
+        long tin = dev.total_in + crit.total_in;
+        long tout = dev.total_out + crit.total_out;
+        dial_info("dialeto encerrado \u00b7 %d rodada(s) \u00b7 melhor %.1f \u00b7 %s\n"
+                  "tokens: entrada %ld \u00b7 saida %ld\nrelatorio: %s",
+                  rodadas_feitas, d.melhor,
+                  d.motivo && *d.motivo ? d.motivo : "concluido", tin, tout, p);
+        free(p);
+        free(rel);
+    }
+
+    app.dialeto_rodando = 0;
+    session_suppress(0);
+
+    agent_free(&dev);
+    agent_free(&crit);
+    free(ultima_critica);
+    dialeto_free(&d);
+    str_free(&err);
+    free(slug);
+    free(ddir);
+
+    /* o Ctrl+C que encerrou o dialeto nao pode matar o proximo turno */
+    app.abort_requested = 0;
+    app.working = 0;
+    app.tr_dirty = 1;
+    render();
+}
+
 static void handle_command(const char *raw)
 {
     char cmd[64] = { 0 };
@@ -2265,6 +2662,11 @@ static void handle_command(const char *raw)
         free(rel);
         app.tr_dirty = 1;
         render();
+        return;
+    }
+
+    if (str_eq(cmd, "/dialeto") || str_eq(cmd, "/dialectic")) {
+        dialeto_comando(rest);
         return;
     }
 
@@ -3270,6 +3672,17 @@ static int run_print_mode(const char *prompt)
         if (lido) prompt = lido;
         else fprintf(stderr, "delta: não consegui ler '%s'\n", prompt + 1);
     }
+
+    /* -p "/comando args": roda o comando de barra fora da TUI (script/CI).
+       O render() fica desligado e os blocos de INFO saem como texto puro. */
+    if (prompt && prompt[0] == '/') {
+        app.headless = 1;
+        handle_command(prompt);
+        app.headless = 0;
+        free(lido);
+        return 0;
+    }
+
     Str err; str_init(&err);
     AgentCB cb;
     memset(&cb, 0, sizeof cb);
@@ -3586,6 +3999,13 @@ static void handle_event(const Event *ev)
     if (app.picker && (ev->type == EV_ESC || (ev->type == EV_CTRL && ev->cp == 'c'))) {
         app.picker = 0;
         str_clear(&app.picker_filter);
+        if (app.working) {
+            /* agente rodando: o ESC interrompe o turno (nao so' fecha o menu) */
+            app.abort_requested = 1;
+            set_status("interrompendo...");
+            render();
+            return;
+        }
         set_status("cancelado");
         render();
         return;
@@ -3764,6 +4184,14 @@ static void handle_event(const Event *ev)
                 render();
                 break;
             case EV_ESC:
+                /* agente trabalhando: ESC interrompe o turno (agora o ESC
+                   para o agente; a cascata de limpeza roda depois) */
+                if (app.working) {
+                    app.abort_requested = 1;
+                    notify("interrompendo...");
+                    render();
+                    break;
+                }
                 /* cascata: selecao do editor, selecao do transcript, rolagem,
                    e so' no fim o texto do editor (antes o ESC fazia tudo de uma
                    vez e apagava o que estava sendo digitado) */
@@ -4168,6 +4596,34 @@ static int run_replay(const char *path, int cols, int rows, int force_offline)
             printf("benchmd: %d x %zu bytes em %llu ms (%.2f ms/vez)\n",
                    rep, t.len, (unsigned long long)dt, (double)dt / (double)rep);
             str_free(&t);
+        } else if (str_eq(line, "abort-at")) {
+            /* abort-at <n> - simula Ctrl+C no pedaco n do stream */
+            int n = arg ? atoi(arg) : 0;
+            if (n <= 0) {
+                fprintf(stderr, "replay: abort-at <pedaco>\n");
+            } else {
+                g_replay_abort_at = n;
+                g_replay_abort_chunks = 0;
+            }
+        } else if (str_eq(line, "esc-at")) {
+            /* esc-at <n> - simula a TECLA ESC no pedaco n do stream */
+            int n = arg ? atoi(arg) : 0;
+            if (n <= 0) {
+                fprintf(stderr, "replay: esc-at <pedaco>\n");
+            } else {
+                g_replay_esc_at = n;
+                g_replay_esc_chunks = 0;
+            }
+        } else if (str_eq(line, "ctrlc-at")) {
+            /* ctrlc-at <n> - simula Ctrl+C REAL (o caminho do ui_poll_input)
+               no pedaco n do stream */
+            int n = arg ? atoi(arg) : 0;
+            if (n <= 0) {
+                fprintf(stderr, "replay: ctrlc-at <pedaco>\n");
+            } else {
+                g_replay_ctrlc_at = n;
+                g_replay_ctrlc_chunks = 0;
+            }
         } else if (str_eq(line, "steer-at")) {
             /* steer-at <n> <texto> - simula digitar/Enter no pedaco n do stream */
             int n = 0, off = 0;
@@ -4694,7 +5150,11 @@ int main(int argc, char **argv)
                                "(/new começa outra)", retomou);
             app.tr_dirty = 1;
         } else if (!opt_no_session) {
-            session_start(cwd);
+            /* TUI cria sessão de verdade; -p só ganha id (roteamento/headers),
+               sem arquivo — o --continue do usuário continua achando a SESSÃO
+               DELE, não a que o agente criou rodando delta -p pelo shell. */
+            if (prompt) session_new_id();
+            else session_start(cwd);
         }
     }
     free(cwd);

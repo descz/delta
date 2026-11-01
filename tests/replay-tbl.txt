@@ -1,0 +1,3 @@
+type tabela-larga mostra a tabela
+key enter
+dump tabela_larga

@@ -402,12 +402,20 @@ static void migrate_legacy_sessions(const char *root, const char *slug_dir,
     free(old);
 }
 
-void session_start(const char *cwd)
+/* Id de sessao SEM arquivo: o modo -p precisa do id (roteamento opencode,
+   headers) mas nao pode criar a "ultima sessao" da pasta — o --continue do
+   usuario tem que continuar achando a SESSAO DELE, nao a do agente. */
+void session_new_id(void)
 {
     char id[37];
     uuid_v4(id);
     free(g_session_id);
     g_session_id = str_dup(id);
+}
+
+void session_start(const char *cwd)
+{
+    session_new_id();
 
     char *root = sessions_root();
     char *slug = cwd_slug(cwd);
@@ -456,10 +464,20 @@ void session_set_id(const char *id)
     g_session_id = str_dup(id);
 }
 
+static int g_session_off = 0;   /* 1 = nao grava nada na sessao (dialeto) */
+
+/* Liga/desliga a gravacao da sessao SEM abrir mao do id: o /dialeto roda
+   rodadas de agente no mesmo processo e nao pode sujar o JSONL do usuario
+   (o estado dele ja persiste em .delta/dialeto/<slug>/). */
+void session_suppress(int on)
+{
+    g_session_off = on;
+}
+
 void session_append(const Agent *a, const char *type, const Msg *m)
 {
     (void)a;
-    if (!g_session_file) return;
+    if (!g_session_file || g_session_off) return;
     const char *path = g_session_file;
 
     Str o; str_init(&o);

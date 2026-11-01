@@ -165,6 +165,21 @@ if [ -n "$PY" ]; then
     rm -rf build/resume-posix
 
     echo
+    echo "[3h2] dialeto: Ctrl+C no meio do turno"
+    python tests/mock_openai.py "$((PORT + 13))" 0 0.05 > /dev/null 2>&1 &
+    MOCK_DIAL=$!
+    sleep 2
+    rm -rf .delta/dialeto/conferir-o-numero-do-arquivo
+    $BIN --replay tests/replay-dialeto-abort.txt 110 36 \
+        --provider openai --model gpt-4o \
+        --baseurl "http://127.0.0.1:$((PORT + 13))/v1" --api-key sk-teste > "$AR/dial_abort.log" 2>&1
+    kill "$MOCK_DIAL" 2>/dev/null
+    expect "$AR/dial_abort.log" "interrompido pelo usuario na rodada 1 do artifice" "Ctrl+C encerra a rodada sem virar falha"
+    expect "$AR/dial_abort.log" "interrompido pelo usuario" "o relatorio registra o motivo certo"
+    expect "$AR/dial_abort.log" "eco: e agora responda normalmente" "o turno seguinte roda normal depois do Ctrl+C"
+    rm -rf .delta/dialeto/conferir-o-numero-do-arquivo
+
+    echo
     echo "[5] modo nao interativo (-p)"
     $BIN -p "leia tests/mock-target.txt" --provider openai --model gpt-4o \
         --baseurl "http://127.0.0.1:$PORT/v1" --api-key sk-teste > "$AR/print.log" 2>&1

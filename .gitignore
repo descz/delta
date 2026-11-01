@@ -7,6 +7,9 @@ dist/
 *.d
 *.exe
 
+# saida do /dialeto (relato por rodada, placar e copia isolada do critico)
+.delta/
+
 # editores / sistema
 .vscode/
 .idea/

@@ -1,0 +1,15 @@
+# Roteiro: teclas no meio do turno do dialeto (servidor falso, deterministico)
+#
+# NOVO comportamento: Ctrl+C NAO para o dialeto (so' avisa); quem interrompe
+# e' o ESC. O ctrlc-at/esc-at simulam as teclas pelos caminhos reais
+# (ctrlc_durante_turno / handle_event) no pedaco N do stream.
+# bin\delta.exe --replay tests\replay-dialeto-abort.txt 110 36 --provider openai ^
+#     --model gpt-4o --baseurl http://127.0.0.1:8094/v1 --api-key sk-teste
+ctrlc-at 1
+esc-at 3
+type /dialeto --rodadas 4 --sem-copia --sim conferir o numero do arquivo
+key enter
+dump apos_ctrl_c
+type e agora responda normalmente
+key enter
+dump turno_seguinte

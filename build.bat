@@ -60,7 +60,7 @@ set "CFLAGS=-std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -Isrc"
 set "LDFLAGS=-static -lwinhttp -luser32 -lkernel32 -lmsvcrt -lws2_32 -lshell32 -lole32 -luuid"
 
 set "OBJS="
-for %%F in (util json okcolor theme ui term clipboard i18n tools tools_ext extensions provider modelsdev agent codegraph update setup main) do (
+for %%F in (util json okcolor theme ui term clipboard i18n tools tools_ext extensions provider modelsdev agent codegraph dialeto update setup main) do (
     echo   cc src\%%F.c
     "%GCC%" %CFLAGS% -c "src\%%F.c" -o "build\%%F.o" || exit /b 1
     set "OBJS=!OBJS! build\%%F.o"
@@ -85,7 +85,7 @@ echo.
 if /i "%~1"=="test" (
     echo   cc tests\test_main.c
     set "COREOBJS="
-    for %%F in (util json okcolor theme ui) do set "COREOBJS=!COREOBJS! build\%%F.o"
+    for %%F in (util json okcolor theme ui dialeto) do set "COREOBJS=!COREOBJS! build\%%F.o"
     "%GCC%" %CFLAGS% !COREOBJS! tests\test_main.c -o bin\delta-tests.exe -lm || exit /b 1
     bin\delta-tests.exe
 )

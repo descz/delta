@@ -80,6 +80,8 @@ int   auth_has_key(const char *provider);
 
 /* Sessao em disco (~/.deltaCore/sessions/...). */
 void session_append(const Agent *a, const char *type, const Msg *m);
+void session_suppress(int on);   /* 1 = nao grava na sessao (dialeto) */
+void session_new_id(void);       /* id sem arquivo (modo -p) */
 void session_set_id(const char *id);
 const char *session_id(void);
 void session_start(const char *cwd);

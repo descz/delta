@@ -98,6 +98,32 @@ class Handler(BaseHTTPRequestHandler):
 
         tem_resultado = any(m.get("role") == "tool" for m in body.get("messages", []))
 
+        if "DIALETO" in ultimo:
+            # o dialeto decide pelo papel: CRITICO devolve NOTA; ARTIFICE responde
+            # plano. Na rodada com tabela larga o artifice responde tabela de 40
+            # colunas (era crash garantido: transbordava o vetor de larguras).
+            rodada = 0
+            for m2 in body.get("messages", []):
+                if m2.get("role") == "user" and "RODADA" in str(m2.get("content", "")):
+                    import re as _re
+                    mm = _re.search(r"RODADA (\d+)", str(m2.get("content", "")))
+                    if mm:
+                        rodada = int(mm.group(1))
+            if "CRITICO" in ultimo:
+                txt = "NOTA: 9.8\nCRITICO: ok, sem bloqueios nesta rodada.\n"
+            elif "tabela-larga" in ultimo and rodada == 1:
+                txt = "| c" + " | c" * 39 + "|\n"
+                txt += "|" + "---|" * 40 + "\n"
+                txt += "|" + " x |" * 40 + "\n"
+                txt += "tabela de 40 colunas renderizada.\n"
+            else:
+                txt = "artifice: trabalho da rodada %d feito.\n" % rodada
+            self.responder_eventos([
+                {"id": "d", "choices": [{"index": 0, "delta": {"content": txt}}]},
+                {"id": "d", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            ])
+            return
+
         if "corte" in ultimo:
             # encurtamento de saidas antigas: 12 tool_calls de shell com saida
             # grande; nas 2 ultimas o Delta responde texto.
@@ -125,6 +151,17 @@ class Handler(BaseHTTPRequestHandler):
                     {"index": 0, "id": "call_b", "type": "function",
                      "function": {"name": "bash", "arguments": '{"command": "dir build\\acentos"}'}}]}}]},
                 {"id": "1", "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+            ])
+            return
+
+        if "tabela-larga" in ultimo and not tem_resultado:
+            txt = "| c" + " | c" * 39 + "|\n"
+            txt += "|" + "---|" * 40 + "\n"
+            txt += "|" + " x |" * 40 + "\n"
+            txt += "tabela de 40 colunas renderizada.\n"
+            self.responder_eventos([
+                {"id": "t", "choices": [{"index": 0, "delta": {"content": txt}}]},
+                {"id": "t", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
             ])
             return
 

@@ -93,9 +93,11 @@ key enter
 dump depois_do_status
 mouse 2 0 click        # seleção por arrasto
 steer-at 3 texto novo  # digita no meio do stream (teste headless do steer)
+abort-at 1             # simula Ctrl+C no 1o pedaço do stream
 ```
 
 Novos comandos de replay usados nos testes: `bench`, `benchmd`, `bencht`, `mouse`, `steer-at`,
+`abort-at <pedaço>` (Ctrl+C determinístico, para testar o `/dialeto`),
 `working`, `drain`, `idle <ms>` (espera sem input: teste de maratona) e `update-check` (roda o
 mesmo aviso de versão nova do boot da TUI).
 

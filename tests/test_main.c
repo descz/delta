@@ -4,6 +4,7 @@
 #include "../src/theme.h"
 #include "../src/okcolor.h"
 #include "../src/ui.h"
+#include "../src/dialeto.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +12,11 @@
 #include <math.h>
 
 static int failures = 0;
+
+static int contains(const char *hay, const char *needle)
+{
+    return hay && needle && strstr(hay, needle) != NULL;
+}
 static int checks = 0;
 
 static void ok(int cond, const char *what)
@@ -229,6 +235,135 @@ int main(void)
         ok(!file_write_atomic("build/pasta-que-nao-existe/x.json", "x", 1),
            "falha sem crash quando a pasta nao existe");
         remove(p);
+    }
+
+    /* ---------------- dialeto ---------------- */
+    printf("[9] dialeto (opcoes, nota do critico, placar)\n");
+    {
+        DialetoOpts o;
+        const char *brief = NULL;
+        Str err; str_init(&err);
+
+        ok(dialeto_opts(&o, "melhorar o parser", &brief, &err), "opts sem flag");
+        ok(o.rodadas_min == 50 && o.rodadas_max == 50, "piso padrao = 50 rodadas");
+        ok(o.meta > 8.9 && o.meta < 9.1, "meta padrao 9.0");
+        ok(o.copia_critico == 1, "critico roda em copia isolada por padrao");
+        ok(str_eq(brief, "melhorar o parser"), "brief sem flag e' o texto todo");
+
+        str_clear(&err);
+        ok(dialeto_opts(&o, "--rodadas 12 --meta 8.5 --sem-copia --critico gpt-x arrumar o loop",
+                        &brief, &err),
+           "opts com flags");
+        ok(o.rodadas_min == 12 && o.rodadas_max == 12, "--rodadas fixa piso e teto");
+        ok(o.meta > 8.4 && o.meta < 8.6, "--meta");
+        ok(o.copia_critico == 0, "--sem-copia");
+        ok(str_eq(o.critico, "gpt-x"), "--critico com valor");
+        ok(str_eq(brief, "arrumar o loop"), "brief depois das flags");
+
+        str_clear(&err);
+        ok(!dialeto_opts(&o, "--rodadas 2 x", &brief, &err), "--rodadas abaixo do minimo falha");
+        ok(err.len > 0, "erro explicado");
+        str_clear(&err);
+        ok(!dialeto_opts(&o, "--inventada x", &brief, &err), "flag desconhecida falha");
+        str_clear(&err);
+        ok(dialeto_opts(&o, "", &brief, &err) && *brief == 0, "vazio: brief vazio (vira uso)");
+        str_free(&err);
+
+        char *slug = dialeto_slug("Melhorar o /dialeto! (v2)");
+        ok(str_eq(slug, "melhorar-o-dialeto-v2"), "slug limpo");
+        free(slug);
+        slug = dialeto_slug("");
+        ok(str_eq(slug, "projeto"), "slug vazio vira 'projeto'");
+        free(slug);
+    }
+    {
+        DialetoNota n;
+        const char *ok_txt =
+            "Nada de bom no codigo.\n\nBLOQUEIO: main.c:88 - perde dado no flush\n"
+            "CRITICO: usuario que usa acento quebra\nPROXIMO: corrigir o flush\nNOTA: 6.5\n";
+        ok(dialeto_nota(ok_txt, &n) == 1, "acha NOTA");
+        ok(fabs(n.nota - 6.5) < 1e-9, "nota 6.5");
+        ok(n.bloqueios == 1 && n.criticos == 1, "conta bloqueio e critico");
+
+        ok(dialeto_nota("NOTA: 9.5\nBLOQUEIO: nenhum\n", &n) == 1, "acha NOTA sem bloqueio");
+        ok(n.bloqueios == 0, "'BLOQUEIO: nenhum' nao conta");
+
+        ok(dialeto_nota("**NOTA FINAL:** 8,5 de 10\n", &n) == 1, "nota com marcacao e virgula");
+        ok(fabs(n.nota - 8.5) < 1e-9, "8,5 vira 8.5");
+
+        ok(dialeto_nota("sem numero nenhum aqui\n", &n) == 0, "sem NOTA = parse falhou");
+        ok(n.nota == 0 && n.bloqueios == 1, "sem nota conta como bloqueio, nao como 10");
+
+        ok(dialeto_nota("NOTA: 99\n", &n) == 1 && n.nota == 10.0, "nota acima de 10 satura");
+    }
+    {
+        DialetoOpts o; const char *brief = "consertar o flush do editor"; Str err;
+        str_init(&err);
+        dialeto_opts(&o, "--rodadas 3 --critico gpt-x", &brief, &err);
+        str_free(&err);
+        Dialeto d; dialeto_init(&d, &o);
+        d.rodada = 2;
+
+        char *p = dialeto_prompt_dev(&d, brief, "BLOQUEIO: main.c:10 — vaza memoria");
+        ok(p && contains(p, "ARTIFICE"), "prompt do artifice se identifica");
+        ok(contains(p, "RODADA 2"), "prompt do artifice traz a rodada");
+        ok(contains(p, brief), "prompt do artifice traz o objetivo");
+        ok(contains(p, "main.c:10"), "critica anterior entra no prompt");
+        ok(contains(p, "MUDOU:") && contains(p, "PROVA:"), "prompt do artifice pede formato");
+        free(p);
+
+        p = dialeto_prompt_dev(&d, brief, NULL);
+        ok(p && contains(p, "ARTIFICE") && !contains(p, "fila:"),
+           "rodada 1 sem critica nao inventa critica");
+        free(p);
+
+        p = dialeto_prompt_critico(&d, brief, "mudei o flush", "--- a/main.c\n+++ b/main.c",
+                                   "C:/tmp/copia");
+        ok(p && contains(p, "CRITICO"), "prompt do critico se identifica");
+        ok(contains(p, "NOTA:") && contains(p, "BLOQUEIO:"), "critico sabe o formato da nota");
+        ok(contains(p, "mudei o flush"), "critico recebe o relato do artifice");
+        ok(contains(p, "+++ b/main.c"), "critico recebe o diff");
+        ok(contains(p, "C:/tmp/copia"), "critico recebe o cwd da copia");
+        free(p);
+
+        p = dialeto_relatorio(&d, brief, 3);
+        ok(p && contains(p, brief), "relatorio traz o objetivo");
+        ok(contains(p, "3"), "relatorio traz as rodadas");
+        free(p);
+
+        dialeto_free(&d);
+    }
+    {
+        DialetoOpts o; const char *brief = "x"; Str err; str_init(&err);
+        dialeto_opts(&o, "--rodadas 50", &brief, &err);
+        str_free(&err);
+
+        Dialeto d; dialeto_init(&d, &o);
+        DialetoNota n;
+        int parou_antes = 0;
+        for (int r = 1; r <= 60; r++) {
+            memset(&n, 0, sizeof n);
+            n.rodada = r; n.nota = 9.5; n.parse_ok = 1;
+            dialeto_registrar(&d, &n);
+            if (dialeto_parar(&d)) {
+                ok(r == 50, "estoura o teto na rodada 50");
+                parou_antes = 1;
+                break;
+            }
+        }
+        ok(parou_antes, "loop de 50 rodadas encerra sozinho");
+        ok(d.melhor > 9.4, "melhor nota guardada");
+        ok(d.placar.len > 0, "placar escrito");
+        dialeto_free(&d);
+
+        /* piso maior que o teto de meta: rodada 4 nao pode encerrar antes do piso */
+        dialeto_opts(&o, "--min 10 --max 40 --meta 9", &brief, &err);
+        Dialeto e; dialeto_init(&e, &o);
+        memset(&n, 0, sizeof n);
+        n.rodada = 1; n.nota = 10; n.parse_ok = 1;
+        dialeto_registrar(&e, &n);
+        ok(!dialeto_parar(&e), "nao encerra antes do piso de rodadas");
+        dialeto_free(&e);
     }
 
     printf("\n%d verificacoes, %d falhas\n", checks, failures);

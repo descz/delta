@@ -390,6 +390,35 @@ expect /tmp/delta_cita.log "│ um    │ dois  │"            "tabela: linha d
 reject /tmp/delta_cita.log "| col A | col B |"            "tabela: não vira linha crua de pipes"
 
 echo
+echo "[3-dialeto] dialeto: rodadas numeradas, retomada do placar, sessão intocada"
+DMOCK=$!
+python tests/mock_openai.py $((PORT + 40)) > /dev/null 2>&1 &
+DMOCK=$!
+sleep 2
+DT="$ROOT/build/dialeto-test"
+rm -rf "$DT" && mkdir -p "$DT/proj"
+printf '/dialeto --rodadas 4 --sim --sem-copia tabela-larga' > "$DT/task.txt"
+DELTA_CORE="$ROOT/build/core-t" ./bin/delta.exe -p "@$DT/task.txt" \
+    --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 40))/v1" --api-key sk-teste \
+    --cwd "$DT/proj" > "$DT/run1.log" 2>&1
+expect "$DT/run1.log" "rodada 1/4 · ARTIFICE"     "dialeto: rodada 1 numerada"
+expect "$DT/run1.log" "rodada 4/4 · ARTIFICE"     "dialeto: rodada 4 numerada (o teto roda)"
+expect "$DT/run1.log" "nota 9.8"                 "dialeto: nota do critico parseada"
+DELTA_CORE="$ROOT/build/core-t" ./bin/delta.exe -p "@$DT/task.txt" \
+    --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 40))/v1" --api-key sk-teste \
+    --cwd "$DT/proj" > "$DT/run2.log" 2>&1
+expect "$DT/run2.log" "dialeto retomado · 4 rodada(s)" "dialeto: retoma do placar"
+reject "$DT/run2.log" "rodada 5/"               "dialeto: teto respeitado na retomada (sem rodada desperdicada)"
+if ! ls build/core-t/sessions/ 2>/dev/null | grep -q .; then
+    pass "dialeto: nenhuma sessao criada (nao suja a lista do usuario)"
+else
+    fail "dialeto: criou sessao (deveria usar so' .delta/dialeto/)"
+fi
+kill $DMOCK 2>/dev/null
+rm -rf "$DT" build/core-t
+
 echo "[3-edsel] seleção no editor: arrasto seleciona, backspace apaga"
 ./bin/delta.exe --replay tests/replay-edsel.txt 100 24 > /tmp/delta_edsel.log 2>&1
 expect /tmp/delta_edsel.log "edsel: ativa [0,6) texto='ola mu' fg=000000 bg=FFFFFF" "editor: arrasto seleciona (letra preta, fundo branco)"
@@ -538,7 +567,7 @@ echo
 echo "[7] menu de comandos (digitar /)"
 ./bin/delta.exe --replay tests/replay-menu.txt 100 30 > /tmp/delta_menu.log 2>&1
 expect /tmp/delta_menu.log "→ help"   "marcador -> no item selecionado"
-expect /tmp/delta_menu.log "(1/21)"            "contador de itens"
+expect /tmp/delta_menu.log "(1/22)"            "contador de itens"
 expect /tmp/delta_menu.log "/models "         "Tab completa o comando"
 expect /tmp/delta_menu.log "Todos os modelos"    "descricao do comando aparece"
 
@@ -800,6 +829,24 @@ expect /tmp/delta_steer.log "mude o foco para o resumo"        "mensagem do usua
 expect /tmp/delta_steer.log "eco: mude o foco para o resumo"    "o modelo respondeu a mensagem nova"
 reject /tmp/delta_steer.log "eco: leia tests/mock-target.txt"   "a resposta anterior foi cortada antes do fim"
 expect /tmp/delta_steer.log "O arquivo contem: 42 e o caminho lido foi" "o texto parcial da resposta cortada ficou no historico"
+
+echo
+echo "[17b] dialeto: Ctrl+C não para; ESC sim; turno seguinte limpo"
+# ctrlc-at simula o Ctrl+C REAL no primeiro pedaco: o dialeto tem que CONTINUAR
+# (so' avisa). esc-at simula o ESC: interrompe o dialeto com o motivo certo, e
+# o turno seguinte tem que funcionar (o sinal nao pode envenenar a sessao).
+rm -rf .delta/dialeto/conferir-o-numero-do-arquivo
+python tests/mock_openai.py "$((PORT + 13))" 0 0.05 > /dev/null 2>&1 &
+MOCK_DIAL=$!
+sleep 2
+./bin/delta.exe --replay tests/replay-dialeto-abort.txt 110 36 \
+    --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 13))/v1" --api-key sk-teste > /tmp/delta_dial_abort.log 2>&1
+kill $MOCK_DIAL 2>/dev/null
+expect /tmp/delta_dial_abort.log "não para com Ctrl+C · use ESC" "Ctrl+C não para o dialeto (só avisa)"
+expect /tmp/delta_dial_abort.log "interrompido pelo usuario"         "o ESC interrompe e o relatorio registra o motivo"
+expect /tmp/delta_dial_abort.log "eco: e agora responda normalmente" "o turno seguinte roda normal depois do ESC"
+rm -rf .delta/dialeto/conferir-o-numero-do-arquivo
 
 echo
 echo "[18] arsenal de tools (fs/git/shell/web/memory/code/assert/agent/extend)"

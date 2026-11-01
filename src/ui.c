@@ -728,6 +728,7 @@ void md_layout(const Theme *t, const char *text, size_t n, int width, Style base
                     if (nc > ncols_tbl) ncols_tbl = nc;
                     scan = eol2 + 1;
                 }
+                if (ncols_tbl > MD_TBL_COLS) ncols_tbl = MD_TBL_COLS;   /* teto: sem leitura fora do vetor */
 
                 if (ncols_tbl > 0) {
                     int total = 1;

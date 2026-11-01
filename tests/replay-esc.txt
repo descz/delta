@@ -1,0 +1,4 @@
+esc-at 2
+type conte um conto
+key enter
+dump apos_esc
