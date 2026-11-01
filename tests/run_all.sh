@@ -844,7 +844,7 @@ sleep 2
     --baseurl "http://127.0.0.1:$((PORT + 13))/v1" --api-key sk-teste > /tmp/delta_dial_abort.log 2>&1
 kill $MOCK_DIAL 2>/dev/null
 expect /tmp/delta_dial_abort.log "não para com Ctrl+C · use ESC" "Ctrl+C não para o dialeto (só avisa)"
-expect /tmp/delta_dial_abort.log "interrompido pelo usuario"         "o ESC interrompe e o relatorio registra o motivo"
+expect /tmp/delta_dial_abort.log "interrompido pelo usuário"         "o ESC interrompe e o relatorio registra o motivo"
 expect /tmp/delta_dial_abort.log "eco: e agora responda normalmente" "o turno seguinte roda normal depois do ESC"
 rm -rf .delta/dialeto/conferir-o-numero-do-arquivo
 
