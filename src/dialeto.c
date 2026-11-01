@@ -68,15 +68,9 @@ int dialeto_opts(DialetoOpts *o, const char *args, const char **brief, Str *err)
         flag[k] = 0;
         p += k;
 
-        /* valor opcional (nao consome a proxima flag). `valor` aponta para
-           dentro de `args` — vale enquanto o chamador mantiver a string.
-           SO' flags que tomam valor consomem: --sim tabela-larga tem que
-           deixar o objetivo no brief (a mensagem de erro ensina exatamente
-           essa sintaxe), nao virar valor de flag booleana. */
-        int toma_valor = str_ieq(flag, "--rodadas") || str_ieq(flag, "--turnos") ||
-                         str_ieq(flag, "--max") || str_ieq(flag, "--min") ||
-                         str_ieq(flag, "--meta") || str_ieq(flag, "--minutos") ||
-                         str_ieq(flag, "--critico");
+        /* valor opcional (nao consome a proxima flag): so' flags que tomam
+           valor o consomem; o objetivo vem por ultimo e nao e' engolido. */
+        int toma_valor = str_ieq(flag, "--rodadas") || str_ieq(flag, "--max");
         char num[32] = {0};
         const char *valor = NULL;
         int tem_valor = 0;
@@ -111,47 +105,12 @@ int dialeto_opts(DialetoOpts *o, const char *args, const char **brief, Str *err)
             }
             o->rodadas_min = n;
             o->rodadas_max = n;
-        } else if (str_ieq(flag, "--min")) {
-            if (!tem_valor || !num[0]) {
-                str_adds(err, "--min precisa de um numero de rodadas");
-                return 0;
-            }
-            o->rodadas_min = atoi(num);
-            if (o->rodadas_min < 1) o->rodadas_min = 1;
         } else if (str_ieq(flag, "--max")) {
             if (!tem_valor || !num[0]) {
                 str_adds(err, "--max precisa de um numero de rodadas");
                 return 0;
             }
             o->rodadas_max = atoi(num);
-        } else if (str_ieq(flag, "--meta")) {
-            if (!tem_valor || !num[0]) {
-                str_adds(err, "--meta precisa de uma nota (ex.: --meta 9)");
-                return 0;
-            }
-            o->meta = atof(num);
-            if (o->meta <= 0 || o->meta > 10) o->meta = 9.0;
-        } else if (str_ieq(flag, "--minutos")) {
-            if (!tem_valor || !num[0]) {
-                str_adds(err, "--minutos precisa de um numero (ex.: --minutos 90)");
-                return 0;
-            }
-            long m = atol(num);
-            if (m > 0) o->limite_s = m * 60;
-        } else if (str_ieq(flag, "--critico")) {
-            if (!tem_valor) {
-                str_adds(err, "--critico precisa do nome de um modelo");
-                return 0;
-            }
-            /* copia o token: `valor` aponta no meio de `args` e iria ate' o fim */
-            snprintf(o->critico_buf, sizeof o->critico_buf, "%s", num);
-            o->critico = o->critico_buf;
-        } else if (str_ieq(flag, "--sem-copia")) {
-            o->copia_critico = 0;
-        } else if (str_ieq(flag, "--copia")) {
-            o->copia_critico = 1;
-        } else if (str_ieq(flag, "--sim") || str_ieq(flag, "--yes")) {
-            o->sim = 1;
         } else if (str_eq(flag, "--")) {
             break;
         } else {

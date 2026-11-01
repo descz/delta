@@ -2355,21 +2355,16 @@ static void dialeto_comando(const char *args)
         return;
     }
     if (!brief || !*brief) {
-        dial_info("uso: /dialeto [--meta N] [--critico <modelo>] [--sem-copia] [--rodadas N] <objetivo>\n\n"
-                  "O artífice implementa, o crítico ataca e testa numa cópia isolada,\n"
-                  "o artífice corrige, e assim por diante — com o MESMO modelo que\n"
-                  "você está usando nos dois papéis (--critico troca só o crítico).\n"
-                  "SEM --rodadas o loop roda INFINITAMENTE até você mandar parar\n"
-                  "(Ctrl+C ou ESC). Com --meta N encerra sozinho quando a nota N se\n"
-                  "mantém estável. A nota de cada rodada fica em\n"
-                  ".delta/dialeto/<objetivo>/PLACAR.md e rodar de novo com o mesmo\n"
-                  "objetivo RETOMA de onde parou.\n\n"
-                  "Custo: 2 turnos de agente por rodada — para quando quiser.");
+        dial_info("uso: /dialeto [--rodadas N] <objetivo>\n\n"
+                  "O artífice implementa, o crítico ataca e corrige, em loop —\n"
+                  "com o modelo que você está usando. Sem --rodadas roda até você\n"
+                  "parar (ESC). Cada rodada fica em .delta/dialeto/ e rodar de novo\n"
+                  "com o mesmo objetivo retoma de onde parou.");
         return;
     }
 
     const char *cwd = app.agent.cwd && *app.agent.cwd ? app.agent.cwd : ".";
-    const char *modelo_crit = (o.critico && *o.critico) ? o.critico : app.cfg.model;
+    const char *modelo_crit = app.cfg.model;   /* os dois papeis = o modelo atual */
 
     char *slug  = dialeto_slug(brief);
     char *d0    = path_join(cwd, ".delta");
@@ -2386,9 +2381,10 @@ static void dialeto_comando(const char *args)
         str_adds(&s, "# Objetivo do dialeto\n\n");
         str_adds(&s, brief);
         str_adds(&s, "\n\n## Regras\n\n");
-        str_addf(&s, "- rodadas: %d (piso %d)\n- meta: %.1f\n- critico: %s\n- copia isolada: %s\n",
-                 o.rodadas_max, o.rodadas_min, o.meta, modelo_crit,
-                 o.copia_critico ? "sim" : "nao");
+        char rodadas_txt[48];
+        if (o.rodadas_max > 0) snprintf(rodadas_txt, sizeof rodadas_txt, "até %d", o.rodadas_max);
+        else                   snprintf(rodadas_txt, sizeof rodadas_txt, "infinito (para com ESC)");
+        str_addf(&s, "- rodadas: %s\n", rodadas_txt);
         file_write(p, s.data ? s.data : "", s.len);
         str_free(&s);
         free(p);

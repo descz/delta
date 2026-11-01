@@ -7,7 +7,7 @@
 #     --model gpt-4o --baseurl http://127.0.0.1:8094/v1 --api-key sk-teste
 ctrlc-at 1
 esc-at 3
-type /dialeto --rodadas 4 --sem-copia --sim conferir o numero do arquivo
+type /dialeto --rodadas 4 conferir o numero do arquivo
 key enter
 dump apos_ctrl_c
 type e agora responda normalmente

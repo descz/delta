@@ -397,7 +397,7 @@ DMOCK=$!
 sleep 2
 DT="$ROOT/build/dialeto-test"
 rm -rf "$DT" && mkdir -p "$DT/proj"
-printf '/dialeto --rodadas 4 --sem-copia tabela-larga' > "$DT/task.txt"
+printf '/dialeto --rodadas 4 tabela-larga' > "$DT/task.txt"
 DELTA_CORE="$ROOT/build/core-t" ./bin/delta.exe -p "@$DT/task.txt" \
     --provider openai --model gpt-4o \
     --baseurl "http://127.0.0.1:$((PORT + 40))/v1" --api-key sk-teste \
