@@ -473,4 +473,31 @@ int video_frames(const char *video_path, const char *dest_dir,
     }
     return feitos;
 }
+
+int video_render(const char *frames_dir, const char *out_mp4, int fps)
+{
+    if (!frames_dir || !out_mp4) return 0;
+    if (fps <= 0 || fps > 60) fps = 30;
+    char fq[1200], oq[1200], dq[1200];
+    shell_aspas(frames_dir, fq, sizeof fq);
+    shell_aspas(out_mp4, oq, sizeof oq);
+    shell_aspas(".", dq, sizeof dq);
+    (void)dq;
+    char cmd[2600];
+    snprintf(cmd, sizeof cmd,
+             "cd '%s' && ffmpeg -v error -y -framerate %d -i '%%04d.bmp' -c:v libx264 "
+             "-pix_fmt yuv420p '%s' 2>/dev/null",
+             fq, fps, oq);
+    if (system(cmd) != 0) return 0;
+    size_t n = 0;
+    char **arqs = dir_list(frames_dir, &n);
+    int feitos = 0;
+    for (size_t i = 0; arqs && arqs[i]; i++) {
+        size_t l = strlen(arqs[i]);
+        if (l > 4 && str_ieq(arqs[i] + l - 4, ".bmp")) feitos++;
+        free(arqs[i]);
+    }
+    free(arqs);
+    return feitos;
+}
 #endif
