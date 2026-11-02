@@ -17,4 +17,10 @@
 int video_frames(const char *video_path, const char *dest_dir,
                  const char *prefix, int max);
 
+/* Renderiza UM mp4 a partir de frames BMP (24bpp, nome livre, ordenados) de
+ * um diretorio. fps sem sinal = 30. Retorna o numero de frames codificados
+ * (0 = nada: diretorio sem .bmp, codec ausente...). Windows: Media
+ * Foundation (H.264 do sistema); POSIX: ffmpeg do usuario. */
+int video_render(const char *frames_dir, const char *out_mp4, int fps);
+
 #endif /* DELTA_VIDEO_H */

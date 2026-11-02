@@ -95,6 +95,7 @@ int video_frames(const char *video_path, const char *dest_dir,
                  const char *prefix, int max)
 {
     if (!video_path || !dest_dir || !prefix || max <= 0) return 0;
+    dir_make(dest_dir);   /* o destino tem que existir (fopen nao cria pasta) */
     if (CoInitializeEx(NULL, COINIT_MULTITHREADED) == RPC_E_CHANGED_MODE)
         return 0;
 
@@ -153,55 +154,272 @@ int video_frames(const char *video_path, const char *dest_dir,
         }
     }
 
-    for (int i = 0; i < max; i++) {
-        if (dur > 0) {
-            long long t = (long long)((double)dur * ((double)i + 0.5) / (double)max);
-            PROPVARIANT pv;
-            PropVariantInit(&pv);
-            pv.vt = VT_I8;
-            pv.hVal.QuadPart = t;
-            if (FAILED(IMFSourceReader_SetCurrentPosition(reader, &GUID_NULL, &pv))) continue;
-        }
-
+    /* DUAS passadas: (1) conta os frames decodificando ate o fim; (2) reabre
+     * e salva os frames nos indices espacados. Sem seek e sem duracao — mp4
+     * de qualquer gerador funciona (o seek e a fonte de E_FAIL dos mp4s). */
+    long long total_frames = 0;
+    for (;;) {
         IMFSample *sp = NULL;
         DWORD flags = 0;
-        if (FAILED(IMFSourceReader_ReadSample(reader, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-                                              0, NULL, &flags, NULL, &sp)))
-            continue;
-        if (!sp) continue;
-        if (flags & MF_SOURCE_READERF_ENDOFSTREAM) { IMFSample_Release(sp); break; }
+        HRESULT hrc = IMFSourceReader_ReadSample(reader, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+                                                 0, NULL, &flags, NULL, &sp);
+        if (FAILED(hrc)) break;
+        if (sp) IMFSample_Release(sp);
+        if (flags & MF_SOURCE_READERF_ENDOFSTREAM) break;
+        total_frames++;
+        if (total_frames > 20000) break;   /* teto de seguranca */
+    }
+    if (total_frames < 1) goto fim;
 
-        IMFMediaBuffer *mb = NULL;
-        if (FAILED(IMFSample_ConvertToContiguousBuffer(sp, &mb))) {
-            IMFSample_Release(sp);
-            continue;
-        }
-        BYTE *dados = NULL;
-        DWORD len = 0;
-        if (FAILED(IMFMediaBuffer_Lock(mb, &dados, NULL, &len))) {
+    IMFSourceReader_Release(reader);
+    reader = NULL;
+    if (FAILED(MFCreateSourceReaderFromURL(wpath, NULL, &reader))) goto fim;
+    {
+        IMFMediaType *mt2 = NULL;
+        if (FAILED(MFCreateMediaType(&mt2))) goto fim;
+        IMFAttributes_SetGUID((IMFAttributes *)mt2, &MF_MT_MAJOR_TYPE, &MFMediaType_Video);
+        IMFAttributes_SetGUID((IMFAttributes *)mt2, &MF_MT_SUBTYPE, &g_MFVideoFormat_NV12);
+        IMFSourceReader_SetCurrentMediaType(reader, MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, mt2);
+        IMFAttributes_Release((IMFAttributes *)mt2);
+    }
+
+    /* passada 2: decodifica de novo e grava os indices alvo (espacados) */
+    {
+        long long idx_f = -1;
+        for (;;) {
+            IMFSample *sp = NULL;
+            DWORD flags = 0;
+            HRESULT hrc = IMFSourceReader_ReadSample(reader, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+                                                     0, NULL, &flags, NULL, &sp);
+            if (FAILED(hrc)) break;
+            idx_f++;
+            int fim_st = (flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0;
+            int eh_alvo = 0;
+            if (sp) {
+                for (int k = 0; k < max; k++)
+                    if ((long long)((double)total_frames * ((double)k + 0.5) / (double)max) == idx_f)
+                        eh_alvo = 1;
+            }
+            if (!eh_alvo || !sp) { if (sp) IMFSample_Release(sp); if (fim_st) break; continue; }
+
+            IMFMediaBuffer *mb = NULL;
+            if (FAILED(IMFSample_ConvertToContiguousBuffer(sp, &mb))) {
+                IMFSample_Release(sp);
+                if (fim_st) break;
+                continue;
+            }
+            BYTE *dados = NULL;
+            DWORD len = 0;
+            if (FAILED(IMFMediaBuffer_Lock(mb, &dados, NULL, &len))) {
+                IMFMediaBuffer_Release(mb);
+                IMFSample_Release(sp);
+                if (fim_st) break;
+                continue;
+            }
+            {
+                /* o buffer tem que caber Y (w*h) + UV (w*h/2): amostra menor =
+                   formato inesperado; converte NAO (leitura fora do buffer) */
+                size_t precisa = (size_t)w * (size_t)h * 3 / 2;
+                if (len >= precisa) {
+                    char dest[1024];
+                    snprintf(dest, sizeof dest, "%s/%s-%02d.png", dest_dir, prefix, feitos + 1);
+                    if (frame_para_png(dados, w, h, dest)) feitos++;
+                }
+            }
+            IMFMediaBuffer_Unlock(mb);
             IMFMediaBuffer_Release(mb);
             IMFSample_Release(sp);
-            continue;
+            if (fim_st) break;
+            if (feitos >= max) break;
         }
-        {
-            /* o buffer tem que caber Y (w*h) + UV (w*h/2): amostra menor =
-               formato inesperado; converte NAO (leitura fora do buffer) */
-            size_t precisa = (size_t)w * (size_t)h * 3 / 2;
-            if (len >= precisa) {
-                char dest[1024];
-                snprintf(dest, sizeof dest, "%s/%s-%02d.png", dest_dir, prefix, i + 1);
-                if (frame_para_png(dados, w, h, dest)) feitos++;
-            }
-        }
-        IMFMediaBuffer_Unlock(mb);
-        IMFMediaBuffer_Release(mb);
-        IMFSample_Release(sp);
     }
 
 fim:
     if (reader) IMFSourceReader_Release(reader);
     MFShutdown();
     free(wpath);
+    CoUninitialize();
+    return feitos;
+}
+
+/* ================= render: frames BMP -> mp4 (SinkWriter) ============ */
+
+/* le um BMP 24bpp: devolve o buffer BGR bottom-up (exatamente o que o MF
+ * espera com stride positivo), dimensões por referencia. Alocado. */
+static unsigned char *bmp_le(const char *path, int *w, int *h)
+{
+    size_t n = 0;
+    unsigned char *tudo = (unsigned char *)file_read(path, &n);
+    if (!tudo || n < 54 || tudo[0] != 'B' || tudo[1] != 'M') { free(tudo); return NULL; }
+    int larg = 0, alt = 0;
+    unsigned short bpp = 0;
+    unsigned int off = 54;
+    memcpy(&larg, tudo + 18, 4);
+    memcpy(&alt, tudo + 22, 4);
+    memcpy(&bpp, tudo + 28, 2);
+    memcpy(&off, tudo + 10, 4);
+    if (bpp != 24 || larg <= 0 || (alt == 0)) { free(tudo); return NULL; }
+    int invertido = alt > 0;             /* BMP padrao: bottom-up */
+    int ah = alt < 0 ? -alt : alt;
+    size_t stride = ((size_t)larg * 3 + 3) & ~(size_t)3;
+    if (n < off + stride * (size_t)ah) { free(tudo); return NULL; }
+    (void)invertido;
+    *w = larg;
+    *h = ah;
+    unsigned char *px = (unsigned char *)malloc(stride * (size_t)ah);
+    if (!px) { free(tudo); return NULL; }
+    memcpy(px, tudo + off, stride * (size_t)ah);
+    free(tudo);
+    return px;
+}
+
+int video_render(const char *frames_dir, const char *out_mp4, int fps)
+{
+    if (!frames_dir || !out_mp4) return 0;
+    if (fps <= 0 || fps > 60) fps = 30;
+
+    size_t n_dir = 0;
+    char **arqs = dir_list(frames_dir, &n_dir);
+    if (!arqs) return 0;
+
+    /* so' BMPs, ordenados (dir_list ja' ordena por nome) */
+    int n_f = 0;
+    for (size_t i = 0; arqs[i]; i++) {
+        size_t l = strlen(arqs[i]);
+        if (l > 4 && (str_ieq(arqs[i] + l - 4, ".bmp"))) n_f++;
+    }
+    if (n_f == 0) { for (size_t i = 0; arqs[i]; i++) free(arqs[i]); free(arqs); return 0; }
+
+    if (CoInitializeEx(NULL, COINIT_MULTITHREADED) == RPC_E_CHANGED_MODE) {
+        for (size_t i = 0; arqs[i]; i++) free(arqs[i]);
+        free(arqs);
+        return 0;
+    }
+
+    int feitos = 0;
+    HRESULT hrmf2 = 0;
+    IMFSinkWriter *writer = NULL;
+    int w = 0, h = 0;
+    unsigned char *primeiro = NULL;
+    WCHAR *wout = NULL;
+
+    {
+        int nw = MultiByteToWideChar(CP_UTF8, 0, out_mp4, -1, NULL, 0);
+        if (nw <= 0) goto fim_r;
+        wout = (WCHAR *)malloc((size_t)nw * sizeof(WCHAR));
+        if (!wout) goto fim_r;
+        MultiByteToWideChar(CP_UTF8, 0, out_mp4, -1, wout, nw);
+    }
+
+    /* dimensoes pelo PRIMEIRO frame (todos tem que bater) */
+    for (size_t i = 0; arqs[i] && !primeiro; i++) {
+        size_t l = strlen(arqs[i]);
+        if (l > 4 && str_ieq(arqs[i] + l - 4, ".bmp")) {
+            char abs1[1300];
+            snprintf(abs1, sizeof abs1, "%s/%s", frames_dir, arqs[i]);
+            int tw = 0, th = 0;
+            primeiro = bmp_le(abs1, &tw, &th);
+            if (!primeiro) continue;
+            w = tw;
+            h = th;
+        }
+    }
+    if (!primeiro || w < 16 || h < 16) goto fim_r;
+
+    if (FAILED(MFStartup(MF_VERSION, 0))) goto fim_r;
+
+    {
+        IMFSinkWriter *sw = NULL;
+        IMFMediaType *tipo_out = NULL, *tipo_in = NULL;
+        if (FAILED(MFCreateSinkWriterFromURL(wout, NULL, NULL, &sw))) goto encerra;
+
+        MFCreateMediaType(&tipo_out);
+        IMFAttributes_SetGUID((IMFAttributes *)tipo_out, &MF_MT_MAJOR_TYPE, &MFMediaType_Video);
+        IMFAttributes_SetGUID((IMFAttributes *)tipo_out, &MF_MT_SUBTYPE, &MFVideoFormat_H264);
+        IMFAttributes_SetUINT32((IMFAttributes *)tipo_out, &MF_MT_AVG_BITRATE, 5000000);
+        IMFAttributes_SetUINT64((IMFAttributes *)tipo_out, &MF_MT_FRAME_SIZE,
+                                ((UINT64)w << 32) | (UINT64)h);
+        IMFAttributes_SetUINT32((IMFAttributes *)tipo_out, &MF_MT_INTERLACE_MODE,
+                                (UINT32)MFVideoInterlace_Progressive);
+        IMFAttributes_SetUINT64((IMFAttributes *)tipo_out, &MF_MT_FRAME_RATE,
+                                ((UINT64)fps << 32) | 1);
+        IMFAttributes_SetUINT64((IMFAttributes *)tipo_out, &MF_MT_PIXEL_ASPECT_RATIO,
+                                ((UINT64)1 << 32) | 1);
+        DWORD idx_stream = 0;
+        hrmf2 = IMFSinkWriter_AddStream(sw, tipo_out, &idx_stream);
+        if (FAILED(hrmf2)) goto encerra;
+
+        MFCreateMediaType(&tipo_in);
+        IMFAttributes_SetGUID((IMFAttributes *)tipo_in, &MF_MT_MAJOR_TYPE, &MFMediaType_Video);
+        IMFAttributes_SetGUID((IMFAttributes *)tipo_in, &MF_MT_SUBTYPE, &MFVideoFormat_RGB24);
+        IMFAttributes_SetUINT32((IMFAttributes *)tipo_in, &MF_MT_DEFAULT_STRIDE,
+                                (UINT32)(-(int)(w * 3)));   /* negativo = top-down (conv. do sink) */
+        IMFAttributes_SetUINT64((IMFAttributes *)tipo_in, &MF_MT_FRAME_SIZE,
+                                ((UINT64)w << 32) | (UINT64)h);
+        IMFAttributes_SetUINT64((IMFAttributes *)tipo_in, &MF_MT_FRAME_RATE,
+                                ((UINT64)fps << 32) | 1);
+        IMFAttributes_SetUINT64((IMFAttributes *)tipo_in, &MF_MT_PIXEL_ASPECT_RATIO,
+                                ((UINT64)1 << 32) | 1);
+        hrmf2 = IMFSinkWriter_SetInputMediaType(sw, idx_stream, tipo_in, NULL);
+        if (FAILED(hrmf2))
+            goto encerra;
+
+        IMFSinkWriter_BeginWriting(sw);
+
+        long long tick = 10000000LL / fps;
+        for (int i = 0; i < n_f; i++) {
+            char abs1[1300];
+            snprintf(abs1, sizeof abs1, "%s/%s", frames_dir, arqs[i]);
+            /* ordem: dir_list ordena por nome; so' bmps */
+            size_t l = strlen(arqs[i]);
+            if (!(l > 4 && str_ieq(arqs[i] + l - 4, ".bmp"))) continue;
+            int tw = 0, th = 0;
+            unsigned char *d = bmp_le(abs1, &tw, &th);
+            if (!d || tw != w || th != h) { if (d) free(d); continue; }
+
+            IMFMediaBuffer *mb = NULL;
+            if (FAILED(MFCreateMemoryBuffer((DWORD)((size_t)w * 3 * (size_t)h), &mb))) {
+                free(d);
+                continue;
+            }
+            {
+                BYTE *pd = NULL;
+                if (SUCCEEDED(IMFMediaBuffer_Lock(mb, &pd, NULL, NULL))) {
+                    /* BMP = bottom-up; o sink quer top-down (stride negativo):
+                       copia invertendo as linhas */
+                    size_t stride = ((size_t)w * 3 + 3) & ~(size_t)3;
+                    for (int y = 0; y < h; y++)
+                        memcpy(pd + (size_t)y * stride, d + (size_t)(h - 1 - y) * stride, stride);
+                    IMFMediaBuffer_SetCurrentLength(mb, (DWORD)((size_t)w * 3 * (size_t)h));
+                    IMFMediaBuffer_Unlock(mb);
+                    IMFSample *sp = NULL;
+                    if (SUCCEEDED(MFCreateSample(&sp))) {
+                        IMFSample_AddBuffer(sp, mb);
+                        IMFSample_SetSampleTime(sp, (LONGLONG)i * tick);
+                        IMFSample_SetSampleDuration(sp, tick);
+                        hrmf2 = IMFSinkWriter_WriteSample(sw, idx_stream, sp);
+                        if (FAILED(hrmf2))                        IMFSample_Release(sp);
+                        feitos++;
+                    }
+                }
+                IMFMediaBuffer_Release(mb);
+            }
+            free(d);
+        }
+        hrmf2 = IMFSinkWriter_Finalize(sw);
+encerra:
+        if (tipo_in) IMFAttributes_Release((IMFAttributes *)tipo_in);
+        if (tipo_out) IMFAttributes_Release((IMFAttributes *)tipo_out);
+        if (sw) IMFSinkWriter_Release(sw);
+    }
+
+    MFShutdown();
+
+fim_r:
+    free(wout);
+    free(primeiro);
+    for (size_t i = 0; arqs[i]; i++) free(arqs[i]);
+    free(arqs);
     CoUninitialize();
     return feitos;
 }

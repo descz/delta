@@ -5065,6 +5065,15 @@ int main(int argc, char **argv)
                 replay_cols = atoi(argv[++i]);
                 replay_rows = atoi(argv[++i]);
             }
+        } else if (str_eq(a, "--render-video") && i + 2 < argc) {
+            /* frames BMP -> mp4 (a saida da skill video-de-codigo) */
+            const char *dirf = argv[i + 1];
+            const char *sai = argv[i + 2];
+            int fps = (i + 3 < argc) ? atoi(argv[i + 3]) : 0;
+            int nf = video_render(dirf, sai, fps);
+            if (nf > 0) printf("render: %d frames -> %s\n", nf, sai);
+            else { fprintf(stderr, "render: nada codificado (sem .bmp? codec ausente?)\n"); return 1; }
+            return 0;
         } else if (str_eq(a, "--video-frames") && i + 1 < argc) {
             /* debug/ teste: extrai frames do video (destino opcional) */
             const char *vid = argv[i + 1];

@@ -409,6 +409,33 @@ else
     pass "vídeo: ffmpeg ausente na máquina (teste ignorado)"
 fi
 
+echo "[3-video-render] renderizar mp4 de frames BMP (o caminho da skill video-de-codigo)"
+python - <<'PYEOF'
+import struct, os
+os.makedirs("build/frames-r", exist_ok=True)
+W, H = 320, 180
+for f in range(12):
+    lin = (W * 3 + 3) & ~3
+    px = bytearray(lin * H)
+    cx = int((0.15 + 0.7 * f / 12) * W)
+    for y in range(H):
+        for x in range(W):
+            rr, g, b = (30, 120, 255) if (x-cx)**2 + (y-H//2)**2 < 3600 else (18, 18, 30)
+            i = y * lin + x * 3
+            px[i] = b; px[i+1] = g; px[i+2] = rr
+    hdr = (b"BM" + struct.pack("<IHHI", 54 + len(px), 0, 0, 54)
+           + struct.pack("<IiiHHIIiiII", 40, W, H, 1, 24, 0, len(px), 2835, 2835, 0, 0))
+    open("build/frames-r/%04d.bmp" % f, "wb").write(hdr + bytes(px))
+print("bmps ok")
+PYEOF
+rm -f build/anim-teste.mp4
+./bin/delta.exe --render-video build/frames-r build/anim-teste.mp4 30 > "$ROOT/build/render.log" 2>&1
+expect "$ROOT/build/render.log" "render: 12 frames"    "render: 12 frames codificados"
+if [ -s build/anim-teste.mp4 ]; then pass "render: mp4 existe e tem conteudo"
+else fail "render: mp4 vazio/ausente"; fi
+ffprobe -v error -show_entries stream=codec_name -of csv=p=0 build/anim-teste.mp4 2>/dev/null | grep -q h264 \
+    && pass "render: mp4 h264 de verdade" || fail "render: mp4 nao e h264"
+
 echo "[3-dialeto] dialeto: rodadas numeradas, retomada do placar, sessão intocada"
 DMOCK=$!
 python tests/mock_openai.py $((PORT + 40)) > /dev/null 2>&1 &
