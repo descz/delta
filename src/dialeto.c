@@ -213,7 +213,7 @@ char *dialeto_prompt_dev(const Dialeto *d, const char *brief,
 
 char *dialeto_prompt_critico(const Dialeto *d, const char *brief,
                              const char *relato_dev, const char *diff,
-                             const char *cwd)
+                             const char *cwd, const char *preferencias)
 {
     Str s;
     str_init(&s);
@@ -250,6 +250,13 @@ char *dialeto_prompt_critico(const Dialeto *d, const char *brief,
         str_adds(&s, "\n");
     }
 
+    if (preferencias && *preferencias) {
+        str_adds(&s, "O que o usuario costuma aprovar/preferir (da memoria dele —\n");
+        str_adds(&s, "julgue o resultado contra isto, e cite a preferencia violada):\n\n");
+        add_trecho(&s, preferencias, 4000);
+        str_adds(&s, "\n");
+    }
+
     str_adds(&s,
         "Como julgar, nesta ordem:\n"
         "1. O que o artifice afirmou e' VERDADE? Rode o comando que ele citou. Se a\n"
@@ -258,12 +265,16 @@ char *dialeto_prompt_critico(const Dialeto *d, const char *brief,
         "   perda de dado, mensagem de erro que engana, resultado errado em silencio.\n"
         "3. Buraco de teste que esconde regressao real (nao cobertura por cobertura).\n"
         "4. Doc que mente, codigo morto, dependencia que nao precisava existir.\n"
-        "5. So' depois de tudo isso: forma, nome, organizacao.\n\n"
+        "5. Preferencia do usuario violada (veja a lista acima): PREFERENCIA VIOLADA\n"
+        "   conta como bloqueio real — o resultado e' pra ele, nao pra nota.\n"
+        "6. So' depois de tudo isso: forma, nome, organizacao.\n\n"
         "Regras:\n"
         "- Todo apontamento precisa de arquivo:linha (ou comando + saida).\n"
         "- Nao invente defeito para parecer rigoroso: apontamento falso queima uma\n"
         "  rodada do artifice e derruba a nota final.\n"
-        "- Nao repita apontamento ja corrigido nas rodadas anteriores.\n\n"
+        "- Nao repita apontamento ja corrigido nas rodadas anteriores.\n"
+        "- Voce LE a memoria do usuario; NAO escreva nela — opiniao sua gravada como\n"
+        "  preferencia envenena as rodadas seguintes.\n\n"
         "Termine a resposta EXATAMENTE com estas linhas (o driver as le'):\n"
         "NOTA: <0 a 10, uma casa decimal>\n"
         "BLOQUEIO: <arquivo:linha — defeito que torna o resultado errado>\n"

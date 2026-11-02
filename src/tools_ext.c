@@ -3666,6 +3666,31 @@ static void memoria_add(JValue *arr, const char *title, const char *content, con
     arr->items[arr->count++] = n;
 }
 
+/* Preferencias do usuario para o critico do /dialeto: o que o usuario
+ * costuma aprovar/preferir (kind=preference) + fatos explicitos (kind=note).
+ * Texto em linhas "- conteudo" ou NULL se nao ha nada. Alocado. */
+char *tools_memoria_preferencias(size_t max_chars)
+{
+    JValue *arr = memory_load();
+    Str s;
+    str_init(&s);
+    for (size_t i = 0; i < arr->count && s.len < max_chars; i++) {
+        JValue *n = arr->items[i];
+        const char *kind = json_str(json_get(n, "kind"));
+        const char *content = json_str(json_get(n, "content"));
+        if (!content || !*content) continue;
+        int eh_pref = str_eq(kind, "preference");
+        int eh_nota = str_eq(kind, "note") && str_eq(json_str(json_get(n, "scope")), "global");
+        if (!eh_pref && !eh_nota) continue;
+        str_adds(&s, "- ");
+        str_adds(&s, content);
+        str_addc(&s, '\n');
+    }
+    json_free(arr);
+    if (!s.len) { str_free(&s); return NULL; }
+    return str_steal(&s);
+}
+
 /* Extrai o que parece duradouro. A mensagem crua NAO vira memoria: ela ja'
    esta' no JSONL da sessao; memory.json guarda fato que vale entre sessoes. */
 void tools_auto_memorize(const char *texto)

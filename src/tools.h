@@ -74,6 +74,7 @@ void  tools_report_user(const char *pedido);                    /* antes de resp
 void  tools_report_tool(const char *nome, const char *alvo, int is_error); /* tool fim */
 void  tools_report_turn_end(const char *status);                /* fecha o turno */
 char *tools_session_report(void);                               /* malloc ou NULL */
+char *tools_memoria_preferencias(size_t max_chars);             /* malloc ou NULL */
 
 /* Indice de skills (skills/, ~/.deltaCore/skills e ~/.agents/skills) para o prompt. */
 char *tools_skills_index(const char *cwd, size_t max_chars);

@@ -62,7 +62,7 @@ char *dialeto_prompt_dev(const Dialeto *d, const char *brief,
                          const char *ultima_critica);
 char *dialeto_prompt_critico(const Dialeto *d, const char *brief,
                              const char *relato_dev, const char *diff,
-                             const char *cwd);
+                             const char *cwd, const char *preferencias);
 
 /* Extrai NOTA / BLOQUEIO / CRITICO do texto do critico. 1 = achou nota. */
 int   dialeto_nota(const char *texto, DialetoNota *out);

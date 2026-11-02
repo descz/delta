@@ -2297,6 +2297,7 @@ static void menu_complete(void)
 /* RELATORIO) para sobreviver ao loop e para o usuario ler depois.      */
 /* ================================================================== */
 static Str g_dial_cap;
+static Str g_dial_prefs;   /* preferencias do usuario lidas 1x para o critico */
 
 static void dial_cb_text(void *ud, const char *s, size_t n)
 {
@@ -2425,6 +2426,12 @@ static void dialeto_comando(const char *args)
 
     session_suppress(1);   /* rodadas do dialeto não sujam a sessão do usuário */
     app.dialeto_rodando = 1;   /* Ctrl+C não para o dialeto (só o ESC) */
+    str_init(&g_dial_prefs);
+    {
+        char *prefs = tools_memoria_preferencias(4000);
+        if (prefs && *prefs) str_adds(&g_dial_prefs, prefs);
+        free(prefs);
+    }
 
     if (o.rodadas_max > 0)
         dial_info("dialeto iniciado \u00b7 %d rodadas \u00b7 artífice %s \u00b7 crítico %s\n"
@@ -2510,7 +2517,8 @@ static void dialeto_comando(const char *args)
 
         /* --- critico ------------------------------------------------- */
         char *pcrit = dialeto_prompt_critico(&d, brief, relato, df.data,
-                                            cdir ? cdir : NULL);
+                                            cdir ? cdir : NULL,
+                                            g_dial_prefs.data ? g_dial_prefs.data : NULL);
         dial_rodar(&crit, &ccfg, cdir ? cdir : cwd, "CRITICO", modelo_crit,
                    d.rodada, o.rodadas_max);
         str_clear(&g_dial_cap);
@@ -2604,6 +2612,7 @@ static void dialeto_comando(const char *args)
     }
 
     app.dialeto_rodando = 0;
+    str_free(&g_dial_prefs);
     session_suppress(0);
 
     agent_free(&dev);
