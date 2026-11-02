@@ -20,7 +20,7 @@ ifeq ($(IS_WIN),1)
   BIN      := bin/delta.exe
   TESTBIN  := bin/delta-tests.exe
   DIST     := dist/Delta.exe
-  LDFLAGS  := -static -lwinhttp -luser32 -lkernel32 -lmsvcrt -lws2_32 -lshell32 -lole32 -luuid
+  LDFLAGS  := -static -lwinhttp -luser32 -lkernel32 -lmsvcrt -lws2_32 -lshell32 -lole32 -luuid -lmfplat -lmfreadwrite -lmfuuid
   LDLIBS   :=
   EXTRA_OBJ := $(BUILD)/delta-res.o
 else
@@ -37,7 +37,7 @@ ifeq ($(IS_WIN),)
   CFLAGS += -D_DEFAULT_SOURCE -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700
 endif
 
-CORE_SRC := src/util.c src/json.c src/okcolor.c src/theme.c src/ui.c
+CORE_SRC := src/util.c src/json.c src/okcolor.c src/theme.c src/ui.c src/video.c
 APP_SRC  := src/term.c src/clipboard.c src/i18n.c src/tools.c src/tools_ext.c \
             src/extensions.c src/provider.c src/modelsdev.c src/agent.c src/codegraph.c src/dialeto.c \
             src/update.c src/setup.c src/main.c

@@ -1,6 +1,7 @@
 /* main.c - Delta Agent: agente de codificacao leve (TUI, derivado do Delta).
  * C11, sem dependencias externas. */
 #include "agent.h"
+#include "video.h"
 #include "clipboard.h"
 #include "modelsdev.h"
 #include "term.h"
@@ -4391,6 +4392,35 @@ static void inserir_colagem(const Clip *c)
         if (!app.cfg.supports_image)
             notify("%s não aceita imagem: só o caminho vai no texto (use /models para um com visão)",
                    app.cfg.model ? app.cfg.model : "o modelo");
+    } else if (c->kind == CLIP_FILES && c->path && c->is_video && app.cfg.supports_image) {
+        /* video + modelo com visao: storyboard de frames (o modelo "assiste") */
+        char *dir = paste_dir();
+        char prefixo[48];
+        snprintf(prefixo, sizeof prefixo, "vid%llu", (unsigned long long)now_ms());
+        int nf = video_frames(c->path, dir, prefixo, 6);
+        if (nf > 0) {
+            for (int i = 1; i <= nf && app.n_imgs < 8; i++) {
+                char nome[700];
+                snprintf(nome, sizeof nome, "%s/%s-%02d.jpg", dir, prefixo, i);
+                if (!file_exists(nome)) break;
+                char limpo[600];
+                snprintf(limpo, sizeof limpo, "%s", nome);
+#ifdef _WIN32
+                for (char *q = limpo; *q; q++) if (*q == '/') *q = '\\';
+#endif
+                if (app.n_imgs < 8) app.imgs[app.n_imgs++] = str_dup(limpo);
+                char rot[48];
+                snprintf(rot, sizeof rot, "[frame %d/%d] ", i, nf);
+                input_insert_text(rot, strlen(rot));
+            }
+            input_insert_text(" ", 1);
+        } else {
+            char buf[1400];
+            snprintf(buf, sizeof buf, "[video: %s] ", c->path);
+            input_insert_text(buf, strlen(buf));
+            notify("não consegui extrair frames do vídeo (codec? ffmpeg?) — vai só o caminho");
+        }
+        free(dir);
     } else if (c->kind == CLIP_FILES && c->path) {
         char buf[1400];
         snprintf(buf, sizeof buf, "[%s: %s] ", c->is_video ? "video" : "arquivo", c->path);
@@ -5035,6 +5065,16 @@ int main(int argc, char **argv)
                 replay_cols = atoi(argv[++i]);
                 replay_rows = atoi(argv[++i]);
             }
+        } else if (str_eq(a, "--video-frames") && i + 1 < argc) {
+            /* debug/ teste: extrai frames do video (destino opcional) */
+            const char *vid = argv[i + 1];
+            const char *dest = (i + 2 < argc) ? argv[i + 2] : ".";
+            i += (i + 2 < argc) ? 2 : 1;
+            int nf = video_frames(vid, dest, "frame", 6);
+            printf("frames: %d\n", nf);
+            for (int k = 1; k <= nf; k++)
+                printf("  %s/frame-%02d.png\n", dest, k);
+            return 0;
         } else if (str_eq(a, "--tool-script") && i + 1 < argc) {
             return run_tool_script(argv[++i], opt_cwd);
         } else if (str_eq(a, "--tool") && i + 2 < argc) {

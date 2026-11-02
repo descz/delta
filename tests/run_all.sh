@@ -390,6 +390,25 @@ expect /tmp/delta_cita.log "│ um    │ dois  │"            "tabela: linha d
 reject /tmp/delta_cita.log "| col A | col B |"            "tabela: não vira linha crua de pipes"
 
 echo
+echo "[3-video] colar vídeo = storyboard de frames (WMF no Windows / ffmpeg no POSIX)"
+if command -v ffmpeg >/dev/null 2>&1; then
+    ffmpeg -v error -y -f lavfi -i "testsrc=duration=4:size=1280x720:rate=30" -c:v h264_mf \
+        build/teste-video.mp4 2>/dev/null || ffmpeg -v error -y -f lavfi \
+        -i "testsrc=duration=4:size=1280x720:rate=30" build/teste-video.mp4 2>/dev/null
+    if [ -f build/teste-video.mp4 ]; then
+        VT="$ROOT/build/frames-teste"
+        rm -rf "$VT" && mkdir -p "$VT"
+        ./bin/delta.exe --video-frames build/teste-video.mp4 "$VT" > "$VT/out.log" 2>/dev/null
+        expect "$VT/out.log" "frames: 6"           "vídeo: 6 frames extraídos"
+        if [ -f "$VT/frame-01.png" ]; then pass "vídeo: frame-01.png gravado"
+        else fail "vídeo: frame-01.png ausente"; fi
+    else
+        pass "vídeo: ffmpeg não gerou o teste (ignorado)"
+    fi
+else
+    pass "vídeo: ffmpeg ausente na máquina (teste ignorado)"
+fi
+
 echo "[3-dialeto] dialeto: rodadas numeradas, retomada do placar, sessão intocada"
 DMOCK=$!
 python tests/mock_openai.py $((PORT + 40)) > /dev/null 2>&1 &
