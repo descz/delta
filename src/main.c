@@ -5066,7 +5066,7 @@ int main(int argc, char **argv)
                 replay_rows = atoi(argv[++i]);
             }
         } else if (str_eq(a, "--render-video") && i + 2 < argc) {
-            /* frames BMP -> mp4 (a saida da skill video-de-codigo) */
+            /* frames BMP -> mp4 (a saida da skill deltamotion) */
             const char *dirf = argv[i + 1];
             const char *sai = argv[i + 2];
             int fps = (i + 3 < argc) ? atoi(argv[i + 3]) : 0;

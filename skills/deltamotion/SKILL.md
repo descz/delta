@@ -1,5 +1,5 @@
 ---
-name: video-de-codigo
+name: deltamotion
 description: Gerar videos animados de alta qualidade com codigo C em dois estilos — EXPLAINER tipografico (fundo claro, texto gigante, cards, icones, typewriter) e DARK MOTION (fundo escuro, glow, particulas). Brief antes, MP4 pelo Delta. Use quando o usuario pedir "video animado", "motion graphic", "animacao programatica" ou video explicativo.
 ---
 
