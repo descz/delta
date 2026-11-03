@@ -1027,8 +1027,17 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
             msg_add_call(am, turn.calls.calls[i].id, turn.calls.calls[i].name, turn.calls.calls[i].args);
         session_append(a, "message", am);
 
-        if (turn.calls.n_calls == 0) {
+                if (turn.calls.n_calls == 0) {
             turn_free(&turn);
+            /* resposta VAZIA com resultados de ferramenta pendentes no fim do
+               contexto = o stream morreu no meio do trabalho (alguns proxies
+               cortam o H.264/deepseek a ~75s). Uma retentativa automatica:
+               a proxima leva os results pendentes visiveis e o modelo pode
+               continuar de onde parou, em vez do turno acabar do nada. */
+            int pendentes = a->msgs.n > 0 && a->msgs.items[a->msgs.n - 1].role == ROLE_TOOL;
+            if (pendentes && ++a->respirados <= 6) {
+                continue;
+            }
             return 1;
         }
 

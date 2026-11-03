@@ -34,6 +34,7 @@ typedef struct {
     char    *cwd;
     char    *system_prompt;
     long     total_in, total_out, total_cost_cache_read, total_cache_write;
+    int      respirados;        /* retries quando o stream morre com tool result pendente */
     int      turn_count;
 } Agent;
 
