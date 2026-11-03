@@ -142,6 +142,25 @@ static void texto(const char *s, int x, int y, int alt, int peso,
     SelectObject(mem, vo); DeleteObject(f);
 }
 ```
+/* TEXTO CENTRALIZADO — use SEMPRE ele (a maioria dos defeitos e texto
+   desalinhado: nunca calcule x na mao). Devolve o y usado. */
+static int texto_central(const char *s, int y, int alt, int peso,
+                         int r, int g, int b, float alpha) {
+    SIZE ss; memset(&ss, 0, sizeof ss);
+    HFONT f = CreateFontW(alt, 0,0,0, peso, FALSE,FALSE,FALSE, DEFAULT_CHARSET,
+                          OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                          DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    HDC dc = GetDC(NULL); HGDIOBJ vo = SelectObject(dc, f);
+    int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
+    WCHAR *w = malloc((size_t)n*2);
+    MultiByteToWideChar(CP_UTF8, 0, s, -1, w, n);
+    GetTextExtentPoint32W(dc, w, n-1, &ss);
+    int x = (CW - ss.cx) / 2;
+    SelectObject(dc, vo); DeleteObject(f); ReleaseDC(NULL, dc);
+    texto(s, x, y, alt, peso, r, g, b, alpha);
+    return y + alt + alt / 3;
+}
+
 Fontes boas instaladas no Windows: **Segoe UI** (Black=900 p/ headlines, Bold=700,
 Regular), Consolas p/ código. Números do peso: 400 normal, 700 bold, 900 black.
 
@@ -221,6 +240,68 @@ static void frame_gravar(const char *dir, int n) {
     fclose(f); free(inv);
 }
 ```
+
+## O TEMPLATE — comece SEMPRE por ele (so' troque as palavras)
+
+NÃO invente layout: os defeitos recorrentes são texto desalinhado e ritmo
+morrendo. O template abaixo ja' resolve os dois (tudo CENTRALIZADO, 6s,
+3 cenas de ~1.8s). Troque APENAS: as palavras do kicker/headline/labels e
+a cor de acento. NÃO mexa no ritmo, nas dimensões nem no layout.
+
+```c
+static int acento_r = 226, acento_g = 60, acento_b = 40;   /* a cor do brief */
+
+/* CENA: entra texto centrado + saida. Retorna o y apos a ultima linha. */
+static void cena_texto(const char *kicker, const char *linha1, const char *linha2,
+                       const char *destaque, int destaque_linha, float t_cena) {
+    float e = ease(clamp01(t_cena * 2.2f));            /* entra em <=0.45s */
+    if (e <= 0) return;
+    int y = texto_central(kicker, 150, 24, 600, 90, 85, 80, e * 0.75f) + 40;
+    y = texto_central(linha1, y + 20, 110, 800, 25, 22, 20, e);
+    if (linha2) {
+        int y2 = texto_central(linha2, y + 30, 110, 800, 25, 22, 20, e);
+        /* highlight crescendo atras da palavra-chave (word = medida na mao:
+           se for usar, meca com GetTextExtentPoint32W no espaco antes dela) */
+        if (destaque) {
+            float hl = ease(clamp01((t_cena - 0.45f) * 3));
+            if (hl > 0) {
+                /* ret de acento crescente ATRAS do destaque: derive o x
+                   centrando o destaque isolado (GetTextExtentPoint32W) */
+                (void)destaque_linha;
+            }
+        }
+    }
+}
+
+int main(void) {
+    canvas_init(1280, 720);
+    system("mkdir frames 2>NUL 1>NUL");
+    int TOTAL = 180;                                   /* 6s a 30fps - NA' O MEXA */
+    for (int f = 0; f < TOTAL; f++) {
+        float t = (float)f / TOTAL;
+        fundo(250, 246, 239);
+        dot_grid(28, 30, 28, 24, 0.10f);
+        /* 3 cenas de 180/3 = 60 frames = 2s cada:
+           intensidade = sino sobre a cena (entra.esigh.sai dentro do slot) */
+        float sino1 = sin(clamp01((t - 0.02f) / 0.26f) * 3.14159f);
+        if (sino1 > 0.02f) cena_texto("DELTA MOTION", "Um video feito", "100 por cento com codigo", NULL, 0, sino1);
+        float sino2 = sin(clamp01((t - 0.34f) / 0.26f) * 3.14159f);
+        if (sino2 > 0.02f) cena_texto("CENA 2", "Sua segunda linha de texto aqui", NULL, 2615013, 0, sino2);
+        float sino3 = sin(clamp01((t - 0.66f) / 0.28f) * 3.14159f);
+        if (sino3 > 0.02f) cena_texto("CENA 3", "Encerre com a mensagem clara", NULL, 2615013, 0, sino3);
+        revela(0.01f, "frames", f);                    /* estilo B usa hdr+rastro */
+        frame_gravar("frames", f);
+    }
+    return 0;
+}
+```
+
+**RIGOR do ritmo e layout (nao negocie):**
+- TOTAL = 180 frames (6s); 3 cenas no maximo; trocas em 1/3 e 2/3;
+- Toda entrada com `ease(clamp01())` em <= 0.45s; saida suave (sino);
+- Tudo CENTRALIZADO com `texto_central`; kicker no y=150; headline no y~230;
+- Uma frase por linha no maximo 4-6 palavras; headline 110px weight 800;
+- reveala(0.01f) por frame; o creme/grid/BMP: iguais ao template.
 
 ## Receitas dos padrões estudados
 
