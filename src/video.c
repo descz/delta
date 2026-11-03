@@ -353,7 +353,7 @@ int video_render(const char *frames_dir, const char *out_mp4, int fps)
         IMFAttributes_SetGUID((IMFAttributes *)tipo_in, &MF_MT_MAJOR_TYPE, &MFMediaType_Video);
         IMFAttributes_SetGUID((IMFAttributes *)tipo_in, &MF_MT_SUBTYPE, &MFVideoFormat_RGB24);
         IMFAttributes_SetUINT32((IMFAttributes *)tipo_in, &MF_MT_DEFAULT_STRIDE,
-                                (UINT32)(-(int)(w * 3)));   /* negativo = top-down (conv. do sink) */
+                                (UINT32)(-(int)(w * 3)));   /* negativo = bottom-up (convencao MF p/ RGB) */
         IMFAttributes_SetUINT64((IMFAttributes *)tipo_in, &MF_MT_FRAME_SIZE,
                                 ((UINT64)w << 32) | (UINT64)h);
         IMFAttributes_SetUINT64((IMFAttributes *)tipo_in, &MF_MT_FRAME_RATE,
@@ -385,11 +385,10 @@ int video_render(const char *frames_dir, const char *out_mp4, int fps)
             {
                 BYTE *pd = NULL;
                 if (SUCCEEDED(IMFMediaBuffer_Lock(mb, &pd, NULL, NULL))) {
-                    /* BMP = bottom-up; o sink quer top-down (stride negativo):
-                       copia invertendo as linhas */
+                    /* BMP = bottom-up e o stride positivo do input type declara
+                       exatamente isso: copia direto */
                     size_t stride = ((size_t)w * 3 + 3) & ~(size_t)3;
-                    for (int y = 0; y < h; y++)
-                        memcpy(pd + (size_t)y * stride, d + (size_t)(h - 1 - y) * stride, stride);
+                    memcpy(pd, d, (size_t)w * 3 * (size_t)h);
                     IMFMediaBuffer_SetCurrentLength(mb, (DWORD)((size_t)w * 3 * (size_t)h));
                     IMFMediaBuffer_Unlock(mb);
                     IMFSample *sp = NULL;
