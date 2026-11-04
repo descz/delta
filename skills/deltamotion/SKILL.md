@@ -241,6 +241,21 @@ static void frame_gravar(const char *dir, int n) {
 }
 ```
 
+## A REGRA DE OURO: cenas EXCLUSIVAS (janela de alpha)
+
+O defeito nº 1 do video ruim: cenas EMPILHADAS (o terminal sobre os cards,
+a headline atras do logo). Cada cena tem uma JANELA de tempo e o alpha dela
+e ZERO fora da janela — a anterior sai (fade) ANTES da proxima entrar:
+
+```c
+/* alpha da cena: sobe na entrada, desce na saida, ZERO fora */
+float a1 = ease(clamp01(t*6 / 0.4f)) * (1 - ease(clamp01((t*6 - 1.9f) / 0.3f)));
+if (a1 > 0.01f) { /* ...desenha tudo da cena 1 multiplicado por a1... */ }
+if (t >= 0.366f && t < 0.633f) { /* cena 2 so' na janela dela */ }
+if (t >= 0.633f) { /* cena 3 */ }
+```
+Teste: extraia frames a 1/3 e 2/3 do video — cada frame tem UMA cena, nunca duas.
+
 ## O TEMPLATE — comece SEMPRE por ele (so' troque as palavras)
 
 NÃO invente layout: os defeitos recorrentes são texto desalinhado e ritmo
