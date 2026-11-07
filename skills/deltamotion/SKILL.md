@@ -1,357 +1,502 @@
 ---
 name: deltamotion
-description: Gerar videos animados de alta qualidade com codigo C em dois estilos — EXPLAINER tipografico (fundo claro, texto gigante, cards, icones, typewriter) e DARK MOTION (fundo escuro, glow, particulas). Brief antes, MP4 pelo Delta. Use quando o usuario pedir "video animado", "motion graphic", "animacao programatica" ou video explicativo.
+description: Use when the user asks for an animated video, motion graphic, explainer, cinematic title or programmatic animation delivered as MP4 and rendered by C code, without a browser, HTML, Three.js or screen recording.
 ---
 
-# Vídeo com código
+# Deltamotion: vídeo por código (C → BMP → MP4)
 
-Vídeos nascem de CÓDIGO: um gerador em C desenha os frames, o Delta codifica
-o MP4 (codec do sistema — Media Foundation; ffmpeg no POSIX). Nada de gravar tela.
+O vídeo nasce de um programa C que desenha cada quadro em BMP. O `delta` junta
+a sequência em H.264. Não há navegador, HTML, WebGL nem gravação de tela neste
+fluxo. Cada quadro depende só de `t` (segundos), então o resultado é repetível.
 
-## OS DOIS ESTILOS (estudados em vídeos de referência)
+## Escopo
 
-**Estilo A — EXPLAINER tipográfico** (fundo claro): fundo creme/branco,
-headlines BOLD gigantes, kicker em small-caps espaçado no topo, highlight de
-cor sólida crescendo atrás de uma palavra-chave, cards brancos arredondados
-com sombra + ícones flat (desenhe com primitivas: play = círculo+triângulo,
-envelope = retângulo+diagonais), labels coloridas dentro dos cards, dot grid
-sutil no fundo. Típico: vídeos explicativos, storytelling, comparativos.
+- **Serve para:** explicativos, intros, títulos, motion gráfico 2D com profundidade
+  simulada (camadas e paralaxe), transições, letterbox, texto em Windows.
+- **Não serve para:** 3D real (não existe motor 3D aqui), páginas HTML/CSS ou Three.js
+  (use a skill `3jsskill`, que trata de páginas web), gravação de tela.
 
-**Estilo B — DARK motion** (fundo escuro): fundo quase-preto, partículas/glow
-aditivo, rastros (o buffer NUNCA limpa — decai ~0.88 por frame), rampa de cor
-por profundidade, anel/órbita de composição, vinheta. Típico: intros, "o que
-é X", vídeos de producto.
+## Fluxo obrigatório
 
-## O pipeline (sempre este)
+1. **Brief.** Duração (6 a 20 s), formato (16:9 em 1280×720 ou 1920×1080; vertical
+   1080×1920), uma frase com a mensagem, 2 a 3 cores em hex, ritmo de referência e se
+   haverá áudio.
+2. **Storyboard.** Uma linha por plano: `t_in`, `t_out`, enquadramento (aberto, médio,
+   detalhe), movimento de câmera, elemento principal, entrada, saída e motivo. Não
+   escreva código antes disso.
+3. **Código.** Parta do modelo abaixo e troque cena por cena, seguindo o storyboard.
+4. **Compilação.** `gcc -std=c11 -O2 -Wall -Wextra -Wpedantic gera.c -o gera -lm`
+   (com texto no Windows, acrescente `-lgdi32`). Zero avisos.
+5. **Quadros.** `mkdir frames` e rode `./gera`. Confira que a contagem bate com
+   duração × fps (ex.: 8 s × 30 = 240 arquivos).
+6. **Revisão.** Antes de codificar, abra pelo menos 6 quadros: 1/6, 1/3, 1/2, 2/3,
+   5/6 e um de cada transição. Se um quadro mostra duas cenas, a janela de tempo
+   está errada. Depois de codificar, extraia quadros com `delta --video-frames video.mp4 check`.
+7. **Codificação.** `delta --render-video frames video.mp4 30`. O encoder lê só `.bmp`,
+   em ordem de nome.
+8. **Conferência.** `ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate -show_entries format=duration -of default=nw=1 video.mp4`.
+   Esperado: `h264`, as dimensões do brief, `30/1` e a duração.
+9. **Áudio (opcional).** Só se `ffmpeg` estiver no PATH. Veja a seção final.
+10. **Limpeza.** Apague a pasta `frames/`. Ela é grande.
 
-1. **BRIEF VISUAL primeiro** (nunca pule): estilo (A ou B), a ideia da animação,
-   paleta de 2-3 cores exatas em hex, o ritmo (o que entra quando) em uma
-   tabela cena por cena, dimensões (1280x720 ou 1080x1920) e duração (6-20s).
-2. **Escreva `gera.c`** com o mini-canvas (abaixo); cada frame desenhado em
-   função de `t` (0 a 1), cenas com fade in/out (NUNCA corte seco).
-3. **Compile e rode**: `gcc -O2 gera.c -o gera -lm && ./gera` → `frames/0000.bmp ...`
-4. **Codifique**: `delta --render-video frames/ video.mp4 30`
-5. **Revise de verdade**: `delta --video-frames video.mp4 check/` e OLHE 2-3
-   frames; compare com o brief; ajuste e repita. Vídeo bom sai em 2-3 idas.
+## Compilador e ambiente (Windows)
 
-## As 6 técnicas de qualidade (estilo A e B)
+O Delta executa comandos pelo `cmd.exe`. Nesse ambiente o `gcc` costuma não estar no PATH.
 
-1. **Supersampling 2x**: render em 2560x1440, rebaixa para 720p (anti-aliase);
-2. **Acumulação HDR + tonemap** (estilo B): brilho soma em float; grava com
-   `x*(2.51x+0.03)/(x*(2.43x+0.59)+0.14)` — glow quente sem branco chapado;
-3. **Rastros** (estilo B): NUNCA limpe o buffer — decaia ~0.88 por frame;
-4. **CONFIRMAÇÃO de cena** (estilo A): cada elemento ENTRA com ease (deslizando
-   de baixo ou escala), cena sai com fade ANTES da próxima entrar (nunca
-   sobreponha cenas — o maior defeito que se vê);
-5. **Typewriter + highlight** (estilo A): texto aparece letra a letra ou com
-   highlight de cor sólida crescendo ATRÁS da palavra-chave;
-6. **Vida de fundo** (ambos): dot grid sutil (A), chevrons/setas repetidas com
-   fade progressivo (A), elementos decorativos cortando os cantos (A/B),
-   fundo borrado ampliado atrás do card-herói (profundidade, B/A).
+1. Verifique com `where gcc`. Se não achar, procure um toolchain MinGW-w64 (ex.: `C:\MinGW\bin\gcc.exe` ou `mingw64\bin\gcc.exe` do WinLibs).
+2. Se o caminho do compilador tiver espaço (ex.: a pasta do usuário "GM METELURGICA"), o link falha com `file not recognized`. Solução testada: copiar o toolchain para um caminho sem espaços (ex.: `C:\dmtc\mingw64`) e zerar `COMPILER_PATH` e `LIBRARY_PATH` antes de compilar.
+3. Compile por um `.bat` com finais de linha CRLF, em vez de encadear comandos longos:
 
-## O mini-canvas (cole no topo do gera.c)
-
-```c
-static unsigned char *img; static int CW, CH;   /* RGB, origem topo-esq */
-static void canvas_init(int w, int h) { CW = w; CH = h; img = malloc((size_t)CW*CH*3); }
-static void px(int x, int y, int r, int g, int b) {
-    if (x < 0 || y < 0 || x >= CW || y >= CH) return;
-    unsigned char *p = img + ((size_t)y*CW + x)*3; p[0]=r; p[1]=g; p[2]=b;
-}
-static void fundo(int r, int g, int b) {
-    for (int i = 0; i < CW*CH; i++) { img[i*3]=r; img[i*3+1]=g; img[i*3+2]=b; }
-}
-static void mistura(int x, int y, int r, int g, int b, float a) {
-    if (x < 0 || y < 0 || x >= CW || y >= CH) return;
-    unsigned char *p = img + ((size_t)y*CW + x)*3;
-    p[0]=p[0]*(1-a)+r*a; p[1]=p[1]*(1-a)+g*a; p[2]=p[2]*(1-a)+b*a;
-}
-static void retangulo(int x0, int y0, int w, int h, int r, int g, int b) {
-    for (int y = y0; y < y0+h; y++) for (int x = x0; x < x0+w; x++) px(x, y, r, g, b);
-}
-static void rect_arred(int x0, int y0, int w, int h, int rad, int r, int g, int b) {
-    for (int y = y0; y < y0+h; y++) for (int x = x0; x < x0+w; x++) {
-        int dx = x<x0+rad ? x0+rad-x : (x>=x0+w-rad ? x-(x0+w-1-rad) : 0);
-        int dy = y<y0+rad ? y0+rad-y : (y>=y0+h-rad ? y-(y0+h-1-rad) : 0);
-        if (dx*dx+dy*dy <= rad*rad) px(x, y, r, g, b);
-    }
-}
-static void sombra(int x0, int y0, int w, int h, int rad, float forca) {
-    for (int y = y0-rad; y < y0+h+rad; y++) for (int x = x0-rad; x < x0+w+rad; x++) {
-        int dx = x<x0+rad ? x0+rad-x : (x>=x0+w-rad ? x-(x0+w-1-rad) : 0);
-        int dy = y<y0+rad ? y0+rad-y : (y>=y0+h-rad ? y-(y0+h-1-rad) : 0);
-        float a = (1.0f - sqrt((float)(dx*dx+dy*dy)) / rad) * forca;
-        if (a > 0) mistura(x, y, 20, 18, 15, a);
-    }
-}
-static void circulo_preenche(int cx, int cy, int r, int cr, int cg, int cb) {
-    for (int y = cy-r; y <= cy+r; y++) for (int x = cx-r; x <= cx+r; x++)
-        if ((x-cx)*(x-cx)+(y-cy)*(y-cy) <= r*r) px(x, y, cr, cg, cb);
-}
-static void linha(int x0, int y0, int x1, int y1, int r, int g, int b) {
-    int dx = abs(x1-x0), dy = abs(y1-y0), n = dx > dy ? dx : dy;
-    for (int i = 0; i <= n; i++)
-        px(x0+(x1-x0)*i/(n?n:1), y0+(y1-y0)*i/(n?n:1), r, g, b);
-}
-static void dot_grid(int passo, int r, int g, int b, float a) {
-    for (int y = passo; y < CH; y += passo)
-        for (int x = passo; x < CW; x += passo) mistura(x, y, r, g, b, a);
-}
-static float ease(float t) { return t < .5f ? 2*t*t : 1 - (-2*t+2)*(-2*t+2)/2; }
-static float clamp01(float t) { return t < 0 ? 0 : (t > 1 ? 1 : t); }
+```bat
+@echo off
+cd /d "%~dp0"
+set COMPILER_PATH=
+set LIBRARY_PATH=
+C:\dmtc\mingw64\bin\gcc.exe -std=c11 -O2 -Wall -Wextra -Wpedantic gera.c -o gera.exe -lm -lgdi32
+if errorlevel 1 (echo FALHOU) else (echo COMPILADO)
 ```
 
-### Texto (Windows — GDI, fonte do sistema, com anti-aliase de verdade)
+No Linux/macOS: `gcc -std=c11 -O2 -Wall -Wextra gera.c -o gera -lm`, sem `-lgdi32`.
+Se `delta` não estiver no PATH, use o caminho completo do executável.
+
+## Regras técnicas (não negocie)
+
+- **Dimensões:** largura múltipla de 4 e altura par. Pelo código de `video_render`, o
+  padding das linhas BMP não é tratado; por isso a largura deve ser múltipla de 4. Os
+  formatos deste guia (1280×720, 1920×1080, 1080×1920) atendem. Larguras fora disso
+  não foram testadas.
+- **Nomes:** `%04d.bmp` começando em `0000`, sem buracos. A ordem vem do nome.
+- **BMP:** 24 bpp, de baixo para cima, em BGR. O modelo já faz isso.
+- **Supersampling 2×:** desenhe em 2× e reduza com média. Formas finas e texto precisam disso.
+- **Motion blur:** `SUB = 4` subquadros com obturador de `0.5`. Mais subquadros dão blur
+  mais suave e custam mais tempo.
+- **Precisão:** acumule em `float`. Converta para 8 bits só no fim.
+- **Tempo:** toda animação usa `t` em segundos, nunca o índice do quadro direto.
+- **Disco:** um quadro 1280×720 tem cerca de 2,7 MB. Oito segundos a 30 fps geram cerca
+  de 650 MB de BMP temporário.
+
+## Linguagem de direção
+
+Cada escolha abaixo tem uma razão. Use a razão para decidir quando aplicar.
+
+1. **Escala de plano.** Alterne aberto, médio e detalhe a cada 2 a 4 s. O aberto dá
+   contexto; o detalhe dá ênfase.
+2. **Curvas de entrada e saída.** Entrada com ease-out (desacelera ao chegar); saída
+   com ease-in suave. Movimento linear parece mecânico.
+3. **Câmera 2.5D.** Cada camada tem profundidade `prof` (1 = mais perto). O deslocamento
+   da câmera é `cam * prof`, e a diferença entre camadas cria paralaxe. Para dolly, some
+   uma escala de 1.00 a 1.04 no conjunto. Como referência prática, mantenha o movimento
+   abaixo de cerca de 150 px/s em 1280×720.
+4. **Janela exclusiva por cena.** Uma cena por vez. O fade de saída termina antes da
+   entrada da próxima, salvo uma transição planejada de 0,3 a 0,6 s.
+5. **Tempo de leitura.** Texto parado por pelo menos 2 s a cada 5 a 7 palavras. Uma
+   ideia por cena.
+6. **Transições com motivo.**
+   - Corte seco: impacto ou mudança de assunto.
+   - Fade: passagem de tempo.
+   - Match cut: forma que muda de lugar e tamanho entre duas cenas (mesma posição e
+     escala no fim da A e no início da B).
+   - Anel ou onda: energia ou revelação.
+7. **Cor.** Paleta de 2 a 3 cores e um neutro. Acento em menos de 10% da área. Use a grade
+   de cor abaixo, sem exagero.
+8. **Enquadramento.** Letterbox 2,39:1 em 1280×720 deixa barras de cerca de 92 px em
+   cima e embaixo. Margem segura de 6%: cerca de 77 px na horizontal e 43 px na vertical.
+9. **Textura.** Grão de 0,02 e vinheta entre 0,2 e 0,35. Acima disso vira ruído.
+10. **Quadro parado?** Ajuste a curva de ease ou o tempo de pausa, não o tamanho do elemento.
+
+### Presets de partida
+
+| Preset | Fundo | Ritmo | Textura |
+|---|---|---|---|
+| Explicativo | claro (creme) | 2 a 3 s por cena, tipo grande | sem grão, vinheta leve |
+| Dark motion | quase preto | glow e rastros, 3 a 5 s por cena | vinheta 0,3 e grão 0,02 |
+| Título cinematográfico | escuro com letterbox | dolly lento, 5 a 8 s | grade de cor e grão |
+
+## Modelo base (compilado e renderizado)
+
+Este arquivo foi compilado com MinGW-w64 (sem avisos com `-Wall -Wextra -Wpedantic`),
+gerou 240 quadros em cerca de 43 s, e o encoder produziu H.264 1280×720 a 30 fps com
+8,000 s. Troque apenas as cenas dentro de `cena()`.
 
 ```c
-/* DIB/DC criados UMA_VEZ (static) — criar a cada chamada esgota o GDI e o
-   texto some do nada no meio do vídeo. A máscara = média dos 3 canais
-   (ANTIALIASED_QUALITY; ClearType é subpixel e quebra a máscara). */
-static HDC mem; static void *bits; static HBITMAP bmp; static HDC wdc;
-static int cw_usado;
-static void texto(const char *s, int x, int y, int alt, int peso,
-                  int r, int g, int b, float alpha) {
-    if (cw_usado != CW) {
-        wdc = GetDC(NULL); mem = CreateCompatibleDC(wdc);
-        BITMAPINFO bi; memset(&bi, 0, sizeof bi);
-        bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bi.bmiHeader.biWidth = CW; bi.bmiHeader.biHeight = -CH;
-        bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32;
-        bmp = CreateDIBSection(wdc, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
-        SelectObject(mem, bmp); cw_usado = CW;
-    }
-    if (!mem || !bits) return;
-    for (int i = 0; i < CW*CH; i++)
-        ((unsigned char*)bits)[i*4] = 0, ((unsigned char*)bits)[i*4+1] = 0,
-        ((unsigned char*)bits)[i*4+2] = 0, ((unsigned char*)bits)[i*4+3] = 255;
-    HFONT f = CreateFontW(alt, 0,0,0, peso, FALSE,FALSE,FALSE, DEFAULT_CHARSET,
-                          OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-                          DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HGDIOBJ vo = SelectObject(mem, f);
-    SetBkMode(mem, TRANSPARENT); SetTextColor(mem, RGB(255,255,255));
-    int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
-    WCHAR *w = malloc((size_t)n*2);
-    MultiByteToWideChar(CP_UTF8, 0, s, -1, w, n);
-    TextOutW(mem, x, y, w, n-1);
-    free(w);
-    for (int yy = 0; yy < CH; yy++) for (int xx = 0; xx < CW; xx++) {
-        unsigned char *m = (unsigned char*)bits + ((size_t)yy*CW+xx)*4;
-        float k = (m[0]+m[1]+m[2]) / (3*255.0f);
-        if (k > 0.01f) mistura(xx, yy, r, g, b, k * alpha);
-    }
-    SelectObject(mem, vo); DeleteObject(f);
-}
-```
-/* TEXTO CENTRALIZADO — use SEMPRE ele (a maioria dos defeitos e texto
-   desalinhado: nunca calcule x na mao). Devolve o y usado. */
-static int texto_central(const char *s, int y, int alt, int peso,
-                         int r, int g, int b, float alpha) {
-    SIZE ss; memset(&ss, 0, sizeof ss);
-    HFONT f = CreateFontW(alt, 0,0,0, peso, FALSE,FALSE,FALSE, DEFAULT_CHARSET,
-                          OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-                          DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HDC dc = GetDC(NULL); HGDIOBJ vo = SelectObject(dc, f);
-    int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
-    WCHAR *w = malloc((size_t)n*2);
-    MultiByteToWideChar(CP_UTF8, 0, s, -1, w, n);
-    GetTextExtentPoint32W(dc, w, n-1, &ss);
-    int x = (CW - ss.cx) / 2;
-    SelectObject(dc, vo); DeleteObject(f); ReleaseDC(NULL, dc);
-    texto(s, x, y, alt, peso, r, g, b, alpha);
-    return y + alt + alt / 3;
+/* gera.c - cena de exemplo para a skill deltamotion: C puro, sem navegador.
+ * Compilar: gcc -std=c11 -O2 -Wall -Wextra gera.c -o gera -lm
+ * Rodar:    mkdir frames && ./gera
+ * MP4:      delta --render-video frames video.mp4 30
+ *
+ * Tecnicas: supersampling 2x, motion blur por obturador (SUB subquadros),
+ * camera 2.5D com paralaxe, cenas com janela exclusiva e fade, vinheta e
+ * grao deterministico. Saida: frames/0000.bmp ... (24 bpp, topo-esq -> BMP).
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+#define W 1280            /* multiplo de 4: linha BMP sem padding */
+#define H 720             /* par: o encoder H.264 exige dimensao par */
+#define SS 2              /* supersampling: desenha em 2x e reduz (anti-aliasing) */
+#define FPS 30
+#define DUR 8.0f          /* duracao em segundos */
+#define NFRAMES ((int)(DUR * FPS))
+#define SUB 4             /* subquadros por quadro = motion blur */
+#define SHUTTER 0.5f      /* obturador aberto em metade do intervalo do quadro */
+
+typedef struct { float r, g, b; } Cor;   /* 0..1, no espaco de exibicao */
+
+static Cor *buf;                          /* W*SS x H*SS: a cena do subquadro */
+static int BW, BH;
+
+static float clampf(float x, float a, float b) { return x < a ? a : (x > b ? b : x); }
+static float smooth01(float t) { t = clampf(t, 0.0f, 1.0f); return t * t * (3.0f - 2.0f * t); }
+static float ease_out3(float t) { t = clampf(t, 0.0f, 1.0f); float u = 1.0f - t; return 1.0f - u * u * u; }
+
+/* janela EXCLUSIVA da cena: 0 fora de [a,b]; sobe em fi s, desce em fo s */
+static float janela(float t, float a, float b, float fi, float fo) {
+    if (t < a || t > b) return 0.0f;
+    float up = fi > 0.0f ? smooth01((t - a) / fi) : 1.0f;
+    float dn = fo > 0.0f ? smooth01((b - t) / fo) : 1.0f;
+    return up < dn ? up : dn;
 }
 
-Fontes boas instaladas no Windows: **Segoe UI** (Black=900 p/ headlines, Bold=700,
-Regular), Consolas p/ código. Números do peso: 400 normal, 700 bold, 900 black.
+/* mistura um pixel do buffer de supersampling (coordenadas em subpixels) */
+static void mistura(int x, int y, Cor c, float a) {
+    if (a <= 0.0f || x < 0 || y < 0 || x >= BW || y >= BH) return;
+    Cor *p = &buf[(size_t)y * BW + (size_t)x];
+    p->r += (c.r - p->r) * a;
+    p->g += (c.g - p->g) * a;
+    p->b += (c.b - p->b) * a;
+}
 
-### Estilo B: HDR + rastros + tonemap (adicione ao canvas)
+/* coordenadas aqui sao do quadro final (1 unidade = 1 pixel de saida) */
+static void retangulo(float x0, float y0, float x1, float y1, Cor c, float a) {
+    int sx0 = (int)floorf(x0 * SS), sy0 = (int)floorf(y0 * SS);
+    int sx1 = (int)ceilf(x1 * SS),  sy1 = (int)ceilf(y1 * SS);
+    for (int y = sy0; y < sy1; y++)
+        for (int x = sx0; x < sx1; x++) mistura(x, y, c, a);
+}
 
-```c
-static float *hdr; static int RW, RH;   /* render 2x (supersample) */
-static void canvas_init_b(int w, int h) {
-    CW = w; CH = h; RW = w*2; RH = h*2;
-    hdr = calloc((size_t)RW*RH*3, sizeof(float));
-    img = malloc((size_t)CW*CH*3);
-}
-static void px_add(float x, float y, float r, float g, float b, float f) {
-    int xi = (int)x, yi = (int)y;   /* jah em espaco de render (x2 dentro) */
-    if (xi < 0 || yi < 0 || xi >= RW || yi >= RH) return;
-    float *p = hdr + ((size_t)yi*RW + xi)*3;
-    p[0] += r*f; p[1] += g*f; p[2] += b*f;
-}
-static void glow(float x, float y, float r, float cr, float cg, float cb) {
-    x *= 2; y *= 2; r *= 2;
-    float r2 = r*r;
-    int x0 = (int)(x-r*4), x1 = (int)(x+r*4), y0 = (int)(y-r*4), y1 = (int)(y+r*4);
-    if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0;
-    if (x1 > RW) x1 = RW; if (y1 > RH) y1 = RH;
-    for (int yy = y0; yy < y1; yy++) for (int xx = x0; xx < x1; xx++) {
-        float d2 = (xx-x)*(xx-x) + (yy-y)*(yy-y);
-        float f = 1.0f - d2/(r2*16);
-        if (f <= 0) continue;
-        float nuc = 1.0f - d2/r2;
-        px_add(xx, yy, cr, cg, cb, (f*f)*(nuc > 0 ? 1.0f + nuc*2.0f : 0.0f));
-    }
-}
-static void rastro(float decai) { for (size_t k = 0; k < (size_t)RW*RH*3; k++) hdr[k] *= decai; }
-static float tonemap(float x) { return x*(2.51f*x+0.03f)/(x*(2.43f*x+0.59f)+0.14f); }
-static void revela(float expo, const char *dir, int n) {
-    /* media 2x2 do render -> canvas com tonemap + vinheta -> BMP */
-    for (int y = 0; y < CH; y++) for (int x = 0; x < CW; x++) {
-        float r = 0, g = 0, b = 0;
-        for (int sy = 0; sy < 2; sy++) for (int sx = 0; sx < 2; sx++) {
-            float *p = hdr + ((size_t)(y*2+sy)*RW + (x*2+sx))*3;
-            r += tonemap(p[0]*expo); g += tonemap(p[1]*expo); b += tonemap(p[2]*expo);
+/* brilho radial suave (glow): alfa cai com o quadrado da distancia */
+static void brilho(float cx, float cy, float raio, Cor c, float a) {
+    float R = raio * SS, X = cx * SS, Y = cy * SS;
+    int x0 = (int)floorf(X - R), x1 = (int)ceilf(X + R);
+    int y0 = (int)floorf(Y - R), y1 = (int)ceilf(Y + R);
+    for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; x++) {
+            float dx = (float)x + 0.5f - X, dy = (float)y + 0.5f - Y;
+            float q = 1.0f - (dx * dx + dy * dy) / (R * R);
+            if (q > 0.0f) mistura(x, y, c, a * q * q);
         }
-        unsigned char *o = img + ((size_t)y*CW+x)*3;
-        o[0] = (unsigned char)(b/4*255); o[1] = (unsigned char)(g/4*255);
-        o[2] = (unsigned char)(r/4*255);
-        float dx = (x-CW/2.0f)/(CW/2.0f), dy = (y-CH/2.0f)/(CH/2.0f);
-        float vig = 1.0f - 0.35f*(dx*dx+dy*dy);
-        o[0] *= vig; o[1] *= vig; o[2] *= vig;
-    }
-    /* grava o BMP igual ao frame_gravar acima (bottom-up, BGR) */
-    extern void frame_gravar(const char *dir, int n);
-    frame_gravar(dir, n);
 }
-```
 
-### Gravação do frame (BMP bottom-up, BGR)
+/* anel de espessura fixa, usado para ondas de impacto */
+static void anel(float cx, float cy, float r, float espessura, Cor c, float a) {
+    float R = r * SS, E = espessura * SS, X = cx * SS, Y = cy * SS;
+    float ro = R + E * 0.5f, ri = R - E * 0.5f;
+    if (ri < 0.0f) ri = 0.0f;
+    int lim = (int)ceilf(ro) + 1;
+    for (int y = (int)Y - lim; y <= (int)Y + lim; y++)
+        for (int x = (int)X - lim; x <= (int)X + lim; x++) {
+            float dx = (float)x + 0.5f - X, dy = (float)y + 0.5f - Y;
+            float d = sqrtf(dx * dx + dy * dy);
+            if (d >= ri && d <= ro) mistura(x, y, c, a);
+        }
+}
 
-```c
-static void frame_gravar(const char *dir, int n) {
-    char path[300]; snprintf(path, sizeof path, "%s/%04d.bmp", dir, n);
+/* cena no tempo t (segundos) - aqui fica a direcao: entradas, paralaxe, cortes */
+static void cena(float t) {
+    /* fundo: gradiente vertical escuro (paleta: azul-noite + ambar) */
+    for (int y = 0; y < BH; y++) {
+        float k = (float)y / (float)BH;
+        Cor c = { 0.035f + 0.05f * k, 0.040f + 0.03f * k, 0.085f + 0.05f * k };
+        for (int x = 0; x < BW; x++) buf[(size_t)y * BW + (size_t)x] = c;
+    }
+
+    /* camera 2.5D: dolly lateral com ease in-out; cada camada anda conforme
+       a sua profundidade (prof 1 = perto, anda mais; prof 0.2 = longe) */
+    float cam = smooth01(t / DUR) * 120.0f;
+
+    /* CENA 1 (0.0-3.0 s): orbes em 3 profundidades, entram e saem com fade */
+    float a1 = janela(t, 0.0f, 3.0f, 0.5f, 0.5f);
+    if (a1 > 0.0f) {
+        const float prof[3] = { 0.25f, 0.6f, 1.0f };
+        Cor cor[3] = { { 0.20f, 0.35f, 0.75f }, { 0.35f, 0.55f, 0.95f }, { 1.0f, 0.62f, 0.25f } };
+        for (int k = 0; k < 3; k++) {
+            float x = 640.0f + 220.0f * sinf(t * 0.9f + (float)k * 1.3f) - cam * prof[k];
+            float y = 360.0f + 60.0f * (float)(k - 1);
+            brilho(x, y, 70.0f + 40.0f * prof[k], cor[k], 0.9f * a1);
+        }
+    }
+
+    /* CENA 2 (2.8-5.6 s): cartoes deslizam de baixo com ease-out escalonado */
+    float a2 = janela(t, 2.8f, 5.6f, 0.4f, 0.4f);
+    if (a2 > 0.0f) {
+        for (int k = 0; k < 3; k++) {
+            float p = ease_out3((t - (2.8f + 0.18f * (float)k)) / 0.7f);
+            float x0 = 180.0f + 340.0f * (float)k;
+            float y0 = 520.0f - 90.0f * p + 60.0f * (1.0f - p);
+            Cor sombra = { 0.0f, 0.0f, 0.0f };
+            retangulo(x0 + 10.0f, y0 + 16.0f, x0 + 290.0f + 10.0f, y0 + 200.0f + 16.0f, sombra, 0.35f * a2 * p);
+            Cor cartao = { 0.96f, 0.93f, 0.86f };
+            retangulo(x0, y0, x0 + 290.0f, y0 + 200.0f, cartao, a2 * p);
+            Cor acento = { 0.90f, 0.42f, 0.18f };
+            retangulo(x0 + 24.0f, y0 + 26.0f, x0 + 24.0f + 60.0f, y0 + 34.0f, acento, a2 * p);
+        }
+    }
+
+    /* CENA 3 (5.4-8.0 s): onda de impacto que se expande e some */
+    float a3 = janela(t, 5.4f, 8.0f, 0.3f, 0.6f);
+    if (a3 > 0.0f) {
+        float p = ease_out3((t - 5.4f) / 1.8f);
+        Cor ambar = { 1.0f, 0.62f, 0.25f };
+        anel(640.0f, 360.0f, 40.0f + 380.0f * p, 6.0f + 10.0f * (1.0f - p), ambar, a3 * (1.0f - p));
+        brilho(640.0f, 360.0f, 120.0f, ambar, 0.5f * a3 * (1.0f - p));
+    }
+}
+
+/* reducao 2x2 -> saida, acumulando com peso (media dos subquadros) */
+static void reduz_acumula(float *acc, float peso) {
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            float r = 0, g = 0, b = 0;
+            for (int sy = 0; sy < SS; sy++)
+                for (int sx = 0; sx < SS; sx++) {
+                    const Cor *p = &buf[(size_t)(y * SS + sy) * BW + (size_t)(x * SS + sx)];
+                    r += p->r; g += p->g; b += p->b;
+                }
+            float n = (float)(SS * SS);
+            float *o = acc + ((size_t)y * W + (size_t)x) * 3;
+            o[0] += r / n * peso;
+            o[1] += g / n * peso;
+            o[2] += b / n * peso;
+        }
+}
+
+/* hash deterministico: o grao e' igual em toda execucao */
+static float ruido(int x, int y, int f) {
+    unsigned int h = (unsigned int)x * 374761393u + (unsigned int)y * 668265263u + (unsigned int)f * 2246822519u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    return (float)((h ^ (h >> 16)) & 0xFFFFu) / 65535.0f - 0.5f;
+}
+
+/* vinheta + grao + 8 bits. O grao e' curto (0.02) para nao virar chuvisco */
+static void finaliza(const float *acc, unsigned char *rgb, int f) {
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            float dx = ((float)x - W * 0.5f) / (W * 0.5f);
+            float dy = ((float)y - H * 0.5f) / (H * 0.5f);
+            float vig = 1.0f - 0.30f * (dx * dx + dy * dy);
+            float g = ruido(x, y, f) * 0.02f;
+            const float *s = acc + ((size_t)y * W + (size_t)x) * 3;
+            unsigned char *o = rgb + ((size_t)y * W + (size_t)x) * 3;
+            for (int c = 0; c < 3; c++)
+                o[c] = (unsigned char)(clampf((s[c] * vig + g), 0.0f, 1.0f) * 255.0f + 0.5f);
+        }
+}
+
+static void le16(unsigned char *p, unsigned v) { p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8); }
+static void le32(unsigned char *p, unsigned v) {
+    p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8);
+    p[2] = (unsigned char)(v >> 16); p[3] = (unsigned char)(v >> 24);
+}
+
+/* BMP 24 bpp, bottom-up, BGR; largura*3 e' multiplo de 4 (sem padding) */
+static int bmp_salvar(const char *path, const unsigned char *rgb) {
     FILE *f = fopen(path, "wb");
-    int lin = CW * 3;
-    unsigned char *inv = malloc((size_t)lin * CH);
-    for (int y = 0; y < CH; y++)
-        for (int x = 0; x < CW; x++) {           /* RGB -> BGR + flip */
-            inv[(size_t)y*lin + x*3]     = img[(size_t)(CH-1-y)*CW*3 + x*3+2];
-            inv[(size_t)y*lin + x*3 + 1] = img[(size_t)(CH-1-y)*CW*3 + x*3+1];
-            inv[(size_t)y*lin + x*3 + 2] = img[(size_t)(CH-1-y)*CW*3 + x*3];
+    if (!f) return 0;
+    unsigned int linha = (unsigned int)((W * 3 + 3) & ~3);
+    unsigned int dados = linha * (unsigned int)H;
+    unsigned char cab[54];
+    memset(cab, 0, sizeof cab);
+    cab[0] = 'B'; cab[1] = 'M';
+    le32(cab + 2, 54u + dados);
+    le32(cab + 10, 54u);
+    le32(cab + 14, 40u);
+    le32(cab + 18, (unsigned)W);
+    le32(cab + 22, (unsigned)H);
+    le16(cab + 26, 1u);
+    le16(cab + 28, 24u);
+    le32(cab + 34, dados);
+    int ok = fwrite(cab, 1, sizeof cab, f) == sizeof cab;
+    unsigned char *lin = calloc(linha, 1);
+    if (!lin) { fclose(f); return 0; }
+    for (int y = H - 1; y >= 0 && ok; y--) {
+        const unsigned char *src = rgb + (size_t)y * W * 3;
+        for (int x = 0; x < W; x++) {
+            lin[x * 3 + 0] = src[x * 3 + 2];
+            lin[x * 3 + 1] = src[x * 3 + 1];
+            lin[x * 3 + 2] = src[x * 3 + 0];
         }
-    unsigned char cab[54] = {'B','M'};
-    int sz = 54 + lin*CH; unsigned zero = 0;
-    memcpy(cab+2, &sz, 4); memcpy(cab+10, &(unsigned){54}, 4);
-    memcpy(cab+14, &(unsigned){40}, 4); memcpy(cab+18, &CW, 4); memcpy(cab+22, &CH, 4);
-    unsigned short um = 1; memcpy(cab+26, &um, 2);
-    memcpy(cab+28, &(unsigned short){24}, 2); memcpy(cab+34, &sz, 4);
-    fwrite(cab, 1, 54, f); fwrite(inv, 1, (size_t)lin*CH, f);
-    fclose(f); free(inv);
-}
-```
-
-## A REGRA DE OURO: cenas EXCLUSIVAS (janela de alpha)
-
-O defeito nº 1 do video ruim: cenas EMPILHADAS (o terminal sobre os cards,
-a headline atras do logo). Cada cena tem uma JANELA de tempo e o alpha dela
-e ZERO fora da janela — a anterior sai (fade) ANTES da proxima entrar:
-
-```c
-/* alpha da cena: sobe na entrada, desce na saida, ZERO fora */
-float a1 = ease(clamp01(t*6 / 0.4f)) * (1 - ease(clamp01((t*6 - 1.9f) / 0.3f)));
-if (a1 > 0.01f) { /* ...desenha tudo da cena 1 multiplicado por a1... */ }
-if (t >= 0.366f && t < 0.633f) { /* cena 2 so' na janela dela */ }
-if (t >= 0.633f) { /* cena 3 */ }
-```
-Teste: extraia frames a 1/3 e 2/3 do video — cada frame tem UMA cena, nunca duas.
-
-## O TEMPLATE — comece SEMPRE por ele (so' troque as palavras)
-
-NÃO invente layout: os defeitos recorrentes são texto desalinhado e ritmo
-morrendo. O template abaixo ja' resolve os dois (tudo CENTRALIZADO, 6s,
-3 cenas de ~1.8s). Troque APENAS: as palavras do kicker/headline/labels e
-a cor de acento. NÃO mexa no ritmo, nas dimensões nem no layout.
-
-```c
-static int acento_r = 226, acento_g = 60, acento_b = 40;   /* a cor do brief */
-
-/* CENA: entra texto centrado + saida. Retorna o y apos a ultima linha. */
-static void cena_texto(const char *kicker, const char *linha1, const char *linha2,
-                       const char *destaque, int destaque_linha, float t_cena) {
-    float e = ease(clamp01(t_cena * 2.2f));            /* entra em <=0.45s */
-    if (e <= 0) return;
-    int y = texto_central(kicker, 150, 24, 600, 90, 85, 80, e * 0.75f) + 40;
-    y = texto_central(linha1, y + 20, 110, 800, 25, 22, 20, e);
-    if (linha2) {
-        int y2 = texto_central(linha2, y + 30, 110, 800, 25, 22, 20, e);
-        /* highlight crescendo atras da palavra-chave (word = medida na mao:
-           se for usar, meca com GetTextExtentPoint32W no espaco antes dela) */
-        if (destaque) {
-            float hl = ease(clamp01((t_cena - 0.45f) * 3));
-            if (hl > 0) {
-                /* ret de acento crescente ATRAS do destaque: derive o x
-                   centrando o destaque isolado (GetTextExtentPoint32W) */
-                (void)destaque_linha;
-            }
-        }
+        ok = fwrite(lin, 1, linha, f) == linha;
     }
+    free(lin);
+    return fclose(f) == 0 && ok;
 }
 
 int main(void) {
-    canvas_init(1280, 720);
-    system("mkdir frames 2>NUL 1>NUL");
-    int TOTAL = 180;                                   /* 6s a 30fps - NA' O MEXA */
-    for (int f = 0; f < TOTAL; f++) {
-        float t = (float)f / TOTAL;
-        fundo(250, 246, 239);
-        dot_grid(28, 30, 28, 24, 0.10f);
-        /* 3 cenas de 180/3 = 60 frames = 2s cada:
-           intensidade = sino sobre a cena (entra.esigh.sai dentro do slot) */
-        float sino1 = sin(clamp01((t - 0.02f) / 0.26f) * 3.14159f);
-        if (sino1 > 0.02f) cena_texto("DELTA MOTION", "Um video feito", "100 por cento com codigo", NULL, 0, sino1);
-        float sino2 = sin(clamp01((t - 0.34f) / 0.26f) * 3.14159f);
-        if (sino2 > 0.02f) cena_texto("CENA 2", "Sua segunda linha de texto aqui", NULL, 2615013, 0, sino2);
-        float sino3 = sin(clamp01((t - 0.66f) / 0.28f) * 3.14159f);
-        if (sino3 > 0.02f) cena_texto("CENA 3", "Encerre com a mensagem clara", NULL, 2615013, 0, sino3);
-        revela(0.01f, "frames", f);                    /* estilo B usa hdr+rastro */
-        frame_gravar("frames", f);
+    BW = W * SS; BH = H * SS;
+    buf = malloc(sizeof(Cor) * (size_t)BW * (size_t)BH);
+    float *acc = malloc(sizeof(float) * (size_t)W * H * 3);
+    unsigned char *rgb = malloc((size_t)W * H * 3);
+    if (!buf || !acc || !rgb) { fprintf(stderr, "sem memoria\n"); return 1; }
+
+    char path[256];
+    for (int f = 0; f < NFRAMES; f++) {
+        memset(acc, 0, sizeof(float) * (size_t)W * H * 3);
+        for (int s = 0; s < SUB; s++) {
+            /* instante do subquadro dentro do obturador aberto */
+            float t = ((float)f + SHUTTER * ((float)s + 0.5f) / (float)SUB) / (float)FPS;
+            cena(t);
+            reduz_acumula(acc, 1.0f / (float)SUB);
+        }
+        finaliza(acc, rgb, f);
+        snprintf(path, sizeof path, "frames/%04d.bmp", f);
+        if (!bmp_salvar(path, rgb)) { fprintf(stderr, "falha em %s\n", path); return 1; }
     }
+    printf("%d quadros em frames/\n", NFRAMES);
+    free(buf); free(acc); free(rgb);
     return 0;
 }
 ```
 
-**RIGOR do ritmo e layout (nao negocie):**
-- TOTAL = 180 frames (6s); 3 cenas no maximo; trocas em 1/3 e 2/3;
-- Toda entrada com `ease(clamp01())` em <= 0.45s; saida suave (sino);
-- Tudo CENTRALIZADO com `texto_central`; kicker no y=150; headline no y~230;
-- Uma frase por linha no maximo 4-6 palavras; headline 110px weight 800;
-- reveala(0.01f) por frame; o creme/grid/BMP: iguais ao template.
+## Acréscimos de edição (testados)
 
-## Receitas dos padrões estudados
+Os blocos abaixo foram compilados e renderizados. Para usar:
 
-- **Typewriter**: `texto(copia_str_ate_idx, ...)` crescentando a substring
-  por frame; o cursor pisca com `(frame / 15) % 2`;
-- **Highlight atrás da palavra**: desenhe o `ret` colorido crescendo pela
-  esquerda (`larg = largura_palavra * ease(clamp01((t-t0)*6 / larg))`) e
-  RE-depore o texto por cima com alpha 1 naquela palavra;
-- **Kicker small-caps**: draw letra a letra com avanço extra (letter-spacing
-  manual), fonte pequena peso 600, cor esmaecida;
-- **Ícones flat**: NÃO desenhe nada 3D — primitivas: play = `circulo_preenche`
-  preto + triângulo branco (linhas); envelope = `ret` colorido + 2 diagonais
-  para o aba da aba; celular = rect_arred escuro + rects claros dentro;
-- **Chevrons vivos**: 3-4 setas repetidas (linhas em V) com alpha em
-  progressão (0.9, 0.6, 0.3) e o conjunto oscilando com sin(t*ritmo);
-- **Fundo borrado (profundidade)**: desenhe o conteúdo grande no fundo,
-  depois o card-herói no meio — falso-blur = desenhe no fundo o MESMO título
-  bem expandido e esmaecido (sem filtro de blur real);
-- **Card + sombra**: `sombra()` ANTES do `rect_arred` branco (double pass).
+- **Grade e letterbox:** cole as duas funções antes de `finaliza`. Dentro de `finaliza`,
+  troque a linha de saída por `o[c] = (unsigned char)(grade(s[c] * vig + g, 0.02f, 1.08f, 0.98f) * 255.0f + 0.5f);`
+  e chame `letterbox(rgb, 2.39f);` no fim da função.
+- **Texto (Windows):** cole o bloco `#ifdef _WIN32`. Inclua `<windows.h>` no topo.
+  Em `main`, chame `texto_init()` logo após `BW = W * SS; BH = H * SS;` e `texto_fim()`
+  antes de liberar memória. Compile com `-lgdi32`. Dentro de `cena()`, chame
+  `texto("DELTA MOTION", 380.0f, 120.0f, 56, 800, ct, 0.9f);` com `Cor ct = { 1.0f, 1.0f, 1.0f };`
+  declarada na própria `cena()`. Não use o nome `cor`: o modelo base já tem um
+  array local `Cor cor[3]` e a chamada não compila. **Chame o texto no fim de `cena()`** —
+  o fundo do modelo pinta o buffer inteiro e apaga texto desenhado antes dele.
 
-## Regras de qualidade
+```c
+/* grade de cor: lift (sombras), gamma (meios), gain (altas), por canal */
+static float grade(float v, float lift, float gamma, float gain) {
+    v = clampf(v, 0.0f, 1.0f);
+    return clampf(powf(v, 1.0f / gamma) * gain + lift, 0.0f, 1.0f);
+}
 
-- **Clamp01 SEMPRE no argumento do ease** (`ease(clamp01(t*3))`) — o ease é
-  parábola: com t > 1 ele VOLTA e a animação entra e sai sozinha (o bug nº 1);
-- **Cenas não se sobreponham**: a cena sai (fade) antes da próxima entrar;
-- **Uma ideia por vídeo**; paleta de 2-3 cores exatas no brief;
-- **30fps x 6-20s** — o gerador tem que rodar em segundos;
-- **Textos: máximo 2 níveis** (kicker pequeno + headline grande);
-- **Revise com olhos**: extraia frames de volta e OLHE antes de entregar.
+/* letterbox cinematografico: barras pretas para a proporcao (ex.: 2.39) */
+static void letterbox(unsigned char *rgb, float prop) {
+    int alt = (int)((float)W / prop + 0.5f);
+    int barra = (H - alt) / 2;
+    if (barra <= 0) return;
+    memset(rgb, 0, (size_t)barra * W * 3);
+    memset(rgb + (size_t)(H - barra) * W * 3, 0, (size_t)barra * W * 3);
+}
+```
 
-## Antipadrões
+```c
+#ifdef _WIN32
+static HDC g_dc = NULL;
+static HBITMAP g_dib = NULL;
+static unsigned char *g_px = NULL;   /* BW x BH x 4, topo-esq */
 
-- Começar a codificar sem o brief cena-por-cena;
-- Elementos que teletransportam (sem ease) ou easing sem clamp01;
-- Cenas sobrepostas; emoji ints como ícones; texto ilegível;
-- Criar DC/DIB/fontes dentro de função por frame (esgota o GDI e o texto
-  some no meio do vídeo);
-- Entregar sem revisar os frames de volta.
+/* cria DC e DIB UMA vez: criar a cada chamada esgota o GDI e o texto some */
+static int texto_init(void) {
+    HDC tela = GetDC(NULL);
+    g_dc = CreateCompatibleDC(tela);
+    ReleaseDC(NULL, tela);
+    if (!g_dc) return 0;
+    BITMAPINFO bi;
+    memset(&bi, 0, sizeof bi);
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = BW;
+    bi.bmiHeader.biHeight = -BH;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    void *bits = NULL;
+    g_dib = CreateDIBSection(g_dc, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    if (!g_dib) return 0;
+    g_px = (unsigned char *)bits;
+    SelectObject(g_dc, g_dib);
+    SetBkMode(g_dc, TRANSPARENT);
+    SetTextColor(g_dc, RGB(255, 255, 255));
+    return 1;
+}
+
+static void texto_fim(void) {
+    if (g_dib) DeleteObject(g_dib);
+    if (g_dc) DeleteDC(g_dc);
+}
+
+/* texto UTF-8 com canto superior esquerdo em (x,y) do quadro final; altura em px */
+static void texto(const char *s, float x, float y, int altura, int peso, Cor c, float alpha) {
+    if (!g_px || alpha <= 0.0f) return;
+    int n = MultiByteToWideChar(CP_UTF8, 0, s, -1, NULL, 0);
+    if (n <= 1) return;
+    wchar_t *w = malloc(sizeof(wchar_t) * (size_t)n);
+    if (!w) return;
+    MultiByteToWideChar(CP_UTF8, 0, s, -1, w, n);
+    HFONT fonte = CreateFontW(-altura * SS, 0, 0, 0, peso, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                              OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                              DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    HGDIOBJ velha = SelectObject(g_dc, fonte);
+    SIZE sz;
+    memset(&sz, 0, sizeof sz);
+    GetTextExtentPoint32W(g_dc, w, n - 1, &sz);
+    int x0 = (int)floorf(x * SS), y0 = (int)floorf(y * SS);
+    int lw = sz.cx + 4, lh = sz.cy + 4;
+    if (lw > BW) lw = BW;
+    if (lh > BH) lh = BH;
+    if (x0 < 0 || y0 < 0 || x0 >= BW || y0 >= BH || lw <= 0 || lh <= 0) {
+        SelectObject(g_dc, velha); DeleteObject(fonte); free(w); return;
+    }
+    /* limpa so a area usada: o DIB inteiro seria caro a cada texto */
+    for (int yy = 0; yy < lh; yy++) memset(g_px + (size_t)yy * BW * 4, 0, (size_t)lw * 4);
+    TextOutW(g_dc, 0, 0, w, n - 1);
+    for (int yy = 0; yy < lh; yy++)
+        for (int xx = 0; xx < lw; xx++) {
+            const unsigned char *p = g_px + ((size_t)yy * BW + (size_t)xx) * 4;
+            float k = ((float)p[0] + (float)p[1] + (float)p[2]) / (3.0f * 255.0f);
+            if (k > 0.01f) mistura(x0 + xx, y0 + yy, c, k * alpha);
+        }
+    SelectObject(g_dc, velha);
+    DeleteObject(fonte);
+    free(w);
+}
+#else
+/* fora do Windows nao ha GDI: o texto e' ignorado (ver a secao de texto) */
+static int texto_init(void) { return 0; }
+static void texto_fim(void) {}
+static void texto(const char *s, float x, float y, int altura, int peso, Cor c, float alpha) {
+    (void)s; (void)x; (void)y; (void)altura; (void)peso; (void)c; (void)alpha;
+}
+#endif
+```
+
+## Áudio (opcional)
+
+`--render-video` gera só vídeo. Se o brief pedir som e o `ffmpeg` existir no PATH,
+faça a mixagem depois. Teste com `ffmpeg -version` antes de prometer isso.
+
+```bash
+ffmpeg -y -i video.mp4 -i trilha.wav -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 160k -shortest final.mp4
+```
+
+Testado: com trilha de teste, o resultado ficou com H.264 + AAC e duração de 8,000 s.
+Sem FFmpeg, entregue só o vídeo e diga isso ao usuário.
+
+## Checklist final
+
+- [ ] Brief e storyboard feitos antes do código.
+- [ ] Compila com `-Wall -Wextra -Wpedantic` sem avisos.
+- [ ] Contagem de quadros = duração × fps.
+- [ ] Pelo menos 6 quadros revisados, incluindo transições.
+- [ ] Nenhuma cena sobreposta sem transição planejada.
+- [ ] Texto legível (contraste forte) e dentro das margens de 6%.
+- [ ] `ffprobe` confirma codec, dimensões, fps e duração.
+- [ ] Pasta `frames/` apagada.
+
+## Limites conhecidos
+
+- Não há 3D real nem navegador.
+- Texto é GDI, só no Windows. Fora dele, a versão atual não renderiza texto.
+- Sem áudio nativo; mixagem depende de FFmpeg externo.
+- Quadros BMP ocupam muito disco. Prefira vídeos curtos.
+- O encoder não avalia qualidade. Quem julga é a revisão dos quadros.

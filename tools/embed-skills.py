@@ -39,15 +39,13 @@ def main():
             if not linha and i == len(linhas) - 1:
                 continue
             lit = linha.replace("\\", "\\\\").replace('"', '\\"')
-            fim = "\\n\"" if i < len(linhas) - 2 else "\""
-            if i == len(linhas) - 1:
-                saida.write("      \"%s\\n\"\n" % lit)
-            else:
-                saida.write("      \"%s\\n\"\n" % lit)
+            saida.write("      \"%s\\n\"\n" % lit)
         saida.write("    },\n")
     saida.write("    { 0, 0 }\n};\n\n")
     saida.write("#endif /* DELTA_SKILLS_SEED_H */\n")
-    sys.stdout.write(saida.getvalue())
+    # bytes crus: no Windows o stdout em texto troca \n por \r\n e o arquivo
+    # gerado sairia com CRLF (ruido no git, que guarda LF)
+    sys.stdout.buffer.write(saida.getvalue().encode("utf-8"))
 
 
 if __name__ == "__main__":
