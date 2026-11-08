@@ -148,10 +148,10 @@ echo "[3b] fila enquanto o agente trabalha (replay)"
 ./bin/delta.exe --replay tests/replay-fila.txt 80 24 > /tmp/delta_fila.log 2>&1
 expect /tmp/delta_fila.log "Working..."                  "status de trabalho visivel na borda do editor"
 expect /tmp/delta_fila.log "2 na fila"                   "contador de mensagens na fila"
-expect /tmp/delta_fila.log "Ш na fila"                   "mensagem do usuario aparece no chat, marcada na fila"
+expect /tmp/delta_fila.log "(na fila)"                   "mensagem do usuario aparece no chat, marcada na fila"
 expect /tmp/delta_fila.log "leia src/util.c e resuma"    "mensagem foi enfileirada sem sumir"
 DRAIN=$(sed -n '/depois_do_drain/,$p' /tmp/delta_fila.log)
-if printf '%s' "$DRAIN" | grep -q "Ш"; then
+if printf '%s' "$DRAIN" | grep -q "(na fila)"; then
     fail "depois de drenada, a mensagem deveria sair do painel"
 else
     pass "no intervalo, a fila e entregue ao agente (sai do painel)"

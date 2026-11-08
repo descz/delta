@@ -985,7 +985,7 @@ static int draw_block(Screen *s, int y, int width, Block *b)
                                      b->text.len, st_q);
                     const char *tag = b->queued == 2 ? "(devolvida ao editor)"
                                      : b->queued == 3 ? "(n\u00e3o enviada: turno interrompido)"
-                                     : "\u0428 na fila \u00b7 o agente le no pr\u00f3ximo passo";
+                                     : "(na fila)";
                     screen_text(s, 2, y, tag, strlen(tag), st_q, width - 4);
                     y += 1;
                     y += 1;
@@ -1992,7 +1992,6 @@ static void enqueue_input(void)
     for (int i = 0; i < app.n_imgs; i++) free(app.imgs[i]);
     app.n_imgs = 0;
     str_free(&text);
-    notify("mensagem na fila (%d) \u2014 o agente le no pr\u00f3ximo passo", g_fila_n);
     render();
 }
 
