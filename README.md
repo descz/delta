@@ -8,9 +8,9 @@
 Delta executes it in your project, with the model you choose — and remembers the context next time.</p>
 
 <p>
-  <a href="https://github.com/descz/delta/releases/latest"><img alt="Download for your system" height="28" src="https://img.shields.io/badge/Download-for%20your%20system-ffffff?style=flat-square&amp;labelColor=000000"></a>
-  <a href="https://descz.github.io/delta/"><img alt="Site" height="28" src="https://img.shields.io/badge/Site-descz.github.io%2Fdelta-111111?style=flat-square&amp;labelColor=000000"></a>
-  <a href="https://github.com/descz/delta"><img alt="GitHub" height="28" src="https://img.shields.io/badge/GitHub-descz%2Fdelta-181717?style=flat-square&amp;logo=github&amp;logoColor=ffffff&amp;labelColor=000000"></a>
+  <a href="https://github.com/descz/delta/releases/latest"><img alt="Download for your system" height="28" src="assets/buttons/download.svg"></a>
+  <a href="https://descz.github.io/delta/"><img alt="Live site" height="28" src="assets/buttons/site.svg"></a>
+  <a href="https://github.com/descz/delta"><img alt="GitHub" height="28" src="assets/buttons/github.svg"></a>
 </p>
 
 <p><sub>Windows · Linux · macOS (source) — one file, no Node, no Python, no admin.</sub></p>
