@@ -1,30 +1,36 @@
-<p align="center">
-  <img src="assets/hero.svg" alt="Delta Agent" width="100%">
+<div align="center">
+
+<img src="docs/logo.png" width="76" height="76" alt="Delta Agent">
+
+<h3>A coding agent that <em>does</em> the work in your terminal</h3>
+
+<p>Ask in your own words: <strong>read code, edit files, run commands, handle git, search the web</strong>.<br>
+Delta executes it in your project, with the model you choose — and remembers the context next time.</p>
+
+<p>
+  <a href="https://github.com/descz/delta/releases/latest"><img alt="Download for your system" height="28" src="https://img.shields.io/badge/Download-for%20your%20system-ffffff?style=flat-square&amp;labelColor=000000"></a>
+  <a href="https://descz.github.io/delta/"><img alt="Site" height="28" src="https://img.shields.io/badge/Site-descz.github.io%2Fdelta-111111?style=flat-square&amp;labelColor=000000"></a>
+  <a href="https://github.com/descz/delta"><img alt="GitHub" height="28" src="https://img.shields.io/badge/GitHub-descz%2Fdelta-181717?style=flat-square&amp;logo=github&amp;logoColor=ffffff&amp;labelColor=000000"></a>
 </p>
 
-<p align="center">
-  <a href="https://github.com/descz/delta/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/descz/delta?style=flat-square&color=white&labelColor=black"></a>
-  <img alt="C11" src="https://img.shields.io/badge/C-11-white?style=flat-square&labelColor=black">
-  <img alt="deps" src="https://img.shields.io/badge/dependencies-0-white?style=flat-square&labelColor=black">
-  <img alt="source-available" src="https://img.shields.io/badge/source-available-white?style=flat-square&labelColor=black">
-  <img alt="windows" src="https://img.shields.io/badge/windows-10%2F11-white?style=flat-square&labelColor=black">
-  <img alt="linux" src="https://img.shields.io/badge/linux-x86__64-white?style=flat-square&labelColor=black">
-  <img alt="macos" src="https://img.shields.io/badge/macos-source%20only-white?style=flat-square&labelColor=black">
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-noncommercial-white?style=flat-square&labelColor=black"></a>
+<p><sub>Windows · Linux · macOS (source) — one file, no Node, no Python, no admin.</sub></p>
+
+<p>
+  <a href="https://github.com/descz/delta/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/descz/delta?style=flat-square&amp;color=white&amp;labelColor=black"></a>
+  <img alt="C11" src="https://img.shields.io/badge/C-11-white?style=flat-square&amp;labelColor=black">
+  <img alt="dependencies" src="https://img.shields.io/badge/dependencies-0-white?style=flat-square&amp;labelColor=black">
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-source--available%20%C2%B7%20noncommercial-white?style=flat-square&amp;labelColor=black"></a>
 </p>
+
+</div>
 
 > **License:** source is available for study and personal/internal use — **selling or cloning is
 > prohibited**, and any public disclosure must be **non-profit** and **credited** to the project.
 > See [LICENSE](LICENSE).
 
-**Delta Agent** is a coding agent that lives in your terminal.
-Site: **[descz.github.io/delta](https://descz.github.io/delta/)** · downloads: **[Releases](https://github.com/descz/delta/releases/latest)**
-
-You talk in natural language and it does the work: reads and writes files, runs commands, handles
-git, searches the web, keeps memory and explains what it found — with the model you choose.
-
-It is a **single executable written in C11, with no dependencies at all**: no Node, Python, npm, pip
-or framework installer. On Windows it is **636 KB** and about **1.7 MB of private memory**.
+A **single executable written in C11, with no dependencies at all**: no Node, Python, npm, pip or
+framework installer. On Windows it is **636 KB** and about **1.7 MB of private memory**. It talks to
+the provider directly (WinHTTP on Windows, `curl` elsewhere) and keeps everything in one folder.
 
 ---
 
@@ -272,3 +278,18 @@ product in any public disclosure.
 
 Mandatory credit: **Delta Agent — https://github.com/descz/delta**.
 Commercial permission, cloning or special redistribution: open an issue in the repository.
+
+<br>
+
+<div align="center">
+
+<img src="docs/logo.png" width="40" height="40" alt="">
+
+<p><strong>Delta Agent</strong> — <a href="https://descz.github.io/delta/">site</a> ·
+<a href="https://github.com/descz/delta">github</a> ·
+<a href="https://github.com/descz/delta/releases/latest">releases</a> ·
+<a href="LICENSE">license</a></p>
+
+<p><sub>C11 · zero dependencies · Windows, Linux, macOS (source)</sub></p>
+
+</div>
