@@ -4,6 +4,9 @@ rem  Delta Agent - empacotador do Windows: dist\Delta.exe + zip
 rem ==================================================================
 setlocal
 cd /d "%~dp0"
+
+rem badges do README: a versao sai de DELTA_VERSION (src/util.h)
+where python >nul 2>&1 && python tools\gen-badges.py
 call build.bat || exit /b 1
 if not exist dist mkdir dist
 copy /y "bin\delta.exe" "dist\Delta.exe" >nul || exit /b 1

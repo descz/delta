@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="127" height="28" viewBox="0 0 127 28" role="img" aria-label="release: v0.1.17">
+  <rect x="0.5" y="0.5" width="126" height="27" rx="13.5" fill="#0d0d0d" stroke="#2a2a2a"/>
+  <text x="10" y="18" font-family="Inter, &quot;Segoe UI&quot;, -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="500" fill="#8a8a8a" textLength="42.0" lengthAdjust="spacingAndGlyphs">release</text>
+  <text x="72.0" y="18" font-family="Inter, &quot;Segoe UI&quot;, -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff" textLength="44.8" lengthAdjust="spacingAndGlyphs">v0.1.17</text>
+</svg>

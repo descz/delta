@@ -9,6 +9,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# badges do README: a versao sai de DELTA_VERSION (src/util.h)
+if command -v python3 >/dev/null 2>&1; then python3 tools/gen-badges.py; fi
+
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 BUILD=1

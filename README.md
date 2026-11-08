@@ -16,10 +16,10 @@ Delta executes it in your project, with the model you choose — and remembers t
 <p><sub>Windows · Linux · macOS (source) — one file, no Node, no Python, no admin.</sub></p>
 
 <p>
-  <a href="https://github.com/descz/delta/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/descz/delta?style=flat-square&amp;color=white&amp;labelColor=black"></a>
-  <img alt="C11" src="https://img.shields.io/badge/C-11-white?style=flat-square&amp;labelColor=black">
-  <img alt="dependencies" src="https://img.shields.io/badge/dependencies-0-white?style=flat-square&amp;labelColor=black">
-  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/license-source--available%20%C2%B7%20noncommercial-white?style=flat-square&amp;labelColor=black"></a>
+  <a href="https://github.com/descz/delta/releases/latest"><img alt="release" height="28" src="assets/buttons/version.svg"></a>
+  <img alt="C11" height="28" src="assets/buttons/c11.svg">
+  <img alt="zero runtime dependencies" height="28" src="assets/buttons/deps.svg">
+  <a href="LICENSE"><img alt="license: source-available, noncommercial" height="28" src="assets/buttons/license.svg"></a>
 </p>
 
 </div>

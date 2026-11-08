@@ -1496,6 +1496,26 @@ else
 fi
 expect build/mock-last-request.json "saida truncada" "saida grande: o modelo ve o aviso de truncamento"
 
+echo
+echo "[22] badges do README: svg do proprio repo, versao em dia"
+# img.shields.io falhava de forma intermitente no GitHub e o camo cacheava o erro
+# (sobrava o alt quebrado). Agora sao arquivos do repo, gerados de DELTA_VERSION.
+if python tools/gen-badges.py --check > /tmp/delta_badges.log 2>&1; then
+    pass "badges: svg em dia com a versao"
+else
+    fail "badges: fora de sincronia ($(grep -c DIFERE /tmp/delta_badges.log) arquivo(s))"
+fi
+if python -c "import glob,xml.dom.minidom as m;[m.parse(f) for f in glob.glob('assets/buttons/*.svg')]" 2>/dev/null; then
+    pass "badges: todo svg e' xml valido"
+else
+    fail "badges: svg invalido"
+fi
+if grep -q "img.shields.io" README.md; then
+    fail "readme: voltou a depender do shields"
+else
+    pass "readme: nenhum badge externo"
+fi
+
 restaurar_globais   # config, chaves e memoria do usuario de volta
 
 kill $MOCK 2>/dev/null
