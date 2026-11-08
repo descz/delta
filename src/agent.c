@@ -22,6 +22,11 @@ static char *config_path(void)
     return p;
 }
 
+/* Empurroes automaticos quando o provedor devolve um turno vazio no meio da
+   tarefa (stream cortado por proxy). Depois disso o turno falha com erro
+   explicito: silencio nunca. */
+#define DELTA_RESPIROS_VAZIOS 6
+
 static const char *default_base(const char *provider)
 {
     return str_istarts(provider, "anthropic") ? "https://api.anthropic.com" : "https://api.openai.com/v1";
@@ -956,6 +961,21 @@ static void agent_trim_tool_outputs(MsgList *msgs)
     free(idx);
 }
 
+/* Ha' resultado de ferramenta esperando resposta? Olha para tras ate' o
+   ultimo assistant: se nesse meio houve ROLE_TOOL, o modelo ainda nao
+   respondeu aquelas saidas (o stream caiu no meio do trabalho). Nao basta
+   olhar o ultimo item: entre o tool result e agora pode haver o empurrao que
+   o proprio agente inseriu. */
+static int tool_result_sem_resposta(const MsgList *m)
+{
+    for (size_t i = m->n; i > 0; i--) {
+        Role r = m->items[i - 1].role;
+        if (r == ROLE_ASSISTANT) return 0;
+        if (r == ROLE_TOOL) return 1;
+    }
+    return 0;
+}
+
 int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
 {
     if (user_text && *user_text) agent_push_user(a, user_text);
@@ -1019,6 +1039,44 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
         a->total_in += turn.usage_in;
         a->total_out += turn.usage_out;
 
+        /* Turno VAZIO: o provedor fechou com 200 e nada dentro (sem texto, sem
+           thinking, sem tool call). Alguns proxies de deepseek/glm cortam o
+           stream no meio da tarefa e entregam o turno em branco. Duas
+           consequencias erradas se isso entrar no fluxo normal: (1) a mensagem
+           vazia vai para o historico e o proximo request leva um assistant sem
+           content — varios provedores recusam isso; (2) o turno terminava como
+           SUCESSO, e o -p saia 0 sem uma linha de explicacao (o agente "parava
+           do nada"). Aqui a decisao e' tomada sobre o turno, antes de gravar. */
+        int turno_vazio = turn.calls.n_calls == 0 && turn.text.len == 0 && turn.thinking.len == 0;
+        if (turno_vazio) {
+            int pendentes = tool_result_sem_resposta(&a->msgs);
+            turn_free(&turn);
+            if (pendentes && ++a->respirados <= DELTA_RESPIROS_VAZIOS) {
+                /* empurrao explicito: repetir o request identico costuma devolver
+                   o mesmo vazio. Nao vai para a sessao em disco — o usuario nao
+                   escreveu isso; serve so' para o proximo request dizer onde o
+                   turno parou. */
+                Msg *emp = msglist_add(&a->msgs, ROLE_USER);
+                str_adds(&emp->text,
+                         "Continue de onde parou. O stream anterior do provedor caiu "
+                         "antes da sua resposta: retome a tarefa com a proxima "
+                         "chamada de ferramenta ou com a resposta final.");
+                continue;
+            }
+            if (err) {
+                if (pendentes)
+                    str_addf(err, "turno vazio: o provedor devolveu %d respostas em branco "
+                                  "seguidas (stream cortado no meio da tarefa) - nada foi "
+                                  "perdido, a sessao esta salva",
+                             DELTA_RESPIROS_VAZIOS + 1);
+                else
+                    str_adds(err, "turno vazio: o provedor nao devolveu texto nem "
+                                  "ferramenta - tente de novo");
+            }
+            return 0;
+        }
+        a->respirados = 0;   /* turno produtivo: zera o orcamento de empurroes */
+
         /* registra a mensagem do assistente */
         Msg *am = msglist_add(&a->msgs, ROLE_ASSISTANT);
         str_add(&am->text, turn.text.data ? turn.text.data : "", turn.text.len);
@@ -1027,18 +1085,9 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
             msg_add_call(am, turn.calls.calls[i].id, turn.calls.calls[i].name, turn.calls.calls[i].args);
         session_append(a, "message", am);
 
-                if (turn.calls.n_calls == 0) {
+        if (turn.calls.n_calls == 0) {
             turn_free(&turn);
-            /* resposta VAZIA com resultados de ferramenta pendentes no fim do
-               contexto = o stream morreu no meio do trabalho (alguns proxies
-               cortam o H.264/deepseek a ~75s). Uma retentativa automatica:
-               a proxima leva os results pendentes visiveis e o modelo pode
-               continuar de onde parou, em vez do turno acabar do nada. */
-            int pendentes = a->msgs.n > 0 && a->msgs.items[a->msgs.n - 1].role == ROLE_TOOL;
-            if (pendentes && ++a->respirados <= 6) {
-                continue;
-            }
-            return 1;
+            return 1;   /* resposta final (com texto): o turno acabou de verdade */
         }
 
         /* executa as ferramentas */

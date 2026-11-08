@@ -245,20 +245,26 @@ int main(void)
         Str err; str_init(&err);
 
         ok(dialeto_opts(&o, "melhorar o parser", &brief, &err), "opts sem flag");
-        ok(o.rodadas_min == 50 && o.rodadas_max == 50, "piso padrao = 50 rodadas");
-        ok(o.meta > 8.9 && o.meta < 9.1, "meta padrao 9.0");
+        ok(o.rodadas_min == 0 && o.rodadas_max == 0, "padrao = infinito (sem piso nem teto)");
+        ok(o.meta == 0, "padrao = sem meta de encerramento automatico");
         ok(o.copia_critico == 1, "critico roda em copia isolada por padrao");
         ok(str_eq(brief, "melhorar o parser"), "brief sem flag e' o texto todo");
 
         str_clear(&err);
-        ok(dialeto_opts(&o, "--rodadas 12 --meta 8.5 --sem-copia --critico gpt-x arrumar o loop",
-                        &brief, &err),
-           "opts com flags");
+        ok(dialeto_opts(&o, "--rodadas 12 arrumar o loop", &brief, &err), "opts com --rodadas");
         ok(o.rodadas_min == 12 && o.rodadas_max == 12, "--rodadas fixa piso e teto");
-        ok(o.meta > 8.4 && o.meta < 8.6, "--meta");
-        ok(o.copia_critico == 0, "--sem-copia");
-        ok(str_eq(o.critico, "gpt-x"), "--critico com valor");
         ok(str_eq(brief, "arrumar o loop"), "brief depois das flags");
+
+        str_clear(&err);
+        ok(dialeto_opts(&o, "--max 30 arrumar", &brief, &err), "opts com --max");
+        ok(o.rodadas_max == 30, "--max so' poe teto");
+        ok(str_eq(brief, "arrumar"), "--max nao engole o objetivo");
+
+        /* --meta, --sem-copia e --critico sairam no /dialeto simplificado:
+           agora tem de falhar como flag desconhecida, nao ser ignoradas */
+        str_clear(&err);
+        ok(!dialeto_opts(&o, "--meta 8.5 x", &brief, &err), "--meta removida falha");
+        ok(err.len > 0, "--meta removida explica o erro");
 
         str_clear(&err);
         ok(!dialeto_opts(&o, "--rodadas 2 x", &brief, &err), "--rodadas abaixo do minimo falha");
@@ -318,12 +324,13 @@ int main(void)
         free(p);
 
         p = dialeto_prompt_critico(&d, brief, "mudei o flush", "--- a/main.c\n+++ b/main.c",
-                                   "C:/tmp/copia");
+                                   "C:/tmp/copia", "prefira nomes curtos");
         ok(p && contains(p, "CRITICO"), "prompt do critico se identifica");
         ok(contains(p, "NOTA:") && contains(p, "BLOQUEIO:"), "critico sabe o formato da nota");
         ok(contains(p, "mudei o flush"), "critico recebe o relato do artifice");
         ok(contains(p, "+++ b/main.c"), "critico recebe o diff");
         ok(contains(p, "C:/tmp/copia"), "critico recebe o cwd da copia");
+        ok(contains(p, "prefira nomes curtos"), "critico recebe as preferencias da memoria");
         free(p);
 
         p = dialeto_relatorio(&d, brief, 3);

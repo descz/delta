@@ -15,6 +15,22 @@ MEM="$HOME/.deltaCore/memory.json"
 cp "$AUTH_GLOBAL" "$ROOT/build/auth-global.bak" 2>/dev/null
 MEM_GLOBAL="$HOME/.deltaCore/memory.json"
 cp "$MEM_GLOBAL" "$ROOT/build/mem-global.bak" 2>/dev/null
+
+# devolve config/chaves/memoria como estavam mesmo se a rodada for interrompida
+# (Ctrl+C, timeout, falha no meio). Rodada abortada deixava a config do usuario
+# com o provider do teste — foi assim que a suite passou a ver
+# "provedor : deepseek" e [3d] a falhar por um motivo que nao era codigo.
+restaurar_globais() {
+    [ -f "$ROOT/build/cfg-global.bak" ] && cp "$ROOT/build/cfg-global.bak" "$CFG_GLOBAL" 2>/dev/null
+    if [ -f "$ROOT/build/auth-global.bak" ]; then
+        cp "$ROOT/build/auth-global.bak" "$AUTH_GLOBAL" 2>/dev/null
+    else
+        : > "$AUTH_GLOBAL" 2>/dev/null
+    fi
+    [ -f "$ROOT/build/mem-global.bak" ] && cp "$ROOT/build/mem-global.bak" "$MEM_GLOBAL" 2>/dev/null
+    return 0
+}
+trap 'restaurar_globais; kill "${MOCK:-}" "${MOCK_VAZIO:-}" "${DMOCK:-}" "${MOCK_STEER:-}" 2>/dev/null' EXIT INT TERM
 # a pasta de projeto do usuario nao pode vazar para os testes (/projects salva
 # projectDir na config); zera durante a suite e restaura no fim.
 python - <<'PYEOF' 2>/dev/null
@@ -29,6 +45,13 @@ io.open(p, "w", encoding="utf-8").write(json.dumps(d, indent=2))
 PYEOF
 
 PORT=$((RANDOM % 2000 + 8300))
+# porta sorteada nao pode estar ocupada por um servidor alheio: se estiver,
+# quase toda secao que sobe mock falha falando com o vizinho
+for _tentativa in $(seq 1 20); do
+    if ! netstat -ano 2>/dev/null | grep -q "127.0.0.1:$PORT .*LISTENING"; then break; fi
+    PORT=$((PORT + 37))
+    [ "$PORT" -gt 10299 ] && PORT=8300
+done
 FAIL=0
 pass() { printf '  \033[32mok\033[0m   %s\n' "$1"; }
 fail() { printf '  \033[31mFALHA\033[0m %s\n' "$1"; FAIL=$((FAIL+1)); }
@@ -48,7 +71,14 @@ command -v gcc >/dev/null 2>&1 || { echo "gcc nao encontrado"; exit 1; }
 
 # se sobrou alguma instancia da TUI, o linker nao consegue regravar o exe
 taskkill //F //IM delta.exe >/dev/null 2>&1
-pkill -f mock_openai.py >/dev/null 2>&1
+# mocks de uma rodada anterior: no Git Bash nao existe pkill, e mock
+# sobrevivente ocupa a porta sorteada e contamina a rodada seguinte
+# (foi assim que [3d] e [3-dialeto] falharam falando com o mock errado).
+if command -v pkill >/dev/null 2>&1; then
+    pkill -f mock_openai.py >/dev/null 2>&1
+elif command -v powershell >/dev/null 2>&1; then
+    powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*mock_openai.py*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }" >/dev/null 2>&1
+fi
 sleep 1
 
 echo
@@ -1415,17 +1445,36 @@ expect "$UPD/mac.log" "não publica binário"      "update: avisa quando nao ha 
 kill "$(cat "$UPD/upd.pid")" "$(cat "$UPD/atual.pid")" "$(cat "$UPD/mac.pid")" 2>/dev/null
 wait "$(cat "$UPD/upd.pid")" 2>/dev/null
 
-[ -f "$ROOT/build/cfg-global.bak" ] && cp "$ROOT/build/cfg-global.bak" "$CFG_GLOBAL" 2>/dev/null
-# as chaves do usuario voltam como estavam (os testes usam chaves falsas)
-if [ -f "$ROOT/build/auth-global.bak" ]; then
-    cp "$ROOT/build/auth-global.bak" "$AUTH_GLOBAL" 2>/dev/null
-else
-    : > "$AUTH_GLOBAL" 2>/dev/null
-fi
-# a memoria do usuario volta como estava (os testes escrevem nela)
-if [ -f "$ROOT/build/mem-global.bak" ]; then
-    cp "$ROOT/build/mem-global.bak" "$MEM_GLOBAL" 2>/dev/null
-fi
+echo
+echo "[20] turno vazio: 200 sem texto e sem tool call nao pode morrer calado"
+# O provedor fecha o stream sem nada dentro (aconteceu com deepseek/glm atras de
+# proxy). O agente tem de empurrar o turno de novo e, se o provedor insistir,
+# terminar com erro explicito — nunca sai 0 sem dizer nada.
+rm -f build/mock-vazio-count.txt
+python tests/mock_vazio.py "$((PORT + 21))" uma > /dev/null 2>&1 &
+MOCK_VAZIO=$!
+sleep 2
+./bin/delta.exe -p "leia tests/mock-target.txt" --provider openai --model gpt-4o     --baseurl "http://127.0.0.1:$((PORT + 21))/v1" --api-key sk-teste > build/vazio-uma.log 2>&1
+RC_VAZIO1=$?
+expect build/vazio-uma.log "O arquivo contem: 42" "turno vazio: o agente se recupera e entrega a resposta"
+[ "$RC_VAZIO1" -eq 0 ]     && pass "turno vazio: recuperacao sai com 0"     || fail "turno vazio: recuperacao devia sair com 0 (saiu $RC_VAZIO1)"
+kill $MOCK_VAZIO 2>/dev/null
+wait $MOCK_VAZIO 2>/dev/null
+
+rm -f build/mock-vazio-count.txt
+python tests/mock_vazio.py "$((PORT + 22))" sempre > /dev/null 2>&1 &
+MOCK_VAZIO=$!
+sleep 2
+./bin/delta.exe -p "leia tests/mock-target.txt" --provider openai --model gpt-4o     --baseurl "http://127.0.0.1:$((PORT + 22))/v1" --api-key sk-teste > build/vazio-sempre.log 2>&1
+RC_VAZIO2=$?
+[ "$RC_VAZIO2" -ne 0 ]     && pass "turno vazio: provedor insistindo termina com codigo de erro"     || fail "turno vazio: saiu 0 em silencio (o bug original)"
+expect build/vazio-sempre.log "turno vazio" "turno vazio: explica o que aconteceu"
+VAZIOS=$(cat build/mock-vazio-count.txt 2>/dev/null || echo 0)
+[ "$VAZIOS" -ge 3 ]     && pass "turno vazio: tentou de novo antes de desistir ($VAZIOS respostas vazias)"     || fail "turno vazio: nao tentou de novo (so' $VAZIOS resposta vazia)"
+kill $MOCK_VAZIO 2>/dev/null
+wait $MOCK_VAZIO 2>/dev/null
+
+restaurar_globais   # config, chaves e memoria do usuario de volta
 
 kill $MOCK 2>/dev/null
 wait $MOCK 2>/dev/null
