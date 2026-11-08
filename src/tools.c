@@ -22,6 +22,11 @@
 
 #define MAX_LINES 2000
 #define MAX_BYTES (50 * 1024)
+/* Teto da saida de comando. Sem isto um erro de shell vira catastrofe: no
+   Windows `find /c /v ""` (idioma do find.exe) cai no find do MSYS e lista o
+   disco inteiro — 267 MB numa unica tool message, request de 267 MB, provedor
+   sem resposta e o agente travado. Acima do teto o processo e' encerrado. */
+#define EXEC_MAX_BYTES (200 * 1024)
 
 static void (*g_tick)(void *) = NULL;
 static void *g_tick_ud = NULL;
@@ -244,6 +249,7 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
     DWORD start = GetTickCount();
     uint64_t deadline = (uint64_t)(timeout_sec > 0 ? timeout_sec * 1000 : 0);
     int timed_out = 0;
+    int truncated = 0;
     char buf[4096];
     for (;;) {
         tools_tick();
@@ -254,6 +260,7 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
             DWORD want = avail > sizeof buf ? (DWORD)sizeof buf : avail;
             if (ReadFile(rd, buf, want, &got, NULL) && got > 0) {
                 str_add(out, buf, got);
+                if (out->len >= EXEC_MAX_BYTES) { truncated = 1; break; }
             } else break;
         } else {
             DWORD st = WaitForSingleObject(pi.hProcess, 30);
@@ -265,6 +272,7 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
                     DWORD want = a2 > sizeof buf ? (DWORD)sizeof buf : a2;
                     if (!ReadFile(rd, buf, want, &got, NULL) || got == 0) break;
                     str_add(out, buf, got);
+                    if (out->len >= EXEC_MAX_BYTES) { truncated = 1; break; }
                 }
                 break;
             }
@@ -275,6 +283,12 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
     if (timed_out) {
         TerminateProcess(pi.hProcess, 1);
         str_addf(out, "\n[Delta] comando interrompido apos %d s\n", timeout_sec);
+    }
+    if (truncated) {
+        /* nao adianta deixar rodando: o que vier depois tambem nao seria lido */
+        TerminateProcess(pi.hProcess, 1);
+        str_adds(out, "\n[Delta] saida truncada em 200 KB (processo encerrado). "
+                      "Reduza a saida com grep/head ou conte as linhas.\n");
     }
     DWORD code = 1;
     GetExitCodeProcess(pi.hProcess, &code);
@@ -306,6 +320,7 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
     uint64_t start = now_ms();
     int status = 0;
     int timed_out = 0;
+    int truncated = 0;
     char buf[4096];
     for (;;) {
         tools_tick();
@@ -316,8 +331,10 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
         int r = select(fds[0] + 1, &rf, NULL, NULL, &tv);
         if (r > 0) {
             ssize_t got = read(fds[0], buf, sizeof buf);
-            if (got > 0) str_add(out, buf, (size_t)got);
-            else if (got == 0) break;
+            if (got > 0) {
+                str_add(out, buf, (size_t)got);
+                if (out->len >= EXEC_MAX_BYTES) { truncated = 1; break; }
+            } else if (got == 0) break;
         } else {
             pid_t w = waitpid(pid, &status, WNOHANG);
             if (w == pid) break;
@@ -330,6 +347,12 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
         str_addf(out, "\n[Delta] comando interrompido apos %d s\n", timeout_sec);
     }
     close(fds[0]);
+    if (truncated) {
+        kill(pid, SIGKILL);
+        waitpid(pid, &status, 0);
+        str_adds(out, "\n[Delta] saida truncada em 200 KB (processo encerrado). "
+                      "Reduza a saida com grep/head ou conte as linhas.\n");
+    }
     if (timed_out) *exit_code = 124;
     else if (WIFEXITED(status)) *exit_code = WEXITSTATUS(status);
     else *exit_code = 1;
@@ -772,6 +795,12 @@ static int tool_ls(Tool *self, JValue *args, const char *cwd, ToolResult *res)
     }
     str_addf(&res->output, "%s:\n", path);
     for (size_t i = 0; i < n; i++) {
+        if (res->output.len >= EXEC_MAX_BYTES) {
+            str_adds(&res->output, "\n[Delta] listagem truncada em 200 KB: use find/grep "
+                                   "para achar o que procura.\n");
+            res->truncated = 1;
+            break;
+        }
         char *full = path_join(path, list[i]);
         str_addf(&res->output, "%s%s\n", list[i], path_is_dir(full) ? "/" : "");
         free(full);

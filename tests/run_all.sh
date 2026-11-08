@@ -1474,6 +1474,28 @@ VAZIOS=$(cat build/mock-vazio-count.txt 2>/dev/null || echo 0)
 kill $MOCK_VAZIO 2>/dev/null
 wait $MOCK_VAZIO 2>/dev/null
 
+echo
+echo "[21] saida de ferramenta gigante nao pode ir inteira ao provedor"
+# Caso real: `find /c /v ""` virou o find do MSYS e listou o disco C inteiro:
+# 267 MB em UMA tool message, request de 267 MB, provedor sem resposta e o
+# agente parecendo travado. Tem de truncar antes de montar o request.
+python tests/mock_grande.py "$((PORT + 23))" > /dev/null 2>&1 &
+MOCK_GRANDE=$!
+sleep 2
+./bin/delta.exe -p "saida-grande" --provider openai --model gpt-4o     --baseurl "http://127.0.0.1:$((PORT + 23))/v1" --api-key sk-teste > build/saida-grande.log 2>&1
+RC_GRANDE=$?
+kill $MOCK_GRANDE 2>/dev/null
+wait $MOCK_GRANDE 2>/dev/null
+expect build/saida-grande.log "saida grande tratada" "saida grande: o turno termina normalmente"
+[ "$RC_GRANDE" -eq 0 ] && pass "saida grande: sai com 0" || fail "saida grande: saiu $RC_GRANDE"
+TAM_REQ=$(stat -c%s build/mock-last-request.json 2>/dev/null || echo 999999999)
+if [ "$TAM_REQ" -lt 300000 ]; then
+    pass "saida grande: request ficou pequeno (${TAM_REQ} bytes)"
+else
+    fail "saida grande: request com $TAM_REQ bytes (a saida nao foi truncada)"
+fi
+expect build/mock-last-request.json "saida truncada" "saida grande: o modelo ve o aviso de truncamento"
+
 restaurar_globais   # config, chaves e memoria do usuario de volta
 
 kill $MOCK 2>/dev/null

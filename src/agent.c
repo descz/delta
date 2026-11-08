@@ -27,6 +27,14 @@ static char *config_path(void)
    explicito: silencio nunca. */
 #define DELTA_RESPIROS_VAZIOS 6
 
+/* Tetos de contexto. Sem eles o agente se sabota sozinho: uma unica saida de
+   ferramenta gigante (no Windows um `find` do MSYS listou o disco C inteiro =
+   267 MB) virava um request de 267 MB, o provedor nao respondia e o turno
+   parecia travado. 200 KB por saida e 8 MB de conversa sao folgados para
+   qualquer tarefa real e mantem o request em segundos, nao em minutos. */
+#define DELTA_TOOL_MAX_CHARS (200 * 1024)
+#define DELTA_REQ_MAX_CHARS  (8 * 1024 * 1024)
+
 static const char *default_base(const char *provider)
 {
     return str_istarts(provider, "anthropic") ? "https://api.anthropic.com" : "https://api.openai.com/v1";
@@ -921,17 +929,8 @@ static int agent_max_steps(void)
    marcador curto. O fio da conversa está no relato vivo (memory, injetado no
    system prompt), então o modelo não se perde. A sessão em disco guarda tudo.
    DELTA_TRIM_CHARS / DELTA_TRIM_KEEP ajustam sem recompilar. */
-static void agent_trim_tool_outputs(MsgList *msgs)
+static void agent_trim_tool_outputs(MsgList *msgs, long teto, int keep)
 {
-    long teto = 60000;
-    int keep = 12;
-    char *e = env_get("DELTA_TRIM_CHARS");
-    if (e && *e) { long x = atol(e); if (x >= 0) teto = x; }
-    free(e);
-    e = env_get("DELTA_TRIM_KEEP");
-    if (e && *e) { int x = atoi(e); if (x >= 0) keep = x; }
-    free(e);
-
     /* indices das saidas de ferramenta + total de caracteres */
     size_t *idx = NULL;
     size_t n_tool = 0, cap = 0;
@@ -961,6 +960,36 @@ static void agent_trim_tool_outputs(MsgList *msgs)
     free(idx);
 }
 
+/* Valores do usuario (DELTA_TRIM_CHARS / DELTA_TRIM_KEEP), usados na passada
+   normal. A passada de emergencia usa numeros fixos e bem menores. */
+static void agent_trim_tool_outputs_env(MsgList *msgs)
+{
+    long teto = 60000;
+    int keep = 12;
+    char *e = env_get("DELTA_TRIM_CHARS");
+    if (e && *e) { long x = atol(e); if (x >= 0) teto = x; }
+    free(e);
+    e = env_get("DELTA_TRIM_KEEP");
+    if (e && *e) { int x = atoi(e); if (x >= 0) keep = x; }
+    free(e);
+    agent_trim_tool_outputs(msgs, teto, keep);
+}
+
+/* Tamanho aproximado do que vai no request (texto + thinking + argumentos). */
+static long agent_context_chars(const MsgList *msgs)
+{
+    long total = 0;
+    for (size_t i = 0; i < msgs->n; i++) {
+        total += (long)msgs->items[i].text.len;
+        total += (long)msgs->items[i].thinking.len;
+        for (size_t k = 0; k < msgs->items[i].n_calls; k++) {
+            const char *args = msgs->items[i].calls[k].args;
+            if (args) total += (long)strlen(args);
+        }
+    }
+    return total;
+}
+
 /* Ha' resultado de ferramenta esperando resposta? Olha para tras ate' o
    ultimo assistant: se nesse meio houve ROLE_TOOL, o modelo ainda nao
    respondeu aquelas saidas (o stream caiu no meio do trabalho). Nao basta
@@ -984,7 +1013,19 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
     for (int step = 0; step < MAX_STEPS; step++) {
         /* intervalo entre thinking/tools: injeta mensagens enfileiradas */
         if (cb && cb->on_interval) cb->on_interval(cb->ud);
-        agent_trim_tool_outputs(&a->msgs);
+        agent_trim_tool_outputs_env(&a->msgs);
+        if (agent_context_chars(&a->msgs) > DELTA_REQ_MAX_CHARS) {
+            /* emergencia: corta duro (4 saidas, 20 KB cada) antes de tentar
+               enviar megabytes que o provedor vai recusar */
+            agent_trim_tool_outputs(&a->msgs, 20000, 4);
+            if (agent_context_chars(&a->msgs) > DELTA_REQ_MAX_CHARS) {
+                if (err)
+                    str_addf(err, "contexto grande demais (%ld MB) para enviar de uma vez - "
+                                  "use /clear ou peça saidas menores (grep/head)",
+                             agent_context_chars(&a->msgs) / (1024 * 1024));
+                return 0;
+            }
+        }
         if (cb && cb->should_abort && cb->should_abort(cb->ud)) {
             if (err) str_adds(err, "interrompido");
             return 0;
@@ -1118,6 +1159,16 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
                 }
             }
             double secs = (double)(now_ms() - t0) / 1000.0;
+
+            /* teto por saida: nenhuma ferramenta (nem extensao) consegue
+               despejar centenas de MB no historico e no request */
+            if (tr.output.len > DELTA_TOOL_MAX_CHARS) {
+                tr.output.data[DELTA_TOOL_MAX_CHARS] = 0;
+                tr.output.len = DELTA_TOOL_MAX_CHARS;
+                str_adds(&tr.output, "\n[Delta] saida truncada em 200 KB para o provedor. "
+                                     "Use filtros (grep/head, contagem) se precisar do resto.\n");
+                tr.truncated = 1;
+            }
 
             Msg *tm = msglist_add(&a->msgs, ROLE_TOOL);
             str_add(&tm->text, tr.output.data ? tr.output.data : "", tr.output.len);
