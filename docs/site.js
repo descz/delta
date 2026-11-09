@@ -13,3 +13,26 @@
     el.style.transitionDelay = Math.min(i % 4, 3) * 60 + 'ms';
     io.observe(el);
   });
+
+  // /docs: botao Copy de cada bloco e destaque da secao atual
+  document.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pre = btn.closest('.codewrap').querySelector('pre');
+      try {
+        await navigator.clipboard.writeText(pre.innerText);
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = 'Copy', 1200);
+      } catch (e) { btn.textContent = 'Ctrl+C'; }
+    });
+  });
+  const links = [...document.querySelectorAll('.docnav [data-sec], .doctoc [data-sec]')];
+  if (links.length && 'IntersectionObserver' in window) {
+    const seen = new Map();
+    const obs = new IntersectionObserver(es => {
+      es.forEach(e => seen.set(e.target.id, e.isIntersecting));
+      let atual = null;
+      document.querySelectorAll('.docmain h2[id]').forEach(h => { if (!atual && seen.get(h.id)) atual = h.id; });
+      links.forEach(a => a.classList.toggle('active', a.dataset.sec === atual));
+    }, { rootMargin: '-88px 0px -70% 0px' });
+    document.querySelectorAll('.docmain h2[id]').forEach(h => obs.observe(h));
+  }

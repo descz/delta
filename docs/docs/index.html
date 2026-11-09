@@ -3,48 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-
 <title>Delta Agent docs — the specification</title>
-<meta name="description" content="Delta Agent specification: the turn loop and its ceilings, the tool set, the session format, the NDJSON surface for CI, the extension manifest and the hook events.">
+<meta name="description" content="Delta Agent documentation: the turn loop and its ceilings, install per platform, config, tools, sessions and export, the NDJSON surface for CI, extensions, hooks and the honest limits.">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="canonical" href="https://descz.github.io/delta/docs/">
 <meta name="theme-color" content="#000000">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Delta Agent">
 <meta property="og:title" content="Delta Agent docs — the specification">
-<meta property="og:description" content="Delta Agent specification: the turn loop and its ceilings, the tool set, the session format, the NDJSON surface for CI, the extension manifest and the hook events.">
+<meta property="og:description" content="The loop, install, config, tools, sessions, CI surface, extensions and hooks — and the honest limits.">
 <meta property="og:url" content="https://descz.github.io/delta/docs/">
 <meta property="og:image" content="https://descz.github.io/delta/logo-512.png">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://descz.github.io/delta/logo-512.png">
 <link rel="icon" href="../icon-96.png" type="image/png" sizes="96x96">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png" sizes="180x180">
 <link rel="preload" href="../fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../site.css">
 <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Delta Agent",
-      "item": "https://descz.github.io/delta/"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "Docs",
-      "item": "https://descz.github.io/delta/docs/"
-    }
-  ]
-}
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+ {"@type":"ListItem","position":1,"name":"Delta Agent","item":"https://descz.github.io/delta/"},
+ {"@type":"ListItem","position":2,"name":"Docs","item":"https://descz.github.io/delta/docs/"}]}
 </script>
 </head>
 <body>
 
-<header class="navbar" id="navbar">
+<header class="navbar scrolled" id="navbar">
   <div class="nav-inner">
     <a href="../" class="brand" aria-label="Delta Agent">
       <img class="brand-mark" src="../icon-96.png" alt="" width="26" height="26" decoding="async">
@@ -54,7 +36,7 @@
       <a href="../#overview">Overview</a>
       <a href="../#features">What it does</a>
       <a href="../install/">Install</a>
-      <a href="../docs/" aria-current="page">Docs</a>
+      <a href="./" aria-current="page">Docs</a>
       <a href="../faq/">FAQ</a>
     </nav>
     <div class="nav-right">
@@ -62,71 +44,118 @@
       <a class="gh" href="https://github.com/descz/delta" aria-label="Delta Agent on GitHub" title="GitHub">
         <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
       </a>
-      <button class="nav-toggle" id="navToggle" aria-label="Open menu"><span></span><span></span><span></span></button>
     </div>
-  </div>
-  <div class="nav-mobile" id="navMobile">
-    <a href="../#overview">Overview</a>
-    <a href="../#features">What it does</a>
-    <a href="../install/">Install</a>
-    <a href="../docs/">Docs</a>
-    <a href="../faq/">FAQ</a>
-    <a href="https://github.com/descz/delta">GitHub</a>
   </div>
 </header>
 
-<main id="top">
+<main class="docwrap" id="top">
+<nav class="docnav">
+      <p class="docnav-h">START</p>
+      <a href="#intro" data-sec="intro">Intro</a>
+      <a href="#install" data-sec="install">Install</a>
+      <p class="docnav-h">REFERENCE</p>
+      <a href="#config" data-sec="config">Config</a>
+      <a href="#tools" data-sec="tools">Tools</a>
+      <a href="#sessions" data-sec="sessions">Sessions</a>
+      <a href="#ci" data-sec="ci">CI surface</a>
+      <p class="docnav-h">CONFIGURE</p>
+      <a href="#extensions" data-sec="extensions">Extensions</a>
+      <a href="#hooks" data-sec="hooks">Hooks</a>
+      <p class="docnav-h">TRUST</p>
+      <a href="#security" data-sec="security">Security</a>
+      <a href="#limits" data-sec="limits">Limits</a>
+      <p class="docnav-h">HELP</p>
+      <a href="#faq" data-sec="faq">FAQ</a>
+    </nav>
+    <article class="docmain">
+      <p class="kicker">docs</p>
+      <h1>Delta Agent — documentation</h1>
+      <p class="lead">What the agent does, exactly: the loop, the tools, the session format, the CI
+        surface, the extension contract. The same text ships inside the binary as <code>delta docs</code>.</p>
 
-  <section class="section" id="spec" style="padding-top:110px">
-    <div class="container">
-      <p class="kicker reveal">docs</p>
-      <h1 class="hero-title reveal" style="text-align:left;margin:14px 0 10px;max-width:none">The <em>specification</em></h1>
-      <p class="section-sub reveal">What Delta does, exactly: the loop, the limits, the tool set, the
-        session format, the CI surface and the extension contract. The same text ships inside the
-        binary as <code>delta docs</code>.</p>
-
-      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">1. The turn</h2>
-      <p class="section-sub reveal">A turn is <code>prompt → provider (streaming) → tool calls →
-        results → next step</code> until the model answers without asking for a tool. Delta owns the
-        loop and the tools; the model only asks. Ceilings, all overridable by env:</p>
-<pre class="reveal">DELTA_MAX_STEPS      200      steps in one turn
-tool output          200 KB   per tool result (process is killed at the cap)
+      <h2 id="intro">Intro</h2>
+      <p>Delta is a terminal coding agent: one C11 binary, no runtime dependencies, working with the
+        model you choose. You ask in your own words; it reads and edits files by exact blocks, runs
+        commands, handles git, searches the web, keeps memory and speaks MCP.</p>
+      <p>A turn is <code>prompt → provider (streaming) → tool calls → results → next step</code> until
+        the model answers without asking for a tool. Delta owns the loop and the tools; the model only asks.</p>
+<div class="codewrap"><div class="codehdr"><span>limits · env overrides</span><button class="copybtn" data-copy>Copy</button></div><pre>DELTA_MAX_STEPS      200      steps in one turn
+tool output          200 KB   per tool result (process killed at the cap)
 context              8 MB     per request; above it, emergency prune (4 outputs x 20 KB)
-empty provider turn  6 nudges after an HTTP 200 with nothing inside, then a real error</pre>
+empty provider turn  6 nudges after an HTTP 200 with nothing inside, then a real error</pre></div>
+      <h2 id="install">Install</h2>
+      <p>Every download <b>is</b> the installer: it asks for the data folder, copies the binary, puts
+        <code>delta</code> on your PATH and creates the shortcut. No admin, no Node, no Python.</p>
+<div class="codewrap"><div class="codehdr"><span>releases · per platform</span><button class="copybtn" data-copy>Copy</button></div><pre># windows 10/11 x64 - double click, or the zip
+Delta.exe
 
-      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">2. Tools</h2>
-      <p class="section-sub reveal"><code>read write edit undo bash ls find grep graph</code> plus the
-        unified families <code>fs shell git web memory code assert agent extend skills mcp
-        extensions</code>, each taking an <code>op</code>. Every write keeps an undo snapshot.
-        <code>bash</code> runs with a timeout, converts Windows OEM output to UTF-8, and is killed
-        when ESC/Ctrl+C asks to stop (exit code 130).</p>
+# linux x86_64 - self-extracting installer (needs curl at runtime)
+chmod +x delta-linux-x86_64.run && ./delta-linux-x86_64.run
 
-      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">3. Sessions</h2>
-      <p class="section-sub reveal">One JSONL per session, per folder:</p>
-<pre class="reveal">~/.deltaCore/sessions/--&lt;folder-slug&gt;--/&lt;date&gt;_&lt;id&gt;.jsonl
+# macOS 11+ - source package, builds locally
+xcode-select --install
+unzip delta-macos-source.zip && cd delta-macos-source && ./INSTALAR-MAC.command</pre></div>
+      <p>Windows may warn on SmartScreen the first time (not code-signed): <i>More info</i> then
+        <i>Run anyway</i>. The installer reopens with <code>delta --setup</code>. Linux was verified in
+        WSL — the desktop layer (<code>.desktop</code>, GNOME favorites, clipboard) was not exercised on
+        a real desktop. macOS ships source only; the native parts were never run by the author.</p>
+<div class="codewrap"><div class="codehdr"><span>first run</span><button class="copybtn" data-copy>Copy</button></div><pre>delta                    # opens the CLI (always a new chat)
+/login                   # pick the provider, paste the key
+/projects ~/dev/my-app   # where it works (saved for next time)
+read src/main.c and explain the flow
+
+delta continue           # reopens this folder's last chat, thinking included
+delta update --check     # only reports; `delta update` installs</pre></div>
+      <h2 id="config">Config</h2>
+      <p>Everything lives in one folder, chosen at install time (default <code>~/.deltaCore</code>).
+        <code>config.json</code> holds provider, model, language, thinking level, verbosity and the
+        project folder; <code>auth.json</code> holds one API key per provider.</p>
+<div class="codewrap"><div class="codehdr"><span>config.json</span><button class="copybtn" data-copy>Copy</button></div><pre>{
+  "provider": "opencode-go",
+  "model": "deepseek-v4.1-flash",
+  "baseUrl": "https://opencode.ai/inference/go/openai/v1",
+  "language": "pt-BR",
+  "thinkingLevel": "max",
+  "verbosity": "low",
+  "maxTokens": 8192,
+  "projectDir": "",
+  "updateCheck": false
+}</pre></div>
+      <p>Slash commands that matter here: <code>/login</code>, <code>/models</code> (catalog from
+        models.dev), <code>/thinking</code>, <code>/verbosity</code>, <code>/projects</code>,
+        <code>/status</code>, <code>/docs</code>. Any OpenAI-compatible endpoint works through
+        <code>baseUrl</code>.</p>
+
+      <h2 id="tools">Tools</h2>
+      <p><code>read write edit undo bash ls find grep graph</code> plus the unified families
+        <code>fs shell git web memory code assert agent extend skills mcp extensions</code>, each taking
+        an <code>op</code>. Every write keeps an undo snapshot; <code>bash</code> has a timeout,
+        converts Windows OEM output to UTF-8 and is killed when ESC/Ctrl+C asks to stop (exit 130).</p>
+
+      <h2 id="sessions">Sessions</h2>
+      <p>One JSONL per session, per folder. <code>delta</code> always starts a new chat,
+        <code>delta continue</code> reopens the last one with the full history and the model's thinking.</p>
+<div class="codewrap"><div class="codehdr"><span>sessions · export</span><button class="copybtn" data-copy>Copy</button></div><pre>~/.deltaCore/sessions/--<folder-slug>--/<date>_<id>.jsonl
 {"type":"session","version":3,"id":"...","cwd":"..."}
-{"type":"message","message":{"role":"user|assistant|tool", ...}}
+{"type":"message","message":{"role":"user|assistant|tool","content":"...","thinking":"..."}}
 
-delta                 new chat (always)
-delta continue        reopen this folder's last chat, thinking included
-delta export          markdown transcript of the last session
-delta export --json   NDJSON of the same messages</pre>
+delta export            # markdown transcript of the last session
+delta export --json     # NDJSON of the same messages</pre></div>
+      <h2 id="ci">CI surface</h2>
+      <p>One JSON event per line, ready for <code>jq</code> or a CI step. Exit codes: <code>0</code>
+        ok, <code>1</code> agent error, <code>124</code> command timeout.</p>
+<div class="codewrap"><div class="codehdr"><span>ndjson events</span><button class="copybtn" data-copy>Copy</button></div><pre>delta -p "review src/" --json
 
-      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">4. CI surface</h2>
-<pre class="reveal">delta -p "review src/" --json     # NDJSON, one event per line
 {"type":"text","text":"..."}
 {"type":"thinking","text":"..."}
 {"type":"tool_call","name":"bash","args":"{...}"}
 {"type":"tool_result","name":"bash","ok":true,"seconds":1.1,"bytes":10}
 {"type":"turn_end","in":1234,"out":456}
-{"type":"error","message":"..."}
-
-# exit codes: 0 ok · 1 agent error · 124 command timeout</pre>
-
-      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">5. Extensions</h2>
-      <p class="section-sub reveal">One manifest can change several parts of the harness at once.
-        Old one-capability-per-entry files keep working.</p>
-<pre class="reveal">[
+{"type":"error","message":"..."}</pre></div>
+      <h2 id="extensions">Extensions</h2>
+      <p>One manifest can change several parts of the harness at once. Files with a single
+        <code>kind</code> (tool, skill, command, mcp, hook) keep working.</p>
+<div class="codewrap"><div class="codehdr"><span>~/.deltaCore/extensions.json</span><button class="copybtn" data-copy>Copy</button></div><pre>[
   {
     "name": "guardrails",
     "enabled": true,
@@ -134,38 +163,68 @@ delta export --json   NDJSON of the same messages</pre>
     "tools":    [{"name": "x", "arg": "cmd", "desc": "...", "schema": "{...}"}],
     "commands": [{"name": "deploy", "arg": "optional prompt", "exec": "cmd"}],
     "hooks":    [{"event": "tool_call", "arg": "cmd"}],
-    "ui":       {"status": "cmd"}     // third footer line
+    "ui":       {"status": "cmd"}
   }
-]</pre>
+]</pre></div>
+      <p>The agent can create one itself: <code>extensions</code> tool, <code>op=add</code> for a
+        single capability or <code>op=bundle</code> for a whole manifest. It takes effect on the next
+        tool call.</p>
 
-      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">6. Hook events</h2>
-      <p class="section-sub reveal">A hook is code, not a prompt: the harness runs it, so a blocked
-        call never happens. Payload arrives as a JSON file path in <code>argv[1]</code>; the reply is
-        JSON on stdout; 5 s timeout, 8 KB cap, fail-open.</p>
-<pre class="reveal">tool_call      {"block":true,"reason":"..."} | {"args":"{...}"}
+      <h2 id="hooks">Hooks</h2>
+      <p>A hook is code, not a prompt: the harness runs it, so a blocked call never happens. The
+        payload arrives as a JSON file path in <code>argv[1]</code>; the reply is JSON on stdout.
+        5 s timeout, 8 KB cap, fail-open. Paths with spaces must be quoted inside <code>arg</code>.</p>
+<div class="codewrap"><div class="codehdr"><span>events</span><button class="copybtn" data-copy>Copy</button></div><pre>tool_call      {"block":true,"reason":"..."} | {"args":"{...}"}
 tool_result    {"output":"..."} | {"append":"..."}
-user_message   {"block":true,"reason":"..."}      before any request leaves
-turn_start     ignored reply                       before each provider call
+user_message   {"block":true,"reason":"..."}     before any request leaves
+turn_start     ignored reply                     before each provider call
 turn_end       ignored reply
-session_start  once per process</pre>
+session_start  once per process</pre></div>
+      <h2 id="security">Security</h2>
+      <p>Requests go only to the provider you configure. History, keys, memory and skills stay in
+        your local folder, and every file is written to a temporary and swapped in one step, so two
+        windows never read half a config.</p>
+      <p><b>Honest limits:</b> keys are plain text in <code>auth.json</code> (the OS keyring is not
+        wired yet); there is no system sandbox — hooks and extensions run with the same permissions as
+        Delta; only install extensions you trust.</p>
 
-      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">7. Data</h2>
-<pre class="reveal">~/.deltaCore/
-  config.json   auth.json   models.v2.json   memory.json
-  sessions/  skills/  mcps/  extensions/  graphs/  hooks/  themes/  undo/
-  system/prompt.md     re-read every turn (your team rules live here)</pre>
-      <p class="section-sub reveal">Every file is written to a temporary and swapped in one step, so
-        two windows never read half a config.</p>
+      <h2 id="limits">Limits</h2>
+      <p>macOS is source-only, with the native layer untested. Linux desktop integration is untested.
+        The UI is not extensible: no in-process plugin, so no widgets, keys or overlays from an
+        extension — what an extension can change is behaviour (prompt, tools, commands, hooks, footer
+        status), not pixels.</p>
 
-      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">8. Known limits</h2>
-      <p class="section-sub reveal">macOS ships source only (no prebuilt binary). Linux desktop
-        integration is untested. Secrets live in <code>auth.json</code> in plain text — the OS keyring
-        is not wired yet. There is no system sandbox: hooks and extensions run with the same
-        permissions as Delta. The UI is not extensible: no in-process plugin, so no widgets, keys or
-        overlays from an extension.</p>
-    </div>
-  </section>
-
+      <h2 id="faq">FAQ</h2>
+<details class="faq"><summary>Do I need an API key?</summary><p>Yes, from a provider you use (OpenAI, Anthropic, OpenRouter, DeepSeek, opencode and others). <code>/login</code> asks for the key once, stores it per provider in <code>auth.json</code> and picks a default model.</p></details>
+<details class="faq"><summary>Does it run offline?</summary><p>The program runs, the model does not. Without network the CLI, sessions and the local tools still work, but the agent cannot talk to the provider.</p></details>
+<details class="faq"><summary>Which platforms are supported?</summary><p>Windows 10/11 x64 (the reference platform), Linux x86_64 (builds and runs; desktop integration untested) and macOS from source. There is no prebuilt macOS binary.</p></details>
+<details class="faq"><summary>Is there a Windows installer?</summary><p>The download is the installer: double click <code>Delta.exe</code>, choose the data folder, and it copies the binary, sets <code>PATH</code> and creates the shortcut. No admin rights.</p></details>
+<details class="faq"><summary>How big is it?</summary><p>809 KB single executable on Windows, about 1.7 MB of private memory, zero runtime dependencies.</p></details>
+<details class="faq"><summary>Which models can I use?</summary><p>Any model in the models.dev catalog from the providers you connected &mdash; Anthropic, OpenAI, OpenRouter, DeepSeek, opencode and others. <code>/models</code> lists what your keys allow.</p></details>
+<details class="faq"><summary>Can I use a local model?</summary><p>If the server exposes the OpenAI-compatible chat API, point the OpenAI provider at its base URL (config <code>baseUrl</code> or <code>--baseurl</code>).</p></details>
+<details class="faq"><summary>How do I change the model or the thinking level?</summary><p><code>/models</code> switches the model, <code>/thinking</code> sets the reasoning effort and <code>/verbosity</code> sets how much prose the reply carries. All saved in the config.</p></details>
+<details class="faq"><summary>What is the context window shown in the footer?</summary><p>The real <code>limit.context</code> of the current model, read from the catalog (1M for a 1M model), with 200k as fallback when the catalog does not know the model.</p></details>
+<details class="faq"><summary>Does it support MCP?</summary><p>Yes &mdash; JSON-RPC over HTTP or stdio. Servers live as one file each in <code>mcps/</code>, and their tools appear to the model like the built-in ones.</p></details>
+<details class="faq"><summary>Can I add my own tools, commands, skills or hooks?</summary><p>Yes, and they live in one manifest: an extension can declare <code>tools</code>, <code>commands</code> (a prompt, or an <code>exec</code> that runs and prints in the chat), <code>hooks</code> (intercepting <code>tool_call</code>, <code>tool_result</code>, <code>turn_end</code>, <code>session_start</code>, <code>user_message</code> and <code>turn_start</code> to block, rewrite or log), a <code>prompt</code> appended to the system prompt and <code>ui.status</code> for a third footer line. The agent can create them itself with the <code>extensions</code> tool.</p></details>
+<details class="faq"><summary>Can it write and run code for me?</summary><p>It reads and edits files by exact blocks, runs shell commands with timeouts and background jobs, handles git, and can generate code in any language. Two skills ship for that: <code>deltamotion</code> (video as C code to MP4) and <code>3jsskill</code> (Three.js without a build step).</p></details>
+<details class="faq"><summary>Where does my data go?</summary><p>Only to the provider you configure. History, keys, memory and skills stay in your local data folder; each file is written atomically so parallel windows never corrupt it.</p></details>
+<details class="faq"><summary>Is it open source?</summary><p>Source-available and non-commercial. The code is public for study and personal or internal use, but the license forbids selling, charging for access and cloning. Sharing the unmodified copy, non-profit and with credit, is allowed. See the <a href="https://github.com/descz/delta/blob/main/LICENSE">LICENSE</a>.</p></details>
+<details class="faq"><summary>Windows said the app is unknown. Is it safe?</summary><p>That is SmartScreen because the binary is not code-signed: <i>More info</i>, then <i>Run anyway</i>. The source in the repository is exactly what builds that binary.</p></details>
+<details class="faq"><summary>Was Linux tested on a real desktop?</summary><p>Partially. Build, CLI, TUI, real streaming and self-update were verified on Linux (WSL, gcc 13). The desktop integration &mdash; <code>.desktop</code> entry, GNOME favorites, clipboard &mdash; was not exercised on a desktop session.</p></details>
+    </article>    <nav class="doctoc">
+      <p class="docnav-h">ON THIS PAGE</p>
+      <a href="#intro" data-sec="intro">Intro</a>
+      <a href="#install" data-sec="install">Install</a>
+      <a href="#config" data-sec="config">Config</a>
+      <a href="#tools" data-sec="tools">Tools</a>
+      <a href="#sessions" data-sec="sessions">Sessions</a>
+      <a href="#ci" data-sec="ci">CI surface</a>
+      <a href="#extensions" data-sec="extensions">Extensions</a>
+      <a href="#hooks" data-sec="hooks">Hooks</a>
+      <a href="#security" data-sec="security">Security</a>
+      <a href="#limits" data-sec="limits">Limits</a>
+      <a href="#faq" data-sec="faq">FAQ</a>
+    </nav>
 </main>
 
 <footer>
