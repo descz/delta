@@ -164,14 +164,14 @@ footer{padding:44px 0 40px;margin-top:40px}
 .doctoc a:hover,.doctoc a.active{color:#fff}
 
 /* bloco de codigo: retangulo com faixa branca (titulo preto) e corpo preto (texto branco) */
-.codewrap{border:1px solid #232323;border-radius:10px;overflow:hidden;margin:16px 0 20px;background:#000}
+.codewrap{border:0;border-radius:10px;overflow:hidden;margin:16px 0 20px;background:#000}
 .codehdr{display:flex;align-items:center;justify-content:space-between;gap:12px;
          background:#fff;color:#000;padding:7px 12px;font:12px var(--mono);font-weight:600;
          letter-spacing:.01em;border:0}
 .codehdr .copybtn{background:none;border:0;color:#000;font:11.5px var(--mono);cursor:pointer;
-                  opacity:.55;padding:0}
-.codehdr .copybtn:hover{opacity:1}
-.codewrap pre{margin:0;padding:14px 14px;background:#000;color:#fff;
+                  opacity:1;padding:0}
+.codehdr .copybtn:hover{text-decoration:underline}
+.codewrap pre{margin:0;padding:14px 14px;background:#000;color:#fff;border:0;
               font:12.5px/1.7 var(--mono);overflow-x:auto}
 .codewrap pre .c{color:#8a8a8a}
 @media (max-width:1180px){ .doctoc{display:none} .docmain{max-width:none} }
@@ -188,4 +188,4 @@ footer{padding:44px 0 40px;margin-top:40px}
 @media (max-width:900px){ .osgrid{grid-template-columns:1fr} }
 
 .docmain pre:not(.codewrap pre),.section pre:not(.codewrap pre){background:#000;color:#fff;
-  border:1px solid #232323;border-radius:10px;padding:14px;font:12.5px/1.7 var(--mono);overflow-x:auto}
+  border:0;border-radius:10px;padding:14px;font:12.5px/1.7 var(--mono);overflow-x:auto}
