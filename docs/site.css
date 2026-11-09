@@ -149,7 +149,6 @@ footer{padding:44px 0 40px;margin-top:40px}
 
 /* ---------- /docs: artigo + TOC fixo ---------- */
 .docwrap{max-width:1080px;margin:0 auto;padding:96px 24px 40px}
-.doctorwrap{display:block}
 .docmain{min-width:0;max-width:780px}
 .docmain h1{font-size:clamp(30px,4vw,44px);letter-spacing:-.03em;margin:6px 0 14px;line-height:1.1}
 .docmain .lead{color:var(--muted2);font-size:16.5px;line-height:1.65;margin:0 0 26px}
@@ -163,15 +162,18 @@ footer{padding:44px 0 40px;margin-top:40px}
         font-size:13px;color:var(--muted);z-index:5}
 .doctoc a{padding:3px 0}
 .doctoc a:hover,.doctoc a.active{color:#fff}
-.codewrap{border:0;border-left:1px solid #202020;border-radius:0;overflow:hidden;margin:16px 0 20px;background:transparent}
-.codehdr{display:flex;align-items:center;justify-content:space-between;padding:0 0 6px;
-         border:0;font:11px var(--mono);color:#5f5f5f;background:transparent;letter-spacing:.02em}
-.codehdr .copybtn{background:none;border:0;color:#5f5f5f;font:11px var(--mono);cursor:pointer;opacity:.7}
-.codehdr .copybtn:hover{color:#fff;opacity:1}
-.codewrap pre{margin:0;padding:2px 0 2px 14px;overflow-x:auto;font:12.5px/1.65 var(--mono);color:#cfcfcf}
-.docmain details.faq{border-top:1px solid var(--border);padding:12px 0}
-.docmain details.faq summary{cursor:pointer;color:#fff;font-weight:500}
-.docmain details.faq p{margin:8px 0 0}
+
+/* bloco de codigo: retangulo com faixa branca (titulo preto) e corpo preto (texto branco) */
+.codewrap{border:1px solid #232323;border-radius:10px;overflow:hidden;margin:16px 0 20px;background:#000}
+.codehdr{display:flex;align-items:center;justify-content:space-between;gap:12px;
+         background:#fff;color:#000;padding:7px 12px;font:12px var(--mono);font-weight:600;
+         letter-spacing:.01em;border:0}
+.codehdr .copybtn{background:none;border:0;color:#000;font:11.5px var(--mono);cursor:pointer;
+                  opacity:.55;padding:0}
+.codehdr .copybtn:hover{opacity:1}
+.codewrap pre{margin:0;padding:14px 14px;background:#000;color:#fff;
+              font:12.5px/1.7 var(--mono);overflow-x:auto}
+.codewrap pre .c{color:#8a8a8a}
 @media (max-width:1180px){ .doctoc{display:none} .docmain{max-width:none} }
 @media (max-width:820px){ .docwrap{padding-top:84px} }
 
@@ -184,3 +186,6 @@ footer{padding:44px 0 40px;margin-top:40px}
 .oscard .btn{margin-top:6px}
 .osicon{width:26px;height:26px;color:#fff;margin-bottom:2px}
 @media (max-width:900px){ .osgrid{grid-template-columns:1fr} }
+
+.docmain pre:not(.codewrap pre),.section pre:not(.codewrap pre){background:#000;color:#fff;
+  border:1px solid #232323;border-radius:10px;padding:14px;font:12.5px/1.7 var(--mono);overflow-x:auto}
