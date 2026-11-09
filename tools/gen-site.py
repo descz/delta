@@ -201,7 +201,7 @@ def build(dirname, title, desc, nome, corpo, extra_ld=""):
 
 def main():
     build("install",
-          "Install Delta Agent — Windows, Linux, macOS",
+          "Delta Agent Install",
           "Install Delta Agent on Windows 10/11, Linux x86_64 or macOS: one file per platform, no admin, "
           "no Node, no Python. Step by step, PATH, first run, update and data folder.",
           "Install", INSTALL)
