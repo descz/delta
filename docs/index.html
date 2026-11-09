@@ -3,9 +3,138 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Delta Agent — the coding agent in your terminal</title>
-<meta name="description" content="Delta is a coding agent that lives in your terminal: reads and edits files, runs commands, handles git, searches the web and keeps memory. One C11 binary, zero dependencies.">
-<link rel="icon" href="logo.png">
+
+<title>Delta Agent</title>
+<meta name="description" content="Delta Agent is an open, single-binary coding agent for the terminal (C11, zero dependencies): reads and edits files, runs commands, handles git, searches the web, keeps memory and speaks MCP. Windows, Linux and macOS, with the model you choose.">
+<meta name="keywords" content="terminal coding agent, AI coding agent, CLI coding assistant, C11, zero dependencies, agent harness, MCP, Windows, Linux, macOS">
+<meta name="author" content="Delta Agent">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<link rel="canonical" href="https://descz.github.io/delta/">
+<meta name="theme-color" content="#000000">
+
+<!-- Open Graph / Twitter -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Delta Agent">
+<meta property="og:title" content="Delta Agent">
+<meta property="og:description" content="A coding agent that does the work in your terminal: files, shell, git, web, memory and MCP. One C11 binary, zero dependencies, Windows/Linux/macOS.">
+<meta property="og:url" content="https://descz.github.io/delta/">
+<meta property="og:image" content="https://descz.github.io/delta/logo.png">
+<meta property="og:image:alt" content="Delta Agent — white triangle mark on a black rounded square">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Delta Agent">
+<meta name="twitter:description" content="A coding agent that does the work in your terminal. One C11 binary, zero dependencies.">
+<meta name="twitter:image" content="https://descz.github.io/delta/logo.png">
+
+<link rel="icon" href="logo.png" type="image/png">
+<link rel="apple-touch-icon" href="logo.png">
+<link rel="preload" href="fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/spacemono.woff2" as="font" type="font/woff2" crossorigin>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://descz.github.io/delta/#website",
+      "url": "https://descz.github.io/delta/",
+      "name": "Delta Agent",
+      "inLanguage": "en",
+      "publisher": { "@id": "https://descz.github.io/delta/#app" }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://descz.github.io/delta/#app",
+      "name": "Delta Agent",
+      "applicationCategory": "DeveloperApplication",
+      "applicationSubCategory": "Coding agent for the terminal",
+      "operatingSystem": "Windows 10, Windows 11, Linux, macOS",
+      "url": "https://descz.github.io/delta/",
+      "downloadUrl": "https://github.com/descz/delta/releases/latest",
+      "codeRepository": "https://github.com/descz/delta",
+      "license": "https://github.com/descz/delta/blob/main/LICENSE",
+      "description": "Terminal coding agent written in C11 with zero runtime dependencies: reads and edits files, runs commands, handles git, searches the web, keeps memory, and speaks MCP. Windows, Linux and macOS.",
+      "image": "https://descz.github.io/delta/logo.png",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    }
+  ]
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Do I need an API key?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, from a provider you use (OpenAI, Anthropic, OpenRouter, DeepSeek, opencode and others). /login asks for the key once and stores it per provider in auth.json."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it run offline?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The program runs, the model does not. Without network the CLI, sessions and local tools still work, but it cannot talk to the provider."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why C11?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A single executable with no runtime opens instantly and never breaks on a Node upgrade. The TUI, JSON parser, markdown and HTTP client are written in the project."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Windows said the app is unknown, is it safe?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "That is SmartScreen because the binary is not code-signed: choose More info, then Run anyway."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it run on macOS?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The binary has to be built on the machine; there is no reliable cross-compile to Mach-O. The package ships a .command that checks the Xcode Command Line Tools and builds locally."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Was Linux tested on a real desktop?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Partially: build, CLI, TUI, streaming and self-update were verified on Linux. Desktop integration (.desktop entry, GNOME favorites, clipboard) was not exercised on a desktop session."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I use it commercially or publish a fork?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. The license is source-available and non-commercial: it forbids selling, charging for access and cloning. Sharing the unmodified copy, non-profit and with credit, is allowed."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Where does my data go?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Only to the provider you configure. History, keys, memory and skills stay in your local .deltaCore folder."
+      }
+    }
+  ]
+}
+</script>
+
 <style>
   @font-face{font-family:Inter;font-weight:100 900;font-display:swap;src:url(fonts/inter.woff2) format('woff2')}
   @font-face{font-family:'Space Mono';font-weight:400 700;font-display:swap;src:url(fonts/spacemono.woff2) format('woff2')}
@@ -228,8 +357,10 @@
       <p class="kicker reveal">overview</p>
       <h2 class="section-title reveal">One binary. <em>One agent.</em></h2>
       <p class="section-sub reveal">
-        Delta talks to the model and does the actual work: opens the file, edits the block, runs the
-        test, reads the error, fixes it. All in the terminal, with the same mental model as an editor.
+        Delta Agent is a terminal coding agent: one C11 binary with no runtime dependencies, on
+        Windows, Linux and macOS, working with the model you choose. It does the actual work —
+        opens the file, edits the block, runs the test, reads the error, fixes it — in the terminal,
+        with the same mental model as an editor.
       </p>
 
       <div class="grid g3">
