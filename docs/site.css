@@ -166,9 +166,9 @@ footer{padding:44px 0 40px;margin-top:40px}
 /* bloco de codigo: retangulo com faixa branca (titulo preto) e corpo preto (texto branco) */
 .codewrap{border:1px solid var(--muted);border-radius:10px;overflow:hidden;margin:16px 0 20px;background:#000}
 .codehdr{display:flex;align-items:center;justify-content:space-between;gap:12px;
-         background:var(--muted);color:#fff;padding:7px 12px;font:12px var(--mono);font-weight:600;
+         background:var(--muted);color:#000;padding:7px 12px;font:12px var(--mono);font-weight:600;
          letter-spacing:.01em;border:0}
-.codehdr .copybtn{background:none;border:0;color:#fff;font:11.5px var(--mono);cursor:pointer;
+.codehdr .copybtn{background:none;border:0;color:#000;font:11.5px var(--mono);cursor:pointer;
                   opacity:1;padding:0}
 .codehdr .copybtn:hover{text-decoration:underline}
 .codewrap pre{margin:0;padding:14px 14px;background:#000;color:#fff;border:0;
