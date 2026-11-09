@@ -54,6 +54,7 @@ HEADER = """<!doctype html>
       <a href="../#overview">Overview</a>
       <a href="../#features">What it does</a>
       <a href="../install/"{cur_install}>Install</a>
+      <a href="../docs/"{cur_docs}>Docs</a>
       <a href="../faq/"{cur_faq}>FAQ</a>
     </nav>
     <div class="nav-right">
@@ -68,6 +69,7 @@ HEADER = """<!doctype html>
     <a href="../#overview">Overview</a>
     <a href="../#features">What it does</a>
     <a href="../install/">Install</a>
+    <a href="../docs/">Docs</a>
     <a href="../faq/">FAQ</a>
     <a href="https://github.com/descz/delta">GitHub</a>
   </div>
@@ -85,6 +87,7 @@ FOOTER = """
     <div style="font-size:12.5px;color:#5f5f5f">
       <a href="../">home</a> &middot;
       <a href="../install/">install</a> &middot;
+      <a href="../docs/">docs</a> &middot;
       <a href="../faq/">faq</a> &middot;
       <a href="https://github.com/descz/delta">github</a> &middot;
       <a href="https://github.com/descz/delta/releases/latest">releases</a>
@@ -303,6 +306,7 @@ def build(dirname, title, desc, nome, corpo, extra_ld=""):
         extra_ld=extra_ld + ("\n" if extra_ld else ""),
         cur_install=' aria-current="page"' if dirname == "install" else "",
         cur_faq=' aria-current="page"' if dirname == "faq" else "",
+        cur_docs=' aria-current="page"' if dirname == "docs" else "",
     )
     destino = os.path.join(DOCS, dirname)
     os.makedirs(destino, exist_ok=True)
@@ -344,7 +348,104 @@ def faq_ld():
             + '\n</script>')
 
 
+DOCS_HTML = """
+  <section class="section" id="spec" style="padding-top:110px">
+    <div class="container">
+      <p class="kicker reveal">docs</p>
+      <h1 class="hero-title reveal" style="text-align:left;margin:14px 0 10px;max-width:none">The <em>specification</em></h1>
+      <p class="section-sub reveal">What Delta does, exactly: the loop, the limits, the tool set, the
+        session format, the CI surface and the extension contract. The same text ships inside the
+        binary as <code>delta docs</code>.</p>
+
+      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">1. The turn</h2>
+      <p class="section-sub reveal">A turn is <code>prompt → provider (streaming) → tool calls →
+        results → next step</code> until the model answers without asking for a tool. Delta owns the
+        loop and the tools; the model only asks. Ceilings, all overridable by env:</p>
+<pre class="reveal">DELTA_MAX_STEPS      200      steps in one turn
+tool output          200 KB   per tool result (process is killed at the cap)
+context              8 MB     per request; above it, emergency prune (4 outputs x 20 KB)
+empty provider turn  6 nudges after an HTTP 200 with nothing inside, then a real error</pre>
+
+      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">2. Tools</h2>
+      <p class="section-sub reveal"><code>read write edit undo bash ls find grep graph</code> plus the
+        unified families <code>fs shell git web memory code assert agent extend skills mcp
+        extensions</code>, each taking an <code>op</code>. Every write keeps an undo snapshot.
+        <code>bash</code> runs with a timeout, converts Windows OEM output to UTF-8, and is killed
+        when ESC/Ctrl+C asks to stop (exit code 130).</p>
+
+      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">3. Sessions</h2>
+      <p class="section-sub reveal">One JSONL per session, per folder:</p>
+<pre class="reveal">~/.deltaCore/sessions/--&lt;folder-slug&gt;--/&lt;date&gt;_&lt;id&gt;.jsonl
+{"type":"session","version":3,"id":"...","cwd":"..."}
+{"type":"message","message":{"role":"user|assistant|tool", ...}}
+
+delta                 new chat (always)
+delta continue        reopen this folder's last chat, thinking included
+delta export          markdown transcript of the last session
+delta export --json   NDJSON of the same messages</pre>
+
+      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">4. CI surface</h2>
+<pre class="reveal">delta -p "review src/" --json     # NDJSON, one event per line
+{"type":"text","text":"..."}
+{"type":"thinking","text":"..."}
+{"type":"tool_call","name":"bash","args":"{...}"}
+{"type":"tool_result","name":"bash","ok":true,"seconds":1.1,"bytes":10}
+{"type":"turn_end","in":1234,"out":456}
+{"type":"error","message":"..."}
+
+# exit codes: 0 ok · 1 agent error · 124 command timeout</pre>
+
+      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">5. Extensions</h2>
+      <p class="section-sub reveal">One manifest can change several parts of the harness at once.
+        Old one-capability-per-entry files keep working.</p>
+<pre class="reveal">[
+  {
+    "name": "guardrails",
+    "enabled": true,
+    "prompt":   "rules appended to the system prompt",
+    "tools":    [{"name": "x", "arg": "cmd", "desc": "...", "schema": "{...}"}],
+    "commands": [{"name": "deploy", "arg": "optional prompt", "exec": "cmd"}],
+    "hooks":    [{"event": "tool_call", "arg": "cmd"}],
+    "ui":       {"status": "cmd"}     // third footer line
+  }
+]</pre>
+
+      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">6. Hook events</h2>
+      <p class="section-sub reveal">A hook is code, not a prompt: the harness runs it, so a blocked
+        call never happens. Payload arrives as a JSON file path in <code>argv[1]</code>; the reply is
+        JSON on stdout; 5 s timeout, 8 KB cap, fail-open.</p>
+<pre class="reveal">tool_call      {"block":true,"reason":"..."} | {"args":"{...}"}
+tool_result    {"output":"..."} | {"append":"..."}
+user_message   {"block":true,"reason":"..."}      before any request leaves
+turn_start     ignored reply                       before each provider call
+turn_end       ignored reply
+session_start  once per process</pre>
+
+      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">7. Data</h2>
+<pre class="reveal">~/.deltaCore/
+  config.json   auth.json   models.v2.json   memory.json
+  sessions/  skills/  mcps/  extensions/  graphs/  hooks/  themes/  undo/
+  system/prompt.md     re-read every turn (your team rules live here)</pre>
+      <p class="section-sub reveal">Every file is written to a temporary and swapped in one step, so
+        two windows never read half a config.</p>
+
+      <h2 class="section-title reveal" style="font-size:22px;margin:34px 0 6px">8. Known limits</h2>
+      <p class="section-sub reveal">macOS ships source only (no prebuilt binary). Linux desktop
+        integration is untested. Secrets live in <code>auth.json</code> in plain text — the OS keyring
+        is not wired yet. There is no system sandbox: hooks and extensions run with the same
+        permissions as Delta. The UI is not extensible: no in-process plugin, so no widgets, keys or
+        overlays from an extension.</p>
+    </div>
+  </section>
+"""
+
+
 def main():
+    build("docs",
+          "Delta Agent docs — the specification",
+          "Delta Agent specification: the turn loop and its ceilings, the tool set, the session format, "
+          "the NDJSON surface for CI, the extension manifest and the hook events.",
+          "Docs", DOCS_HTML)
     build("install",
           "Install Delta Agent — Windows, Linux, macOS",
           "Install Delta Agent on Windows 10/11, Linux x86_64 or macOS: one file per platform, no admin, "
