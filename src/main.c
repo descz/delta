@@ -1410,13 +1410,17 @@ static void render(void)
         snprintf(stats, sizeof stats, "up %ld  down %ld  %.1f%%/%s",
                  app.agent.total_in, app.agent.total_out, pct, win_txt);
 
-        char right[320];
-        snprintf(right, sizeof right, "(%s) %s • thinking %s",
-                 app.cfg.provider ? app.cfg.provider : "?",
+        /* linha de cima: provedor; linha de baixo: modelo e thinking */
+        char right_prov[96];
+        snprintf(right_prov, sizeof right_prov, "(%s)",
+                 app.cfg.provider ? app.cfg.provider : "?");
+        char right_model[320];
+        snprintf(right_model, sizeof right_model, "%s • thinking %s",
                  app.cfg.model ? app.cfg.model : "no-model",
                  app.cfg.thinking_level ? app.cfg.thinking_level : "off");
 
-        ui_footer(&app.screen, rows - footer_h, cols, &app.theme, pwd, stats, right, NULL);
+        ui_footer(&app.screen, rows - footer_h, cols, &app.theme, pwd, stats,
+                  right_prov, right_model, NULL);
     }
 
     term_present(&app.screen);
@@ -3824,8 +3828,8 @@ static int run_preview(int cols, int rows)
         char pwd[512];
         snprintf(pwd, sizeof pwd, "~/Projects/demo");
         ui_footer(&app.screen, rows - footer_h, cols, &app.theme, pwd,
-                  "up 12.4k  down 3.1k  6.2%/200k (auto)",
-                  "(anthropic) claude-sonnet-4-5 • thinking low", NULL);
+                  "up 12.4k  down 3.1k  6.2%/1M",
+                  "(anthropic)", "claude-sonnet-4-5 • thinking low", NULL);
     }
 
     dump_screen_text(&app.screen);

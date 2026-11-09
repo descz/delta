@@ -107,9 +107,10 @@ int ui_editor(Screen *s, int y, int width, const Theme *t,
               int working, const char *work_msg, int spin_frame, int bash_mode,
               int max_rows, const char **negrito, int n_negrito);
 
-/* Rodape: 2 linhas (pwd + stats / modelo). */
+/* Rodape: 2 linhas — pwd + provedor em cima, stats + modelo/thinking embaixo. */
 int ui_footer(Screen *s, int y, int width, const Theme *t,
-              const char *pwd, const char *stats_left, const char *model_right,
+              const char *pwd, const char *stats_left,
+              const char *provider_right, const char *model_right,
               const char *ext_status);
 
 /* Menu de comandos / seletor de modelos.

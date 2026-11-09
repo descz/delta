@@ -1229,33 +1229,68 @@ int ui_editor(Screen *s, int y, int width, const Theme *t,
 /* ================================================================== */
 /* Rodape                                                              */
 /* ================================================================== */
+/* preenche [de, ate) com espaços: screen_text nao apaga o que sobrou */
+static void footer_fill(Screen *s, int de, int ate, int y, const Style *st)
+{
+    if (de < 0) de = 0;
+    if (ate > s->cols) ate = s->cols;
+    for (int x = de; x < ate; x++) screen_put(s, x, y, ' ', *st);
+}
+
+/* desenha esquerda + direita numa linha; se nao couber, corta a direita */
+static void footer_line(Screen *s, int y, int width, const Style *st,
+                        const char *left, const char *right, int left_ansi)
+{
+    int lw = left ? (int)str_width(left) : 0;
+    int rw = right ? (int)str_width(right) : 0;
+    if (lw > width) lw = width;
+    if (!right || !*right) {
+        if (left && *left) {
+            if (left_ansi) ansi_text(s, 0, y, lw, left, *st);
+            else screen_text(s, 0, y, left, strlen(left), *st, lw);
+        }
+        footer_fill(s, lw, width, y, st);
+        return;
+    }
+    if (lw + 2 + rw <= width) {
+        if (left && *left) {
+            if (left_ansi) ansi_text(s, 0, y, lw, left, *st);
+            else screen_text(s, 0, y, left, strlen(left), *st, lw);
+        }
+        footer_fill(s, lw, width - rw, y, st);          /* limpa o meio */
+        screen_text(s, width - rw, y, right, strlen(right), *st, rw);
+        return;
+    }
+    /* nao cabe: encolhe o lado direito em vez de sumir com ele */
+    int avail = width - lw - 2;
+    if (avail >= 12) {
+        if (left && *left) {
+            if (left_ansi) ansi_text(s, 0, y, lw, left, *st);
+            else screen_text(s, 0, y, left, strlen(left), *st, lw);
+        }
+        footer_fill(s, lw, width - avail, y, st);
+        screen_text(s, width - avail, y, right, strlen(right), *st, avail);
+    } else if (left && *left) {
+        if (left_ansi) ansi_text(s, 0, y, width, left, *st);
+        else screen_text(s, 0, y, left, strlen(left), *st, width);
+        footer_fill(s, lw, width, y, st);
+    } else {
+        footer_fill(s, 0, width, y, st);
+    }
+}
+
 int ui_footer(Screen *s, int y, int width, const Theme *t,
-              const char *pwd, const char *stats_left, const char *model_right,
+              const char *pwd, const char *stats_left,
+              const char *provider_right, const char *model_right,
               const char *ext_status)
 {
     Style st_dim = { tcolor_hex(theme_tok(t, TK_DIM)), COL_DEFAULT, 0 };
 
-    /* linha 1: pwd */
-    screen_text(s, 0, y, pwd, strlen(pwd), st_dim, width);
+    /* linha 1: pwd (esquerda) + provedor (direita) */
+    footer_line(s, y, width, &st_dim, pwd, provider_right, 0);
 
-    /* linha 2: stats (esquerda) + modelo (direita) */
-    int y2 = y + 1;
-    int lw = str_width(stats_left);
-    int rw = str_width(model_right);
-    if (lw > width) lw = width;
-    if (lw + 2 + rw <= width) {
-        ansi_text(s, 0, y2, width, stats_left, st_dim);
-        screen_text(s, width - rw, y2, model_right, strlen(model_right), st_dim, rw);
-    } else {
-        /* nao cabe: trunca o lado direito em vez de sumir com ele */
-        int avail = width - lw - 2;
-        if (avail >= 12) {
-            ansi_text(s, 0, y2, lw, stats_left, st_dim);
-            screen_text(s, width - avail, y2, model_right, strlen(model_right), st_dim, avail);
-        } else {
-            ansi_text(s, 0, y2, width, stats_left, st_dim);
-        }
-    }
+    /* linha 2: tokens/uso (esquerda) + modelo e thinking (direita) */
+    footer_line(s, y + 1, width, &st_dim, stats_left, model_right, 1);
 
     int lines = 2;
     if (ext_status && *ext_status) {
