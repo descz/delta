@@ -33,23 +33,6 @@ SECOES = [
 ]
 
 
-def grupo_html(nome, itens):
-    out = ['      <p class="docnav-h">%s</p>' % nome]
-    for sid, titulo, _ in itens:
-        out.append('      <a href="#%s" data-sec="%s">%s</a>' % (sid, sid, titulo))
-    return "\n".join(out)
-
-
-def sidebar():
-    grupos = {}
-    for sid, titulo, g in SECOES:
-        grupos.setdefault(g, []).append((sid, titulo, g))
-    partes = []
-    for g, itens in grupos.items():
-        partes.append(grupo_html(g, itens))
-    return '<nav class="docnav">\n%s\n    </nav>' % ("\n".join(partes))
-
-
 def toc():
     linhas = ['    <nav class="doctoc">', '      <p class="docnav-h">ON THIS PAGE</p>']
     for sid, titulo, _ in SECOES:
@@ -293,7 +276,7 @@ WRAP_FIM = '''
 
 
 def main():
-    html = HEAD + WRAP_INI + sidebar() + artigo() + toc() + WRAP_FIM
+    html = HEAD + WRAP_INI + artigo() + toc() + WRAP_FIM
     destino = os.path.join(DOCS, "docs")
     os.makedirs(destino, exist_ok=True)
     io.open(os.path.join(destino, "index.html"), "w", encoding="utf-8", newline="\n").write(html)

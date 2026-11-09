@@ -147,16 +147,10 @@ footer{padding:44px 0 40px;margin-top:40px}
   .brand-name{display:none}
 }
 
-/* ---------- /docs: sidebar + artigo + TOC ---------- */
-.docwrap{max-width:1400px;margin:0 auto;padding:96px 24px 40px;display:grid;
-         grid-template-columns:230px minmax(0,1fr) 200px;gap:44px;align-items:start}
-.docnav,.doctoc{position:sticky;top:88px;display:flex;flex-direction:column;gap:2px;
-                font-size:13.5px;color:var(--muted);border-left:1px solid var(--border);padding-left:14px}
-.docnav-h{font:11px var(--mono);letter-spacing:.14em;color:#5f5f5f;margin:16px 0 6px}
-.docnav a,.doctoc a{padding:4px 0;border-radius:4px}
-.docnav a:hover,.doctoc a:hover{color:#fff}
-.docnav a.active,.doctoc a.active{color:#fff}
-.docmain{min-width:0;max-width:760px}
+/* ---------- /docs: artigo + TOC fixo ---------- */
+.docwrap{max-width:1080px;margin:0 auto;padding:96px 24px 40px}
+.doctorwrap{display:block}
+.docmain{min-width:0;max-width:780px}
 .docmain h1{font-size:clamp(30px,4vw,44px);letter-spacing:-.03em;margin:6px 0 14px;line-height:1.1}
 .docmain .lead{color:var(--muted2);font-size:16.5px;line-height:1.65;margin:0 0 26px}
 .docmain h2{font-size:22px;letter-spacing:-.02em;margin:44px 0 10px;padding-top:8px;scroll-margin-top:90px}
@@ -164,6 +158,11 @@ footer{padding:44px 0 40px;margin-top:40px}
 .docmain code{font-family:var(--mono);font-size:.85em;background:#0e0e0e;border:1px solid #1c1c1c;
               border-radius:5px;padding:1px 5px;color:#e6e6e6}
 .docmain a{color:#fff;text-decoration:underline;text-decoration-color:#3a3a3a}
+.docnav-h{font:11px var(--mono);letter-spacing:.14em;color:#5f5f5f;margin:0 0 10px}
+.doctoc{position:fixed;top:96px;right:28px;width:190px;display:flex;flex-direction:column;gap:2px;
+        font-size:13px;color:var(--muted);border-left:1px solid var(--border);padding-left:14px;z-index:5}
+.doctoc a{padding:3px 0}
+.doctoc a:hover,.doctoc a.active{color:#fff}
 .codewrap{border:1px solid #1c1c1c;border-radius:12px;overflow:hidden;margin:14px 0 18px;background:#060606}
 .codehdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;
          border-bottom:1px solid #1c1c1c;font:11.5px var(--mono);color:#7a7a7a;background:#0a0a0a}
@@ -173,12 +172,5 @@ footer{padding:44px 0 40px;margin-top:40px}
 .docmain details.faq{border-top:1px solid var(--border);padding:12px 0}
 .docmain details.faq summary{cursor:pointer;color:#fff;font-weight:500}
 .docmain details.faq p{margin:8px 0 0}
-@media (max-width:1100px){
-  .docwrap{grid-template-columns:210px minmax(0,1fr);gap:32px}
-  .doctoc{display:none}
-}
-@media (max-width:820px){
-  .docwrap{grid-template-columns:1fr;padding-top:84px}
-  .docnav{position:static;flex-direction:row;flex-wrap:wrap;gap:10px;border-left:0;border-top:1px solid var(--border);padding:12px 0 0}
-  .docnav-h{display:none}
-}
+@media (max-width:1180px){ .doctoc{display:none} .docmain{max-width:none} }
+@media (max-width:820px){ .docwrap{padding-top:84px} }
