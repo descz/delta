@@ -713,6 +713,19 @@ static void add_verbosity_rules(Str *s, const char *level)
         "  exception.\n");
 }
 
+/* codigo do config -> nome legivel para o prompt */
+static const char *lang_name(const char *code)
+{
+    if (!code || !*code) return "Brazilian Portuguese";
+    if (str_ieq(code, "pt-br") || str_ieq(code, "pt_BR")) return "Brazilian Portuguese";
+    if (str_ieq(code, "pt")) return "Portuguese";
+    if (str_ieq(code, "en")) return "English";
+    if (str_ieq(code, "es")) return "Spanish";
+    if (str_ieq(code, "zh")) return "Chinese";
+    if (str_ieq(code, "ja")) return "Japanese";
+    return code;
+}
+
 static void build_system_prompt(Agent *a)
 {
     Str s; str_init(&s);
@@ -726,6 +739,11 @@ static void build_system_prompt(Agent *a)
         "- Serious, professional tone by default: no jokes, no small talk, no exclamation marks, "
         "no emojis or emoticons.\n"
         "- Address the user as \"chefe\" at least once per reply, naturally inside a sentence.\n");
+    str_addf(&s,
+        "- Write in the user's language; the default from the config is %s. Orthography counts: "
+        "in Portuguese write “não”, “é”, “próprio”, “versão” with the accents. That holds inside "
+        "quoted or plain-text blocks too — only real code is ASCII.\n",
+        lang_name(a->cfg->language));
     add_verbosity_rules(&s, a->cfg->verbosity);
     str_adds(&s,
         "- Use **bold** for the essential term and *italic* for the nuance or caveat.\n"
