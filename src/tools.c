@@ -34,6 +34,23 @@ static void *g_tick_ud = NULL;
 static int (*g_ask_subagent)(void *, char *, size_t) = NULL;
 static void *g_ask_subagent_ud = NULL;
 
+static int (*g_abort)(void *) = NULL;
+static void *g_abort_ud = NULL;
+
+/* A UI registra aqui "o usuario pediu para parar". O laco de execucao checa a
+   cada volta e mata o processo filho: sem isso o ESC so' valia depois que o
+   comando terminasse. */
+void tools_set_abort(int (*fn)(void *), void *ud)
+{
+    g_abort = fn;
+    g_abort_ud = ud;
+}
+
+static int tools_abortado(void)
+{
+    return g_abort && g_abort(g_abort_ud);
+}
+
 void tools_set_tick(void (*fn)(void *), void *ud)
 {
     g_tick = fn;
@@ -250,9 +267,11 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
     uint64_t deadline = (uint64_t)(timeout_sec > 0 ? timeout_sec * 1000 : 0);
     int timed_out = 0;
     int truncated = 0;
+    int abortado = 0;
     char buf[4096];
     for (;;) {
         tools_tick();
+        if (tools_abortado()) { abortado = 1; break; }
         DWORD avail = 0;
         if (!PeekNamedPipe(rd, NULL, 0, NULL, &avail, NULL)) break;
         if (avail > 0) {
@@ -280,7 +299,10 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
         }
     }
 
-    if (timed_out) {
+    if (abortado) {
+        TerminateProcess(pi.hProcess, 1);
+        str_adds(out, "\n[Delta] interrompido pelo usuario\n");
+    } else if (timed_out) {
         TerminateProcess(pi.hProcess, 1);
         str_addf(out, "\n[Delta] comando interrompido apos %d s\n", timeout_sec);
     }
@@ -297,6 +319,7 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
     CloseHandle(rd);
     *exit_code = (int)code;
     if (timed_out) *exit_code = 124;
+    if (abortado) *exit_code = 130;
     tools_oem_to_utf8(out);   /* saida de programas do Windows vem na pagina OEM */
     return 1;
 }
@@ -321,9 +344,11 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
     int status = 0;
     int timed_out = 0;
     int truncated = 0;
+    int abortado = 0;
     char buf[4096];
     for (;;) {
         tools_tick();
+        if (tools_abortado()) { abortado = 1; break; }
         fd_set rf;
         FD_ZERO(&rf);
         FD_SET(fds[0], &rf);
@@ -341,7 +366,11 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
             if (timeout_sec > 0 && (int)(now_ms() - start) > timeout_sec * 1000) { timed_out = 1; break; }
         }
     }
-    if (timed_out) {
+    if (abortado) {
+        kill(pid, SIGKILL);
+        waitpid(pid, &status, 0);
+        str_adds(out, "\n[Delta] interrompido pelo usuario\n");
+    } else if (timed_out) {
         kill(pid, SIGKILL);
         waitpid(pid, &status, 0);
         str_addf(out, "\n[Delta] comando interrompido apos %d s\n", timeout_sec);
@@ -354,6 +383,7 @@ int tools_exec(const char *cwd, const char *command, int timeout_sec, Str *out, 
                       "Reduza a saida com grep/head ou conte as linhas.\n");
     }
     if (timed_out) *exit_code = 124;
+    if (abortado) *exit_code = 130;
     else if (WIFEXITED(status)) *exit_code = WEXITSTATUS(status);
     else *exit_code = 1;
     return 1;

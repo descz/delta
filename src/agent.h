@@ -59,6 +59,9 @@ typedef struct {
 } AgentCB;
 
 void agent_init(Agent *a, Config *cfg, const char *cwd);
+
+/* Exporta a sessao mais recente da pasta: markdown ou NDJSON (as_json=1). */
+int  session_export(const char *cwd, int as_json, Str *out);
 /* Troca a pasta de trabalho e remonta o prompt de sistema (usado no /projects). */
 void agent_set_cwd(Agent *a, const char *cwd);
 /* Remonta o prompt de sistema (lista de tools/skills pode ter mudado). */

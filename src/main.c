@@ -1,6 +1,7 @@
 /* main.c - Delta Agent: agente de codificacao leve (TUI, derivado do Delta).
  * C11, sem dependencias externas. */
 #include "agent.h"
+#include "spec.h"
 #include "video.h"
 #include "clipboard.h"
 #include "modelsdev.h"
@@ -158,6 +159,7 @@ static const char *const CMD_KEYS[] = {
 
 static const Cmd COMMANDS[] = {
     { "help",      "Mostra os comandos e atalhos",                    NULL,                 0 },
+    { "docs",      "Especificacao do agente (loop, tools, eventos, sessao)", NULL,       0 },
     { "login",     "Escolhe um provedor e salva a chave de API",     NULL,                 0 },
     { "logout",    "Remove a chave do provedor atual",                NULL,                 0 },
     { "models",    "Todos os modelos de todos os provedores",         "<filtro>",           1 },
@@ -1495,6 +1497,13 @@ static void steer_dbg(const char *fmt, ...)
 }
 
 /* Chamado de dentro da ferramenta longa (bash): repinta para o tempo andar. */
+/* o tools_exec pergunta a cada volta: parar? */
+static int app_abortado(void *ud)
+{
+    (void)ud;
+    return app.abort_requested;
+}
+
 static void tools_tick_ui(void *ud)
 {
     (void)ud;
@@ -1691,6 +1700,7 @@ static void ctrlc_durante_turno(void)
         return;
     }
     app.abort_requested = 1;
+    provider_abort_now();
     notify("Interrompido");
 }
 
@@ -2732,6 +2742,13 @@ static void handle_command(const char *raw)
         return;
     }
 
+    if (str_eq(cmd, "/docs")) {
+        if (app.headless) { fputs(DELTA_SPEC, stdout); fflush(stdout); return; }
+        Block *b = block_add(B_INFO);
+        str_adds(&b->text, DELTA_SPEC);
+        render();
+        return;
+    }
     if (str_eq(cmd, "/help")) {
         Block *b = block_add(B_INFO);
         str_adds(&b->text, "Comandos (digite / para ver a lista):\n\n");
@@ -3721,6 +3738,66 @@ static void scroll_wheel(int shift)
 /* ================================================================== */
 /* Modo nao interativo                                                 */
 /* ================================================================== */
+/* -p --json: um evento JSON por linha (NDJSON) para CI/scripts */
+static int g_json_events = 0;
+
+static void json_emit(const char *tipo, const char *campo, const char *valor, size_t n)
+{
+    Str o; str_init(&o);
+    str_adds(&o, "{\"type\":");
+    json_write_string(&o, tipo, strlen(tipo));
+    if (campo) {
+        str_adds(&o, ",\"");
+        str_adds(&o, campo);
+        str_adds(&o, "\":");
+        json_write_string(&o, valor ? valor : "", n);
+    }
+    str_adds(&o, "}\n");
+    fwrite(o.data, 1, o.len, stdout);
+    fflush(stdout);
+    str_free(&o);
+}
+
+static void json_text(void *ud, const char *s, size_t n)
+{
+    (void)ud;
+    if (n) json_emit("text", "text", s, n);
+}
+
+static void json_thinking(void *ud, const char *s, size_t n)
+{
+    (void)ud;
+    if (n) json_emit("thinking", "text", s, n);
+}
+
+static void json_tool_start(void *ud, const char *name, const char *args)
+{
+    (void)ud;
+    Str o; str_init(&o);
+    str_adds(&o, "{\"type\":\"tool_call\",\"name\":");
+    json_write_string(&o, name ? name : "", strlen(name ? name : ""));
+    str_adds(&o, ",\"args\":");
+    json_write_string(&o, args ? args : "", strlen(args ? args : ""));
+    str_adds(&o, "}\n");
+    fwrite(o.data, 1, o.len, stdout);
+    fflush(stdout);
+    str_free(&o);
+}
+
+static void json_tool_end(void *ud, const char *name, const char *output, size_t out_len,
+                          int is_error, double seconds)
+{
+    (void)ud;
+    Str o; str_init(&o);
+    str_adds(&o, "{\"type\":\"tool_result\",\"name\":");
+    json_write_string(&o, name ? name : "", strlen(name ? name : ""));
+    str_addf(&o, ",\"ok\":%s,\"seconds\":%.3f,\"bytes\":%zu}\n",
+             is_error ? "false" : "true", seconds, out_len);
+    fwrite(o.data, 1, o.len, stdout);
+    fflush(stdout);
+    str_free(&o);
+}
+
 static void print_text(void *ud, const char *s, size_t n)
 {
     (void)ud;
@@ -3767,17 +3844,28 @@ static int run_print_mode(const char *prompt)
     Str err; str_init(&err);
     AgentCB cb;
     memset(&cb, 0, sizeof cb);
-    cb.on_text = print_text;
-    cb.on_thinking = print_thinking;
-    cb.on_tool_start = print_tool_start;
+    cb.on_text = g_json_events ? json_text : print_text;
+    cb.on_thinking = g_json_events ? json_thinking : print_thinking;
+    cb.on_tool_start = g_json_events ? json_tool_start : print_tool_start;
+    cb.on_tool_end = g_json_events ? json_tool_end : NULL;
     int ok = agent_run(&app.agent, prompt, &cb, &err);
     free(lido);
     if (!ok) {
-        fprintf(stderr, "pi: %s\n", err.len ? err.data : "erro");
+        if (g_json_events) json_emit("error", "message", err.len ? err.data : "erro", err.len ? err.len : 4);
+        else fprintf(stderr, "pi: %s\n", err.len ? err.data : "erro");
         str_free(&err);
         return 1;
     }
-    printf("\n");
+    if (g_json_events) {
+        Str o; str_init(&o);
+        str_addf(&o, "{\"type\":\"turn_end\",\"in\":%ld,\"out\":%ld}\n",
+                 app.agent.total_in, app.agent.total_out);
+        fwrite(o.data, 1, o.len, stdout);
+        fflush(stdout);
+        str_free(&o);
+    } else {
+        printf("\n");
+    }
     str_free(&err);
     return 0;
 }
@@ -4268,7 +4356,8 @@ static void handle_event(const Event *ev)
                 /* agente trabalhando: ESC interrompe o turno (agora o ESC
                    para o agente; a cascata de limpeza roda depois) */
                 if (app.working) {
-                    app.abort_requested = 1;
+                    app.abort_requested = 1;   /* mata o comando em curso */
+                    provider_abort_now();      /* corta o stream sem esperar chunk */
                     notify("interrompendo...");
                     render();
                     break;
@@ -4831,7 +4920,16 @@ static int run_replay(const char *path, int cols, int rows, int force_offline)
             printf("--- passo %d: %s ---\n", step, arg ? arg : "");
             render();
             dump_screen_plain(&app.screen, stdout);
-            printf("\n");
+    if (g_json_events) {
+        Str o; str_init(&o);
+        str_addf(&o, "{\"type\":\"turn_end\",\"in\":%ld,\"out\":%ld}\n",
+                 app.agent.total_in, app.agent.total_out);
+        fwrite(o.data, 1, o.len, stdout);
+        fflush(stdout);
+        str_free(&o);
+    } else {
+        printf("\n");
+    }
         } else if (str_eq(line, "update-check")) {
             /* teste: mesmo caminho do aviso de versao nova da inicializacao */
             update_boot_notice();
@@ -5190,6 +5288,23 @@ int main(int argc, char **argv)
         } else if (str_eq(a, "--version") || str_eq(a, "-v")) {
             printf("Delta Agent " VERSION "\n");
             return 0;
+        } else if (str_eq(a, "--json")) {
+            g_json_events = 1;
+        } else if (str_eq(a, "export")) {
+            int as_json = 0;
+            for (int k = i + 1; k < argc; k++) if (str_eq(argv[k], "--json")) as_json = 1;
+            char *cwd0 = opt_cwd ? str_dup(opt_cwd) : cwd_get();
+            Str out; str_init(&out);
+            int achou = session_export(cwd0, as_json, &out);
+            free(cwd0);
+            if (!achou) {
+                fprintf(stderr, "delta: nenhuma sessao nesta pasta\n");
+                str_free(&out);
+                return 1;
+            }
+            fwrite(out.data, 1, out.len, stdout);
+            str_free(&out);
+            return 0;
         } else if (str_eq(a, "--tools")) {
             for (const Tool *t = tools_all(); t->name; t++)
                 printf("%-8s %s\n", t->name, t->description);
@@ -5205,7 +5320,10 @@ int main(int argc, char **argv)
             return 0;
         } else if (str_eq(a, "update")) {
             return update_cli(argc - i, argv + i);   /* aceita --check */
-        } else if (str_eq(a, "wiki") || str_eq(a, "docs")) {
+        } else if (str_eq(a, "docs")) {
+            fputs(DELTA_SPEC, stdout);
+            return 0;
+        } else if (str_eq(a, "wiki")) {
             /* a documentacao agora vive so' no site (nao abre mais navegador
                nem servidor local) */
             printf("Documentacao: https://descz.github.io/delta/\n");
@@ -5329,10 +5447,11 @@ int main(int argc, char **argv)
     if (use_altscreen) term_alt_enter();
     term_title_cwd(app.agent.cwd);   /* Δ Agent - <última pasta> */
     tools_set_tick(tools_tick_ui, NULL);
+    tools_set_abort(app_abortado, NULL);   /* ESC/Ctrl+C mata o comando em curso */
     g_tui_ativa = 1;                            /* agora pode perguntar (picker) */
     provider_set_wait_tick(provider_tick_ui, NULL);
-    if (app.cfg.api_key) notify("pronto (%s/%s)", app.cfg.provider, app.cfg.model);
-    else notify("sem API key: use /login <chave>");
+    /* sem aviso de "pronto" no boot: o rodape ja mostra provedor e modelo */
+    if (!app.cfg.api_key) notify("sem API key: use /login <chave>");
 
     {
         int cols = 0, rows = 0;

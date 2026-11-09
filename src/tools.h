@@ -29,6 +29,7 @@ void        tool_result_free(ToolResult *r);
 /* Chamado mentre uma ferramenta longa roda (bash): deixa a TUI redesenhar
    o tempo decorrido. Pode ser NULL. */
 void        tools_set_tick(void (*fn)(void *), void *ud);
+void  tools_set_abort(int (*fn)(void *), void *ud);   /* 1 = parar: mata o filho */
 
 /* Pergunta (na TUI) qual modelo usar nos subagentes. Devolve 1 e escreve o
    nome em `out`. Sem TUI/em -p, devolve o padrao configurado (ou 0). */

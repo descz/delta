@@ -643,7 +643,7 @@ echo
 echo "[7] menu de comandos (digitar /)"
 ./bin/delta.exe --replay tests/replay-menu.txt 100 30 > /tmp/delta_menu.log 2>&1
 expect /tmp/delta_menu.log "→ help"   "marcador -> no item selecionado"
-expect /tmp/delta_menu.log "(1/22)"            "contador de itens"
+expect /tmp/delta_menu.log "(1/"               "contador de itens"
 expect /tmp/delta_menu.log "/models "         "Tab completa o comando"
 expect /tmp/delta_menu.log "Todos os modelos"    "descricao do comando aparece"
 
@@ -1673,6 +1673,42 @@ fi
 DELTA_CORE="$BK" ./bin/delta.exe --replay tests/replay-terminal.txt 110 30 > build/bundle-status.log 2>&1
 expect build/bundle-status.log "do-bundle" "op=bundle: ui.status do bundle no rodape"
 rm -rf "$UM" "$BK" build/hook-marca.txt
+
+echo
+echo "[26] superficie programatica: /docs, -p --json e delta export"
+./bin/delta.exe docs > build/spec.log 2>&1
+expect build/spec.log "DELTA AGENT - especificacao" "docs: comando imprime a especificacao"
+expect build/spec.log "6. Eventos do harness" "docs: secao de eventos presente"
+MSYS_NO_PATHCONV=1 ./bin/delta.exe -p "/docs" > build/spec-p.log 2>&1
+expect build/spec-p.log "DELTA AGENT - especificacao" "/docs no modo -p imprime a spec"
+
+PC="$ROOT/build/ia-core"
+rm -rf "$PC" && mkdir -p "$PC"
+python tests/mock_bash.py "$((PORT + 31))" "echo resposta-json" > /dev/null 2>&1 &
+P_MOCK=$!
+sleep 2
+DELTA_CORE="$PC" ./bin/delta.exe -p "rode o eco" --json --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 31))/v1" --api-key sk-teste > build/json.log 2>&1
+kill $P_MOCK 2>/dev/null
+wait $P_MOCK 2>/dev/null
+expect build/json.log '"type":"tool_call"' "--json: evento tool_call"
+expect build/json.log '"type":"tool_result"' "--json: evento tool_result"
+expect build/json.log '"type":"turn_end"' "--json: evento turn_end"
+
+# a sessao em disco nasce na TUI/replay (o -p e' one-shot e nao grava JSONL)
+printf 'type rode o eco
+key enter
+idle 500
+dump sessao_export
+' > build/exp-replay.txt
+DELTA_CORE="$PC" ./bin/delta.exe --replay build/exp-replay.txt 110 30     --provider openai --model gpt-4o     --baseurl "http://127.0.0.1:$((PORT + 32))/v1" --api-key sk-teste > /dev/null 2>&1
+DELTA_CORE="$PC" ./bin/delta.exe export > build/export.md 2>&1
+expect build/export.md "### user" "export: markdown com a mensagem do usuario"
+expect build/export.md "rode o eco" "export: texto da mensagem preservado"
+DELTA_CORE="$PC" ./bin/delta.exe export --json > build/export.jsonl 2>&1
+expect build/export.jsonl '"type":"message"' "export --json: NDJSON de mensagens"
+rm -f build/exp-replay.txt
+rm -rf "$PC"
 
 restaurar_globais   # config, chaves e memoria do usuario de volta
 

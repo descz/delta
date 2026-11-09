@@ -432,6 +432,11 @@ static void stream_state_free(StreamState *st)
 
 int provider_stream_abort = 0;
 
+/* Corte imediato pedido pela UI (ESC/Ctrl+C): a bomba de rede e o laco do
+   parser checam essa flag a cada leitura, entao o turno morre no proximo
+   pedaco em vez de esperar o stream terminar. */
+void provider_abort_now(void) { provider_stream_abort = 1; }
+
 static void (*g_wait_tick)(void *) = NULL;
 static void *g_wait_ud = NULL;
 

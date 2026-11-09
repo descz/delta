@@ -64,6 +64,9 @@ typedef struct {
 typedef void (*DeltaCB)(void *ud, int kind, const char *utf8, size_t len);
 
 /* Executa um turno. Retorna 1 em sucesso; em erro, `err` recebe a mensagem. */
+/* corta o stream em andamento (ESC/Ctrl+C) */
+void provider_abort_now(void);
+
 int provider_run(const Provider *p, const MsgList *msgs, const char *system_prompt,
                  Turn *out, DeltaCB cb, void *ud, Str *err);
 

@@ -1262,3 +1262,90 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
     if (err) str_addf(err, "limite de passos (%d) atingido - diga continue para seguir", MAX_STEPS);
     return 0;
 }
+
+/* Exporta a sessao mais recente desta pasta como markdown (ou NDJSON com
+   as_json=1). Nao depende do agente: le o JSONL e traduz. */
+int session_export(const char *cwd, int as_json, Str *out)
+{
+    char *root = sessions_root();
+    char *slug = cwd_slug(cwd);
+    Str sl; str_init(&sl);
+    str_adds(&sl, "--");
+    str_adds(&sl, slug);
+    str_adds(&sl, "--");
+    char *dir = path_join(root, sl.data);
+    str_free(&sl);
+    size_t n = 0;
+    char **arqs = dir_list(dir, &n);
+    if (!arqs) {
+        free(dir); free(slug); free(root);
+        return 0;
+    }
+
+    /* o nome comeca com a data ISO: o maior nome e' a sessao mais nova */
+    char *escolha = NULL;
+    for (size_t i = 0; i < n; i++) {
+        size_t l = strlen(arqs[i]);
+        if (l < 6 || !str_ends(arqs[i], ".jsonl")) continue;
+        if (!escolha || strcmp(arqs[i], escolha) > 0) escolha = arqs[i];
+    }
+
+    int achou = 0;
+    if (escolha) {
+        char *caminho = path_join(dir, escolha);
+        size_t len = 0;
+        char *txt = file_read(caminho, &len);
+        if (txt) {
+            achou = 1;
+            if (!as_json) str_adds(out, "# Delta Agent - sessao\n\n");
+            char *linha = txt;
+            while (linha && *linha) {
+                char *fim = strchr(linha, '\n');
+                if (fim) *fim = 0;
+                JValue *v = json_parse_cstr(linha);
+                if (v) {
+                    const char *tipo = json_str(json_get(v, "type"));
+                    JValue *m = json_get(v, "message");
+                    if (str_eq(tipo, "session") && !as_json) {
+                        const char *id = json_str(json_get(v, "id"));
+                        const char *c = json_str(json_get(v, "cwd"));
+                        str_addf(out, "- id: `%s`\n- cwd: `%s`\n\n", id, c);
+                    } else if (m) {
+                        const char *role = json_str(json_get(m, "role"));
+                        const char *content = json_str(json_get(m, "content"));
+                        const char *tool = json_str(json_get(m, "tool_name"));
+                        if (as_json) {
+                            str_adds(out, "{\"type\":\"message\",\"role\":");
+                            json_write_string(out, role, strlen(role));
+                            str_adds(out, ",\"content\":");
+                            json_write_string(out, content, strlen(content));
+                            if (*tool) {
+                                str_adds(out, ",\"tool\":");
+                                json_write_string(out, tool, strlen(tool));
+                            }
+                            str_adds(out, "}\n");
+                        } else if (str_eq(role, "tool")) {
+                            str_addf(out, "### tool `%s`\n\n```text\n%s\n```\n\n", tool, content);
+                        } else if (str_eq(role, "assistant")) {
+                            str_adds(out, "### assistant\n\n");
+                            str_adds(out, content);
+                            str_adds(out, "\n\n");
+                        } else if (str_eq(role, "user")) {
+                            str_adds(out, "### user\n\n");
+                            str_adds(out, content);
+                            str_adds(out, "\n\n");
+                        }
+                    }
+                    json_free(v);
+                }
+                if (!fim) break;
+                linha = fim + 1;
+            }
+            free(txt);
+        }
+        free(caminho);
+    }
+    dir_list_free(arqs, n);
+    free(dir); free(slug); free(root);
+    return achou;
+}
