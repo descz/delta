@@ -216,7 +216,7 @@ HEAD = '''<!doctype html>
 <link rel="icon" href="../icon-96.png" type="image/png" sizes="96x96">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png" sizes="180x180">
 <link rel="preload" href="../fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../site.css?v=20261109o">
+<link rel="stylesheet" href="../site.css?v=20261109p">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
  {"@type":"ListItem","position":1,"name":"Delta Agent","item":"https://descz.github.io/delta/"},
@@ -265,14 +265,28 @@ WRAP_FIM = '''
   </div>
 </footer>
 
-<script src="../site.js?v=20261109o" defer></script>
+<script src="../site.js?v=20261109p" defer></script>
 </body>
 </html>
 '''
 
 
+def split_paras(html):
+    """Quebra <p> com mais de duas frases em paragrafos menores (uma ideia cada)."""
+    def repl(m):
+        inner = m.group(1).strip()
+        if not inner or '<pre' in inner:
+            return m.group(0)
+        frases = re.split(r'(?<=[.!?])\s+', inner)
+        if len(frases) <= 2:
+            return m.group(0)
+        partes = [' '.join(frases[i:i + 2]) for i in range(0, len(frases), 2)]
+        return '\n'.join('<p>%s</p>' % p for p in partes)
+    return re.sub(r'<p>(.*?)</p>', repl, html, flags=re.S)
+
+
 def main():
-    html = HEAD + WRAP_INI + artigo() + toc() + WRAP_FIM
+    html = HEAD + WRAP_INI + split_paras(artigo()) + toc() + WRAP_FIM
     destino = os.path.join(DOCS, "docs")
     os.makedirs(destino, exist_ok=True)
     io.open(os.path.join(destino, "index.html"), "w", encoding="utf-8", newline="\n").write(html)
