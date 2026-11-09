@@ -64,7 +64,7 @@
 </script>
 
 
-<link rel="stylesheet" href="site.css?v=20261109i">
+<link rel="stylesheet" href="site.css?v=20261109j">
 </head>
 <body>
 
@@ -139,26 +139,10 @@
         with the same mental model as an editor.
       </p>
 
-      <div class="grid g3">
-        <div class="card reveal">
-          <div class="num">01</div>
-          <h3>It executes, not just answers</h3>
-          <p>Reads and edits files by exact blocks, runs commands with timeouts, keeps background jobs,
-             shows diffs and commits. The result appears in the chat, not in another tab.</p>
-        </div>
-        <div class="card reveal">
-          <div class="num">02</div>
-          <h3>It remembers</h3>
-          <p>Sessions per folder in JSONL: <code>delta</code> starts a new chat, <code>delta continue</code>
-             reopens that folder's last one with the full history and the model's thinking. Skills become
-             <code>SKILL.md</code>; durable facts go to memory.</p>
-        </div>
-        <div class="card reveal">
-          <div class="num">03</div>
-          <h3>You steer mid-turn</h3>
-          <p>Type while it works. The message joins the queue and it <b>cuts the reply</b> at the next
-             chunk to read it — no waiting for the turn to end.</p>
-        </div>
+      <div class="reveal" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:4px">
+        <a class="btn btn-outline" href="docs/">Read the docs &mdash; loop, tools, sessions, CI, extensions</a>
+        <a class="btn btn-outline" href="install/">Install</a>
+      </div>
       </div>
     </div>
   </section>
@@ -388,6 +372,6 @@ delta wiki               <span class="c"># prints the documentation address</spa
   </div>
 </footer>
 
-<script src="site.js?v=20261109i" defer></script>
+<script src="site.js?v=20261109j" defer></script>
 </body>
 </html>

@@ -216,7 +216,7 @@ HEAD = '''<!doctype html>
 <link rel="icon" href="../icon-96.png" type="image/png" sizes="96x96">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png" sizes="180x180">
 <link rel="preload" href="../fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../site.css?v=20261109i">
+<link rel="stylesheet" href="../site.css?v=20261109j">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
  {"@type":"ListItem","position":1,"name":"Delta Agent","item":"https://descz.github.io/delta/"},
@@ -265,7 +265,7 @@ WRAP_FIM = '''
   </div>
 </footer>
 
-<script src="../site.js?v=20261109i" defer></script>
+<script src="../site.js?v=20261109j" defer></script>
 </body>
 </html>
 '''
