@@ -20,7 +20,7 @@
 <link rel="icon" href="../icon-96.png" type="image/png" sizes="96x96">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png" sizes="180x180">
 <link rel="preload" href="../fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../site.css?v=20261109b">
+<link rel="stylesheet" href="../site.css?v=20261109c">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -75,119 +75,79 @@
 
 <main id="top">
 
-  <section class="section" id="requirements" style="padding-top:110px">
+  <section class="section" id="install" style="padding-top:110px">
     <div class="container">
       <p class="kicker reveal">install</p>
       <h1 class="hero-title reveal" style="text-align:left;margin:14px 0 10px;max-width:none">Install <em>Delta Agent</em></h1>
-      <p class="section-sub reveal">
-        One file per platform. The download <b>is</b> the installer: it asks for the data folder,
-        copies the binary, puts <code>delta</code> on your PATH and creates the shortcut. No admin,
-        no Node, no Python, no package manager.
+      <p class="section-sub reveal" style="margin:0 0 22px">One file per platform. The download is the
+        installer: it asks for the data folder, copies the binary, puts <code>delta</code> on your PATH
+        and creates the shortcut. No admin, no Node, no Python.</p>
+      <p class="reveal" style="margin:0 0 6px">
+        <a class="btn btn-white" href="https://github.com/descz/delta/releases/latest">Download the latest release</a>
       </p>
 
-      <div class="grid g3" style="margin-top:26px">
-        <div class="card os-card reveal"><h3>Windows 10/11 <span class="tag">x64</span></h3>
-          <p><code>Delta.exe</code> &mdash; 809 KB, program and installer in one file.
-             The reference platform: 353 automated checks.</p></div>
-        <div class="card os-card reveal"><h3>Linux <span class="tag">x86_64</span></h3>
-          <p><code>delta-linux-x86_64.run</code> &mdash; self-extracting. Needs <code>curl</code> at
-             runtime to reach the provider.</p></div>
-        <div class="card os-card reveal"><h3>macOS 11+ <span class="tag">source</span></h3>
-          <p>Source package with <code>INSTALAR-MAC.command</code>: builds on your machine with the
-             Xcode Command Line Tools.</p></div>
+      <div class="osgrid" style="margin-top:30px">
+        <div class="oscard reveal">
+          <svg class="osicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5.4l7.6-1v7.1H3V5.4zm8.6-1.1L21 3v8.5h-9.4V4.3zM3 12.5h7.6v7.1L3 18.6v-6.1zm8.6 0H21V21l-9.4-1.3v-7.2z"/></svg>
+          <h3>Windows <span class="tag">x64</span></h3>
+          <p>Windows 10/11. Reference platform: 370 automated checks.</p>
+          <a class="btn btn-outline btn-sm" href="https://github.com/descz/delta/releases/latest/download/Delta.exe">Download Delta.exe</a>
+        </div>
+        <div class="oscard reveal">
+          <svg class="osicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2c-1.2 0-2 .8-2 2 0 .6.2 1.1.5 1.5C8.6 6.2 7 8.4 7 11.3c0 1.2.2 2.3.6 3.3-.8.4-1.6 1.1-1.6 2.1 0 .5.2 1 .5 1.4-.3.5-.5 1.1-.5 1.7 0 .9.6 1.6 1.4 1.9.5.2 1.1.3 1.8.3.9 0 1.7-.2 2.3-.5.5.2 1.2.3 1.9.3 1.9 0 3.6-.8 3.6-2.2 0-.6-.2-1.1-.5-1.6.3-.4.5-.9.5-1.4 0-1-.8-1.7-1.6-2.1.4-1 .6-2.1.6-3.3 0-2.9-1.6-5.1-3.5-5.8.3-.4.5-.9.5-1.5 0-1.2-.8-2-2-2zm-1.4 3.1c.4 0 .7.4.7 1s-.3 1-.7 1-.7-.4-.7-1 .3-1 .7-1zm2.8 0c.4 0 .7.4.7 1s-.3 1-.7 1-.7-.4-.7-1 .3-1 .7-1zM12 7.2l1.6 1.6-1.6.9-1.6-.9L12 7.2z"/></svg>
+          <h3>Linux <span class="tag">x86_64</span></h3>
+          <p>Self-extracting installer. Needs <code>curl</code> at runtime.</p>
+          <a class="btn btn-outline btn-sm" href="https://github.com/descz/delta/releases/latest/download/delta-linux-x86_64.run">Download .run</a>
+        </div>
+        <div class="oscard reveal">
+          <svg class="osicon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.5 12.6c0-1.7 1.4-2.5 1.5-2.6-.8-1.2-2.1-1.4-2.6-1.4-1.1-.1-2.1.6-2.7.6s-1.4-.6-2.3-.6c-1.2 0-2.3.7-2.9 1.8-1.2 2.1-.3 5.2.9 6.9.6.8 1.3 1.8 2.2 1.7.9 0 1.2-.6 2.3-.6s1.4.6 2.3.6c1 0 1.6-.9 2.2-1.7.7-1 1-2 1-2.1 0 0-1.9-.7-1.9-2.6zM14.7 7.3c.5-.6.8-1.4.7-2.3-.7 0-1.6.5-2.1 1.1-.5.5-.9 1.4-.8 2.2.8.1 1.6-.4 2.2-1z"/></svg>
+          <h3>macOS <span class="tag">source</span></h3>
+          <p>macOS 11+. Source package; builds on your machine.</p>
+          <a class="btn btn-outline btn-sm" href="https://github.com/descz/delta/releases/latest/download/delta-macos-source.zip">Download source</a>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="section" id="windows">
+  <section class="section" id="install-how">
     <div class="container">
-      <h2 class="section-title reveal">Windows 10/11 <em>x64</em></h2>
-      <p class="section-sub reveal">Download <code>Delta.exe</code> (or
-        <code>Delta-windows-x64.zip</code>) from
-        <a href="https://github.com/descz/delta/releases/latest">Releases</a> and double click.</p>
-      <ol class="reveal" style="color:var(--muted2);line-height:1.9;max-width:70ch">
-        <li>Double click <code>Delta.exe</code>. A small install window opens &mdash; an HTML popup
-            served by the executable itself, with no browser tab left behind.</li>
-        <li>Pick where the data lives (default <code>C:\Users\&lt;you&gt;\.deltaCore</code>).</li>
-        <li>The installer copies the binary, adds <code>delta</code> to your user <code>PATH</code>
-            and creates the shortcut. No administrator rights.</li>
-        <li>Open a <b>new</b> terminal and run <code>delta</code>.</li>
-      </ol>
-<pre class="reveal"><span class="c"># SmartScreen on the first run</span>
-"Windows protected your PC" -&gt; More info -&gt; Run anyway
-<span class="c"># the binary is not code-signed; that is the whole story, nothing else</span></pre>
-      <p class="section-sub reveal">The installer reopens at any time with <code>delta --setup</code>.
-        To uninstall: delete the data folder and remove <code>delta</code> from <code>PATH</code>
-        &mdash; there is no registry entry and no service.</p>
-    </div>
-  </section>
+      <h2 class="section-title reveal">How each one <em>installs</em></h2>
 
-  <section class="section" id="linux">
-    <div class="container">
-      <h2 class="section-title reveal">Linux <em>x86_64</em></h2>
-      <p class="section-sub reveal">Two shapes: the self-extracting installer or the plain tarball.</p>
-<pre class="reveal"><span class="c"># self-extracting installer (installs and puts delta on PATH)</span>
-chmod +x delta-linux-x86_64.run &amp;&amp; ./delta-linux-x86_64.run
+      <h3 class="reveal" style="margin:22px 0 6px">Windows 10/11</h3>
+      <p class="section-sub reveal" style="margin:0">Double click <code>Delta.exe</code>: a small install
+        window opens (HTML popup served by the executable), you pick the data folder and it is done.
+        SmartScreen warns once because the binary is not code-signed &mdash; <i>More info</i> &rarr;
+        <i>Run anyway</i>.</p>
 
-<span class="c"># or the tarball</span>
-tar xzf delta-linux-x86_64.tar.gz &amp;&amp; cd delta-linux-x86_64 &amp;&amp; ./install.sh
+      <h3 class="reveal" style="margin:26px 0 6px">Linux</h3>
+<pre class="reveal">chmod +x delta-linux-x86_64.run &amp;&amp; ./delta-linux-x86_64.run
+<span class="c"># or: tar xzf delta-linux-x86_64.tar.gz &amp;&amp; cd delta-linux-x86_64 &amp;&amp; ./install.sh</span></pre>
 
-<span class="c"># check</span>
-delta --version</pre>
-      <p class="section-sub reveal">Verified on WSL with gcc 13: build, CLI, TUI, real streaming and
-        self-update. The desktop layer &mdash; <code>.desktop</code> entry, GNOME favorites and the
-        clipboard through <code>wl-copy</code>/<code>xclip</code> &mdash; was not exercised on a
-        desktop session, so treat that part as untested. <code>curl</code> must be installed.</p>
-    </div>
-  </section>
+      <h3 class="reveal" style="margin:26px 0 6px">macOS</h3>
+<pre class="reveal">xcode-select --install
+unzip delta-macos-source.zip &amp;&amp; cd delta-macos-source &amp;&amp; ./INSTALAR-MAC.command</pre>
 
-  <section class="section" id="macos">
-    <div class="container">
-      <h2 class="section-title reveal">macOS 11+ <em>source</em></h2>
-      <p class="section-sub reveal">There is no prebuilt Mach-O: the package ships the source and a
-        script that builds it locally.</p>
-<pre class="reveal">xcode-select --install          <span class="c"># free, once</span>
-unzip delta-macos-source.zip
-cd delta-macos-source &amp;&amp; ./INSTALAR-MAC.command</pre>
-      <p class="section-sub reveal">The script checks the Xcode Command Line Tools, builds and opens
-        the installer. The native parts (<code>osascript</code>, <code>.app</code>, Dock) were written
-        but never executed by the author &mdash; no Mac available. This is the least supported of the
-        three paths.</p>
-    </div>
-  </section>
-
-  <section class="section" id="first-run">
-    <div class="container">
-      <h2 class="section-title reveal">First <em>run</em></h2>
+      <h3 class="reveal" style="margin:26px 0 6px">First run</h3>
 <pre class="reveal">delta                    <span class="c"># opens the CLI (always a new chat)</span>
 /login                   <span class="c"># pick the provider, paste the key</span>
-/projects ~/dev/my-app   <span class="c"># where it works (saved for next time)</span>
-read src/main.c and explain the flow
-
-delta continue           <span class="c"># reopens this folder's last chat, thinking included</span>
-delta update --check     <span class="c"># only reports; `delta update` installs</span></pre>
-      <p class="section-sub reveal">Keys are stored per provider in <code>auth.json</code> inside the
-        data folder. Nothing leaves the machine except the requests to the provider you configured.</p>
+/projects ~/dev/my-app   <span class="c"># where it works (saved)</span>
+delta continue           <span class="c"># reopens this folder's last chat</span>
+delta update             <span class="c"># installs the newest release</span></pre>
     </div>
   </section>
 
-  <section class="section" id="data">
+  <section class="section" id="install-notes">
     <div class="container">
-      <h2 class="section-title reveal">Where your data <em>lives</em></h2>
-      <p class="section-sub reveal">One folder, chosen at install time (default
-        <code>~/.deltaCore</code>). Every file is written to a temporary and swapped in one step, so a
-        second window never reads half a config.</p>
-<pre class="reveal">.deltaCore/
-  config.json        provider, model, language, thinking, projectDir
-  auth.json          one API key per provider
-  sessions/          --&lt;folder-slug&gt;--/&lt;date&gt;_&lt;id&gt;.jsonl
-  skills/            &lt;name&gt;/SKILL.md
-  mcps/ extensions/  servers and pluggable extensions (tool, skill, command, mcp, hook)
-  memory.json        durable facts, searchable
-  graphs/            project graph cache (symbols and imports)
-  system/prompt.md   team rules, re-read every turn</pre>
-      <p class="section-sub reveal">Backup is copying the folder. Migration is the same: point the
-        installer at the new path.</p>
+      <h2 class="section-title reveal">Where each platform <em>stands</em></h2>
+      <p class="section-sub reveal" style="max-width:78ch">Linux builds and runs: build, CLI, TUI, real
+        streaming and self-update were verified on WSL with gcc 13. The desktop layer &mdash;
+        <code>.desktop</code> entry, GNOME favorites and clipboard through <code>wl-copy</code>/<code>xclip</code>
+        &mdash; was never exercised on a real desktop session, and <code>curl</code> is required at
+        runtime.</p>
+      <p class="section-sub reveal" style="max-width:78ch">macOS ships source only: there is no prebuilt
+        Mach-O because there is no reliable cross-compile. The package builds locally with the Xcode
+        Command Line Tools, but the native parts (<code>osascript</code>, <code>.app</code>, Dock) were
+        written and never executed by the author &mdash; expect to fix things.</p>
     </div>
   </section>
 
@@ -206,6 +166,6 @@ delta update --check     <span class="c"># only reports; `delta update` installs
   </div>
 </footer>
 
-<script src="../site.js?v=20261109b" defer></script>
+<script src="../site.js?v=20261109c" defer></script>
 </body>
 </html>
