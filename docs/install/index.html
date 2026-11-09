@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Install Delta Agent — Windows, Linux, macOS</title>
+<meta name="description" content="Install Delta Agent on Windows 10/11, Linux x86_64 or macOS: one file per platform, no admin, no Node, no Python. Step by step, PATH, first run, update and data folder.">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://descz.github.io/delta/install/">
+<meta name="theme-color" content="#000000">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Delta Agent">
+<meta property="og:title" content="Install Delta Agent — Windows, Linux, macOS">
+<meta property="og:description" content="Install Delta Agent on Windows 10/11, Linux x86_64 or macOS: one file per platform, no admin, no Node, no Python. Step by step, PATH, first run, update and data folder.">
+<meta property="og:url" content="https://descz.github.io/delta/install/">
+<meta property="og:image" content="https://descz.github.io/delta/logo-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://descz.github.io/delta/logo-512.png">
+<link rel="icon" href="../icon-96.png" type="image/png" sizes="96x96">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png" sizes="180x180">
+<link rel="preload" href="../fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../site.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Delta Agent",
+      "item": "https://descz.github.io/delta/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Install",
+      "item": "https://descz.github.io/delta/install/"
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<header class="navbar" id="navbar">
+  <div class="nav-inner">
+    <a href="../" class="brand" aria-label="Delta Agent">
+      <img class="brand-mark" src="../icon-96.png" alt="" width="26" height="26" decoding="async">
+      <span class="brand-name">Delta <span class="brand-dim">Agent</span></span>
+    </a>
+    <nav class="nav-links">
+      <a href="../#overview">Overview</a>
+      <a href="../#features">What it does</a>
+      <a href="../install/" aria-current="page">Install</a>
+      <a href="../faq/">FAQ</a>
+    </nav>
+    <div class="nav-right">
+      <a href="https://github.com/descz/delta/releases/latest" class="btn btn-white btn-sm">Download</a>
+      <a class="gh" href="https://github.com/descz/delta" aria-label="Delta Agent on GitHub" title="GitHub">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      </a>
+      <button class="nav-toggle" id="navToggle" aria-label="Open menu"><span></span><span></span><span></span></button>
+    </div>
+  </div>
+  <div class="nav-mobile" id="navMobile">
+    <a href="../#overview">Overview</a>
+    <a href="../#features">What it does</a>
+    <a href="../install/">Install</a>
+    <a href="../faq/">FAQ</a>
+    <a href="https://github.com/descz/delta">GitHub</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="section" id="requirements" style="padding-top:110px">
+    <div class="container">
+      <p class="kicker reveal">install</p>
+      <h1 class="hero-title reveal" style="text-align:left;margin:14px 0 10px;max-width:none">Install <em>Delta Agent</em></h1>
+      <p class="section-sub reveal">
+        One file per platform. The download <b>is</b> the installer: it asks for the data folder,
+        copies the binary, puts <code>delta</code> on your PATH and creates the shortcut. No admin,
+        no Node, no Python, no package manager.
+      </p>
+
+      <div class="grid g3" style="margin-top:26px">
+        <div class="card os-card reveal"><h3>Windows 10/11 <span class="tag">x64</span></h3>
+          <p><code>Delta.exe</code> &mdash; 809 KB, program and installer in one file.
+             The reference platform: 353 automated checks.</p></div>
+        <div class="card os-card reveal"><h3>Linux <span class="tag">x86_64</span></h3>
+          <p><code>delta-linux-x86_64.run</code> &mdash; self-extracting. Needs <code>curl</code> at
+             runtime to reach the provider.</p></div>
+        <div class="card os-card reveal"><h3>macOS 11+ <span class="tag">source</span></h3>
+          <p>Source package with <code>INSTALAR-MAC.command</code>: builds on your machine with the
+             Xcode Command Line Tools.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="windows">
+    <div class="container">
+      <h2 class="section-title reveal">Windows 10/11 <em>x64</em></h2>
+      <p class="section-sub reveal">Download <code>Delta.exe</code> (or
+        <code>Delta-windows-x64.zip</code>) from
+        <a href="https://github.com/descz/delta/releases/latest">Releases</a> and double click.</p>
+      <ol class="reveal" style="color:var(--muted2);line-height:1.9;max-width:70ch">
+        <li>Double click <code>Delta.exe</code>. A small install window opens &mdash; an HTML popup
+            served by the executable itself, with no browser tab left behind.</li>
+        <li>Pick where the data lives (default <code>C:\Users\&lt;you&gt;\.deltaCore</code>).</li>
+        <li>The installer copies the binary, adds <code>delta</code> to your user <code>PATH</code>
+            and creates the shortcut. No administrator rights.</li>
+        <li>Open a <b>new</b> terminal and run <code>delta</code>.</li>
+      </ol>
+<pre class="reveal"><span class="c"># SmartScreen on the first run</span>
+"Windows protected your PC" -&gt; More info -&gt; Run anyway
+<span class="c"># the binary is not code-signed; that is the whole story, nothing else</span></pre>
+      <p class="section-sub reveal">The installer reopens at any time with <code>delta --setup</code>.
+        To uninstall: delete the data folder and remove <code>delta</code> from <code>PATH</code>
+        &mdash; there is no registry entry and no service.</p>
+    </div>
+  </section>
+
+  <section class="section" id="linux">
+    <div class="container">
+      <h2 class="section-title reveal">Linux <em>x86_64</em></h2>
+      <p class="section-sub reveal">Two shapes: the self-extracting installer or the plain tarball.</p>
+<pre class="reveal"><span class="c"># self-extracting installer (installs and puts delta on PATH)</span>
+chmod +x delta-linux-x86_64.run &amp;&amp; ./delta-linux-x86_64.run
+
+<span class="c"># or the tarball</span>
+tar xzf delta-linux-x86_64.tar.gz &amp;&amp; cd delta-linux-x86_64 &amp;&amp; ./install.sh
+
+<span class="c"># check</span>
+delta --version</pre>
+      <p class="section-sub reveal">Verified on WSL with gcc 13: build, CLI, TUI, real streaming and
+        self-update. The desktop layer &mdash; <code>.desktop</code> entry, GNOME favorites and the
+        clipboard through <code>wl-copy</code>/<code>xclip</code> &mdash; was not exercised on a
+        desktop session, so treat that part as untested. <code>curl</code> must be installed.</p>
+    </div>
+  </section>
+
+  <section class="section" id="macos">
+    <div class="container">
+      <h2 class="section-title reveal">macOS 11+ <em>source</em></h2>
+      <p class="section-sub reveal">There is no prebuilt Mach-O: the package ships the source and a
+        script that builds it locally.</p>
+<pre class="reveal">xcode-select --install          <span class="c"># free, once</span>
+unzip delta-macos-source.zip
+cd delta-macos-source &amp;&amp; ./INSTALAR-MAC.command</pre>
+      <p class="section-sub reveal">The script checks the Xcode Command Line Tools, builds and opens
+        the installer. The native parts (<code>osascript</code>, <code>.app</code>, Dock) were written
+        but never executed by the author &mdash; no Mac available. This is the least supported of the
+        three paths.</p>
+    </div>
+  </section>
+
+  <section class="section" id="first-run">
+    <div class="container">
+      <h2 class="section-title reveal">First <em>run</em></h2>
+<pre class="reveal">delta                    <span class="c"># opens the CLI (always a new chat)</span>
+/login                   <span class="c"># pick the provider, paste the key</span>
+/projects ~/dev/my-app   <span class="c"># where it works (saved for next time)</span>
+read src/main.c and explain the flow
+
+delta continue           <span class="c"># reopens this folder's last chat, thinking included</span>
+delta update --check     <span class="c"># only reports; `delta update` installs</span></pre>
+      <p class="section-sub reveal">Keys are stored per provider in <code>auth.json</code> inside the
+        data folder. Nothing leaves the machine except the requests to the provider you configured.</p>
+    </div>
+  </section>
+
+  <section class="section" id="data">
+    <div class="container">
+      <h2 class="section-title reveal">Where your data <em>lives</em></h2>
+      <p class="section-sub reveal">One folder, chosen at install time (default
+        <code>~/.deltaCore</code>). Every file is written to a temporary and swapped in one step, so a
+        second window never reads half a config.</p>
+<pre class="reveal">.deltaCore/
+  config.json        provider, model, language, thinking, projectDir
+  auth.json          one API key per provider
+  sessions/          --&lt;folder-slug&gt;--/&lt;date&gt;_&lt;id&gt;.jsonl
+  skills/            &lt;name&gt;/SKILL.md
+  mcps/ extensions/  servers and pluggable extensions (tool, skill, command, mcp, hook)
+  memory.json        durable facts, searchable
+  graphs/            project graph cache (symbols and imports)
+  system/prompt.md   team rules, re-read every turn</pre>
+      <p class="section-sub reveal">Backup is copying the folder. Migration is the same: point the
+        installer at the new path.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container foot">
+    <div class="brand"><img class="brand-mark" src="../icon-96.png" alt="" width="26" height="26" decoding="async"><span class="brand-name">Delta <span class="brand-dim">Agent</span></span></div>
+    <div style="font-size:12.5px;color:#5f5f5f">
+      <a href="../">home</a> &middot;
+      <a href="../install/">install</a> &middot;
+      <a href="../faq/">faq</a> &middot;
+      <a href="https://github.com/descz/delta">github</a> &middot;
+      <a href="https://github.com/descz/delta/releases/latest">releases</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../site.js" defer></script>
+</body>
+</html>
