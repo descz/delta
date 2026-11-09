@@ -30,7 +30,6 @@ SECOES = [
     ("hooks", "Hooks", "CONFIGURE"),
     ("security", "Security", "TRUST"),
     ("limits", "Limits", "TRUST"),
-    ("faq", "FAQ", "HELP"),
 ]
 
 
@@ -83,7 +82,10 @@ def artigo():
         model you choose. You ask in your own words; it reads and edits files by exact blocks, runs
         commands, handles git, searches the web, keeps memory and speaks MCP.</p>
       <p>A turn is <code>prompt → provider (streaming) → tool calls → results → next step</code> until
-        the model answers without asking for a tool. Delta owns the loop and the tools; the model only asks.</p>
+        the model answers without asking for a tool. Delta owns the loop and the tools; the model only asks.
+        On Windows the whole agent is <b>829 KB</b> and about 1.7 MB of private memory. The source is
+        available under a non-commercial license: study and personal/internal use are allowed, selling,
+        paid access and cloning are not (<a href="https://github.com/descz/delta/blob/main/LICENSE">LICENSE</a>).</p>
 ''' + bloco('''DELTA_MAX_STEPS      200      steps in one turn
 tool output          200 KB   per tool result (process killed at the cap)
 context              8 MB     per request; above it, emergency prune (4 outputs x 20 KB)
@@ -102,6 +104,9 @@ chmod +x delta-linux-x86_64.run && ./delta-linux-x86_64.run
 xcode-select --install
 unzip delta-macos-source.zip && cd delta-macos-source && ./INSTALAR-MAC.command''',
             'releases · per platform') + '''
+      <p>You need an API key from a provider you use (OpenAI, Anthropic, OpenRouter, DeepSeek, opencode
+        and others) — <code>/login</code> asks once and stores it per provider. Without network the CLI,
+        sessions and local tools still work; the model, obviously, does not.</p>
       <p>Windows may warn on SmartScreen the first time (not code-signed): <i>More info</i> then
         <i>Run anyway</i>. The installer reopens with <code>delta --setup</code>. Linux was verified in
         WSL — the desktop layer (<code>.desktop</code>, GNOME favorites, clipboard) was not exercised on
@@ -130,9 +135,10 @@ delta update --check     # only reports; `delta update` installs''',
   "updateCheck": false
 }''', 'config.json') + '''
       <p>Slash commands that matter here: <code>/login</code>, <code>/models</code> (catalog from
-        models.dev), <code>/thinking</code>, <code>/verbosity</code>, <code>/projects</code>,
-        <code>/status</code>, <code>/docs</code>. Any OpenAI-compatible endpoint works through
-        <code>baseUrl</code>.</p>
+        models.dev), <code>/thinking</code> (reasoning effort), <code>/verbosity</code> (how much prose),
+        <code>/projects</code>, <code>/status</code>, <code>/docs</code>. Any server that speaks the
+        OpenAI chat API works as a local model through <code>baseUrl</code>. The footer shows the real
+        context window of the current model, read from the catalog, with 200k as fallback.</p>
 
       <h2 id="tools">Tools</h2>
       <p><code>read write edit undo bash ls find grep graph</code> plus the unified families
@@ -177,7 +183,8 @@ delta export --json     # NDJSON of the same messages''',
 ]''', '~/.deltaCore/extensions.json') + '''
       <p>The agent can create one itself: <code>extensions</code> tool, <code>op=add</code> for a
         single capability or <code>op=bundle</code> for a whole manifest. It takes effect on the next
-        tool call.</p>
+        tool call. MCP servers ride the same folder (<code>mcps/</code>, JSON-RPC over HTTP or stdio), and
+        skills are <code>SKILL.md</code> files indexed in the system prompt and read on demand.</p>
 
       <h2 id="hooks">Hooks</h2>
       <p>A hook is code, not a prompt: the harness runs it, so a blocked call never happens. The
@@ -203,11 +210,6 @@ session_start  once per process''', 'events') + '''
         extension — what an extension can change is behaviour (prompt, tools, commands, hooks, footer
         status), not pixels.</p>
 ''' + '''
-      <h2 id="faq">FAQ</h2>
-''' + "\n".join(
-        '<details class="faq"><summary>%s</summary><p>%s</p></details>' % (q, a)
-        for grupo, itens in gs.PERGUNTAS for q, a in itens
-    ) + '''
     </article>''')
     return "\n".join(a)
 

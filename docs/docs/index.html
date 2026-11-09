@@ -64,8 +64,6 @@
       <p class="docnav-h">TRUST</p>
       <a href="#security" data-sec="security">Security</a>
       <a href="#limits" data-sec="limits">Limits</a>
-      <p class="docnav-h">HELP</p>
-      <a href="#faq" data-sec="faq">FAQ</a>
     </nav>
     <article class="docmain">
       <p class="kicker">docs</p>
@@ -78,7 +76,10 @@
         model you choose. You ask in your own words; it reads and edits files by exact blocks, runs
         commands, handles git, searches the web, keeps memory and speaks MCP.</p>
       <p>A turn is <code>prompt → provider (streaming) → tool calls → results → next step</code> until
-        the model answers without asking for a tool. Delta owns the loop and the tools; the model only asks.</p>
+        the model answers without asking for a tool. Delta owns the loop and the tools; the model only asks.
+        On Windows the whole agent is <b>829 KB</b> and about 1.7 MB of private memory. The source is
+        available under a non-commercial license: study and personal/internal use are allowed, selling,
+        paid access and cloning are not (<a href="https://github.com/descz/delta/blob/main/LICENSE">LICENSE</a>).</p>
 <div class="codewrap"><div class="codehdr"><span>limits · env overrides</span><button class="copybtn" data-copy>Copy</button></div><pre>DELTA_MAX_STEPS      200      steps in one turn
 tool output          200 KB   per tool result (process killed at the cap)
 context              8 MB     per request; above it, emergency prune (4 outputs x 20 KB)
@@ -95,6 +96,9 @@ chmod +x delta-linux-x86_64.run &amp;&amp; ./delta-linux-x86_64.run
 # macOS 11+ - source package, builds locally
 xcode-select --install
 unzip delta-macos-source.zip &amp;&amp; cd delta-macos-source &amp;&amp; ./INSTALAR-MAC.command</pre></div>
+      <p>You need an API key from a provider you use (OpenAI, Anthropic, OpenRouter, DeepSeek, opencode
+        and others) — <code>/login</code> asks once and stores it per provider. Without network the CLI,
+        sessions and local tools still work; the model, obviously, does not.</p>
       <p>Windows may warn on SmartScreen the first time (not code-signed): <i>More info</i> then
         <i>Run anyway</i>. The installer reopens with <code>delta --setup</code>. Linux was verified in
         WSL — the desktop layer (<code>.desktop</code>, GNOME favorites, clipboard) was not exercised on
@@ -122,9 +126,10 @@ delta update --check     # only reports; `delta update` installs</pre></div>
   "updateCheck": false
 }</pre></div>
       <p>Slash commands that matter here: <code>/login</code>, <code>/models</code> (catalog from
-        models.dev), <code>/thinking</code>, <code>/verbosity</code>, <code>/projects</code>,
-        <code>/status</code>, <code>/docs</code>. Any OpenAI-compatible endpoint works through
-        <code>baseUrl</code>.</p>
+        models.dev), <code>/thinking</code> (reasoning effort), <code>/verbosity</code> (how much prose),
+        <code>/projects</code>, <code>/status</code>, <code>/docs</code>. Any server that speaks the
+        OpenAI chat API works as a local model through <code>baseUrl</code>. The footer shows the real
+        context window of the current model, read from the catalog, with 200k as fallback.</p>
 
       <h2 id="tools">Tools</h2>
       <p><code>read write edit undo bash ls find grep graph</code> plus the unified families
@@ -168,7 +173,8 @@ delta export --json     # NDJSON of the same messages</pre></div>
 ]</pre></div>
       <p>The agent can create one itself: <code>extensions</code> tool, <code>op=add</code> for a
         single capability or <code>op=bundle</code> for a whole manifest. It takes effect on the next
-        tool call.</p>
+        tool call. MCP servers ride the same folder (<code>mcps/</code>, JSON-RPC over HTTP or stdio), and
+        skills are <code>SKILL.md</code> files indexed in the system prompt and read on demand.</p>
 
       <h2 id="hooks">Hooks</h2>
       <p>A hook is code, not a prompt: the harness runs it, so a blocked call never happens. The
@@ -194,23 +200,6 @@ session_start  once per process</pre></div>
         extension — what an extension can change is behaviour (prompt, tools, commands, hooks, footer
         status), not pixels.</p>
 
-      <h2 id="faq">FAQ</h2>
-<details class="faq"><summary>Do I need an API key?</summary><p>Yes, from a provider you use (OpenAI, Anthropic, OpenRouter, DeepSeek, opencode and others). <code>/login</code> asks for the key once, stores it per provider in <code>auth.json</code> and picks a default model.</p></details>
-<details class="faq"><summary>Does it run offline?</summary><p>The program runs, the model does not. Without network the CLI, sessions and the local tools still work, but the agent cannot talk to the provider.</p></details>
-<details class="faq"><summary>Which platforms are supported?</summary><p>Windows 10/11 x64 (the reference platform), Linux x86_64 (builds and runs; desktop integration untested) and macOS from source. There is no prebuilt macOS binary.</p></details>
-<details class="faq"><summary>Is there a Windows installer?</summary><p>The download is the installer: double click <code>Delta.exe</code>, choose the data folder, and it copies the binary, sets <code>PATH</code> and creates the shortcut. No admin rights.</p></details>
-<details class="faq"><summary>How big is it?</summary><p>809 KB single executable on Windows, about 1.7 MB of private memory, zero runtime dependencies.</p></details>
-<details class="faq"><summary>Which models can I use?</summary><p>Any model in the models.dev catalog from the providers you connected &mdash; Anthropic, OpenAI, OpenRouter, DeepSeek, opencode and others. <code>/models</code> lists what your keys allow.</p></details>
-<details class="faq"><summary>Can I use a local model?</summary><p>If the server exposes the OpenAI-compatible chat API, point the OpenAI provider at its base URL (config <code>baseUrl</code> or <code>--baseurl</code>).</p></details>
-<details class="faq"><summary>How do I change the model or the thinking level?</summary><p><code>/models</code> switches the model, <code>/thinking</code> sets the reasoning effort and <code>/verbosity</code> sets how much prose the reply carries. All saved in the config.</p></details>
-<details class="faq"><summary>What is the context window shown in the footer?</summary><p>The real <code>limit.context</code> of the current model, read from the catalog (1M for a 1M model), with 200k as fallback when the catalog does not know the model.</p></details>
-<details class="faq"><summary>Does it support MCP?</summary><p>Yes &mdash; JSON-RPC over HTTP or stdio. Servers live as one file each in <code>mcps/</code>, and their tools appear to the model like the built-in ones.</p></details>
-<details class="faq"><summary>Can I add my own tools, commands, skills or hooks?</summary><p>Yes, and they live in one manifest: an extension can declare <code>tools</code>, <code>commands</code> (a prompt, or an <code>exec</code> that runs and prints in the chat), <code>hooks</code> (intercepting <code>tool_call</code>, <code>tool_result</code>, <code>turn_end</code>, <code>session_start</code>, <code>user_message</code> and <code>turn_start</code> to block, rewrite or log), a <code>prompt</code> appended to the system prompt and <code>ui.status</code> for a third footer line. The agent can create them itself with the <code>extensions</code> tool.</p></details>
-<details class="faq"><summary>Can it write and run code for me?</summary><p>It reads and edits files by exact blocks, runs shell commands with timeouts and background jobs, handles git, and can generate code in any language. Two skills ship for that: <code>deltamotion</code> (video as C code to MP4) and <code>3jsskill</code> (Three.js without a build step).</p></details>
-<details class="faq"><summary>Where does my data go?</summary><p>Only to the provider you configure. History, keys, memory and skills stay in your local data folder; each file is written atomically so parallel windows never corrupt it.</p></details>
-<details class="faq"><summary>Is it open source?</summary><p>Source-available and non-commercial. The code is public for study and personal or internal use, but the license forbids selling, charging for access and cloning. Sharing the unmodified copy, non-profit and with credit, is allowed. See the <a href="https://github.com/descz/delta/blob/main/LICENSE">LICENSE</a>.</p></details>
-<details class="faq"><summary>Windows said the app is unknown. Is it safe?</summary><p>That is SmartScreen because the binary is not code-signed: <i>More info</i>, then <i>Run anyway</i>. The source in the repository is exactly what builds that binary.</p></details>
-<details class="faq"><summary>Was Linux tested on a real desktop?</summary><p>Partially. Build, CLI, TUI, real streaming and self-update were verified on Linux (WSL, gcc 13). The desktop integration &mdash; <code>.desktop</code> entry, GNOME favorites, clipboard &mdash; was not exercised on a desktop session.</p></details>
     </article>    <nav class="doctoc">
       <p class="docnav-h">ON THIS PAGE</p>
       <a href="#intro" data-sec="intro">Intro</a>
@@ -223,7 +212,6 @@ session_start  once per process</pre></div>
       <a href="#hooks" data-sec="hooks">Hooks</a>
       <a href="#security" data-sec="security">Security</a>
       <a href="#limits" data-sec="limits">Limits</a>
-      <a href="#faq" data-sec="faq">FAQ</a>
     </nav>
 </main>
 
