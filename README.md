@@ -29,12 +29,12 @@ Delta executes it in your project, with the model you choose — and remembers t
 > See [LICENSE](LICENSE).
 
 A **single executable written in C11, with no dependencies at all**: no Node, Python, npm, pip or
-framework installer. On Windows it is **805 KB** and about **1.7 MB of private memory**. It talks to
+framework installer. On Windows it is **809 KB** and about **1.7 MB of private memory**. It talks to
 the provider directly (WinHTTP on Windows, `curl` elsewhere) and keeps everything in one folder.
 
 | size | runtime dependencies | tool operations | installers |
 |:--:|:--:|:--:|:--:|
-| **805 KB** | **0** | **40+** | **3 systems** |
+| **809 KB** | **0** | **40+** | **3 systems** |
 
 ---
 
