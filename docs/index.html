@@ -64,7 +64,7 @@
 </script>
 
 
-<link rel="stylesheet" href="site.css?v=20261109k">
+<link rel="stylesheet" href="site.css?v=20261109l">
 </head>
 <body>
 
@@ -249,64 +249,6 @@
     </div>
   </section>
 
-  <section class="section" id="install">
-    <div class="container">
-      <p class="kicker reveal">install</p>
-      <h2 class="section-title reveal">From zero to your first <em>request</em> in minutes</h2>
-      <p class="section-sub reveal">
-        Every download is the installer: it asks for the folder, copies the binary, puts
-        <code>delta</code> on your PATH and creates the shortcut.
-      </p>
-
-      <div class="grid g3">
-        <div class="card os-card reveal"><h3>Windows 10/11 <span class="tag">x64</span> <span class="tag">tested</span></h3>
-          <p><code>Delta.exe</code> — program + installer in one file. Double click opens the HTML install window
-             (no console, native folder picker). This is the reference platform.</p></div>
-        <div class="card os-card reveal"><h3>Linux <span class="tag">x86_64</span> <span class="tag">builds &amp; runs</span></h3>
-          <p><code>delta-linux-x86_64.run</code> — self-extracting, installs and puts <code>delta</code> on PATH.
-             Verified in WSL; the desktop bits (<code>.desktop</code>, GNOME favorites, clipboard) were not
-             exercised on a real desktop.</p></div>
-        <div class="card os-card reveal"><h3>macOS <span class="tag">source</span> <span class="tag">not tested</span></h3>
-          <p>Source package + <code>INSTALAR-MAC.command</code>: builds on your machine. I have no Mac, so the
-             native parts (<code>osascript</code>, <code>.app</code>, Dock) were never run — treat it as a
-             starting point.</p></div>
-      </div>
-
-<pre class="reveal"><span class="c"># linux</span>
-chmod +x delta-linux-x86_64.run &amp;&amp; ./delta-linux-x86_64.run
-
-<span class="c"># first run</span>
-delta                    <span class="c"># opens the CLI (always a new chat)</span>
-delta continue           <span class="c"># reopens this folder's last chat</span>
-/login                   <span class="c"># pick the provider and paste the key</span>
-/projects D:\dev\app     <span class="c"># where it works (saved)</span>
-
-<span class="c"># day to day</span>
-read src/main.c and explain the flow
-/terminal git status     <span class="c"># runs in your shell and shows the output in the chat</span>
-delta update             <span class="c"># installs the newest release</span>
-delta wiki               <span class="c"># prints the documentation address</span></pre>
-
-      <p style="margin-top:22px"><a class="btn btn-outline" href="install/">Full install guide &mdash; per platform, PATH, first run</a></p>
-
-      <div class="grid g3" style="margin-top:16px">
-        <div class="card reveal"><h3>Commands</h3>
-          <ul><li><code>/models</code> connected models</li><li><code>/thinking</code> effort</li>
-              <li><code>/verbosity</code> how much prose</li>
-              <li><code>/undo</code> restore a file</li><li><code>/subagentmodel</code> model for subagents</li></ul></div>
-        <div class="card reveal"><h3>Shortcuts</h3>
-          <ul><li><code>Enter</code> send · <code>Shift+Enter</code> new line</li>
-              <li><code>Ctrl+C</code> stop (never closes) · with a selection: copy</li><li><code>Ctrl+V</code> paste text/image</li>
-              <li>drag the mouse to select · click clears</li>
-              <li><code>Ctrl+Q</code> return the queue to the editor</li></ul></div>
-        <div class="card reveal"><h3>Data</h3>
-          <ul><li><code>config.json</code> · <code>auth.json</code></li>
-              <li><code>sessions/</code> per folder</li><li><code>skills/</code> · <code>mcps/</code></li>
-              <li><code>system/prompt.md</code> your rules</li></ul></div>
-      </div>
-    </div>
-  </section>
-
   <section class="section" id="faq">
     <div class="container">
       <p class="kicker reveal">faq</p>
@@ -371,6 +313,6 @@ delta wiki               <span class="c"># prints the documentation address</spa
   </div>
 </footer>
 
-<script src="site.js?v=20261109k" defer></script>
+<script src="site.js?v=20261109l" defer></script>
 </body>
 </html>
