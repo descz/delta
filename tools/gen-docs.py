@@ -59,10 +59,14 @@ def toc():
     return "\n".join(linhas)
 
 
+def esc(t):
+    return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def bloco(codigo, titulo):
     return ('<div class="codewrap"><div class="codehdr"><span>%s</span>'
             '<button class="copybtn" data-copy>Copy</button></div>'
-            '<pre>%s</pre></div>' % (titulo, codigo))
+            '<pre>%s</pre></div>' % (esc(titulo), esc(codigo)))
 
 
 def artigo():

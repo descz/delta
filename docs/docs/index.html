@@ -90,11 +90,11 @@ empty provider turn  6 nudges after an HTTP 200 with nothing inside, then a real
 Delta.exe
 
 # linux x86_64 - self-extracting installer (needs curl at runtime)
-chmod +x delta-linux-x86_64.run && ./delta-linux-x86_64.run
+chmod +x delta-linux-x86_64.run &amp;&amp; ./delta-linux-x86_64.run
 
 # macOS 11+ - source package, builds locally
 xcode-select --install
-unzip delta-macos-source.zip && cd delta-macos-source && ./INSTALAR-MAC.command</pre></div>
+unzip delta-macos-source.zip &amp;&amp; cd delta-macos-source &amp;&amp; ./INSTALAR-MAC.command</pre></div>
       <p>Windows may warn on SmartScreen the first time (not code-signed): <i>More info</i> then
         <i>Run anyway</i>. The installer reopens with <code>delta --setup</code>. Linux was verified in
         WSL — the desktop layer (<code>.desktop</code>, GNOME favorites, clipboard) was not exercised on
@@ -135,7 +135,7 @@ delta update --check     # only reports; `delta update` installs</pre></div>
       <h2 id="sessions">Sessions</h2>
       <p>One JSONL per session, per folder. <code>delta</code> always starts a new chat,
         <code>delta continue</code> reopens the last one with the full history and the model's thinking.</p>
-<div class="codewrap"><div class="codehdr"><span>sessions · export</span><button class="copybtn" data-copy>Copy</button></div><pre>~/.deltaCore/sessions/--<folder-slug>--/<date>_<id>.jsonl
+<div class="codewrap"><div class="codehdr"><span>sessions · export</span><button class="copybtn" data-copy>Copy</button></div><pre>~/.deltaCore/sessions/--&lt;folder-slug&gt;--/&lt;date&gt;_&lt;id&gt;.jsonl
 {"type":"session","version":3,"id":"...","cwd":"..."}
 {"type":"message","message":{"role":"user|assistant|tool","content":"...","thinking":"..."}}
 
