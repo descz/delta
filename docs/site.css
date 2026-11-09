@@ -160,7 +160,7 @@ footer{padding:44px 0 40px;margin-top:40px}
 .docmain a{color:#fff;text-decoration:underline;text-decoration-color:#3a3a3a}
 .docnav-h{font:11px var(--mono);letter-spacing:.14em;color:#5f5f5f;margin:0 0 10px}
 .doctoc{position:fixed;top:96px;right:28px;width:190px;display:flex;flex-direction:column;gap:2px;
-        font-size:13px;color:var(--muted);border-left:1px solid var(--border);padding-left:14px;z-index:5}
+        font-size:13px;color:var(--muted);z-index:5}
 .doctoc a{padding:3px 0}
 .doctoc a:hover,.doctoc a.active{color:#fff}
 .codewrap{border:1px solid #1c1c1c;border-radius:12px;overflow:hidden;margin:14px 0 18px;background:#060606}
