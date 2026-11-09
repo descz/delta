@@ -772,6 +772,16 @@ static void build_system_prompt(Agent *a)
         "is done), and when every item is checked the plan closes itself — no need to delete it.\n");
 
     {
+        Str extra; str_init(&extra);
+        if (ext_prompt_append(&extra) && extra.len) {
+            str_adds(&s, "\nHarness rules (from enabled extensions; treat as mandatory):\n");
+            str_add(&s, extra.data, extra.len);
+            str_adds(&s, "\n");
+        }
+        str_free(&extra);
+    }
+
+    {
         char *idx = tools_skills_index(a->cwd, 2400);
         if (idx && *idx) {
             str_adds(&s,

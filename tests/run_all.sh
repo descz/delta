@@ -1595,6 +1595,38 @@ else
 fi
 rm -rf "$HC" build/hook-marca.txt build/hook-marca2.txt
 
+echo
+echo "[24] extensao unificada: prompt + hook + status + comando no mesmo manifesto"
+# Um manifesto so' declara varias capacidades; o Delta expande em registros e o
+# resto do harness (prompt, hooks, rodape, comandos) continua igual.
+KIT="$ROOT/build/kit-core"
+rm -rf "$KIT" && mkdir -p "$KIT"
+cp tests/ext-kit.json "$KIT/extensions.json"
+rm -f build/hook-marca.txt
+python tests/mock_bash.py "$((PORT + 27))" "python -c \"open('build/hook-marca.txt','w').write('x')\"" > /dev/null 2>&1 &
+KIT_MOCK=$!
+sleep 2
+DELTA_CORE="$KIT" ./bin/delta.exe -p "rode" --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 27))/v1" --api-key sk-teste > build/kit.log 2>&1
+kill $KIT_MOCK 2>/dev/null
+wait $KIT_MOCK 2>/dev/null
+if grep -q "Sempre responda em pt-BR" build/mock-last-request.json 2>/dev/null; then
+    pass "bundle: prompt entra no system prompt"
+else
+    fail "bundle: prompt nao chegou ao system prompt"
+fi
+if grep -q "bloqueado pelo hook do harness" build/mock-last-request.json 2>/dev/null && [ ! -f build/hook-marca.txt ]; then
+    pass "bundle: hook do manifesto bloqueia a ferramenta"
+else
+    fail "bundle: hook do manifesto nao bloqueou"
+fi
+DELTA_CORE="$KIT" ./bin/delta.exe --replay tests/replay-terminal.txt 110 30 > build/kit-status.log 2>&1
+expect build/kit-status.log "branch-teste" "bundle: status aparece como terceira linha do rodape"
+printf 'type /kit-eco\nkey enter\nidle 900\ndump comando_exec\n' > build/kit-replay.txt
+DELTA_CORE="$KIT" ./bin/delta.exe --replay build/kit-replay.txt 110 30 > build/kit-exec.log 2>&1
+expect build/kit-exec.log "ola do bundle" "bundle: /comando com exec roda e mostra a saida"
+rm -rf "$KIT" build/hook-marca.txt build/kit-replay.txt
+
 restaurar_globais   # config, chaves e memoria do usuario de volta
 
 kill $MOCK 2>/dev/null

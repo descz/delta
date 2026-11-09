@@ -45,8 +45,79 @@ typedef struct {
     char arg[2048];
     char desc[240];
     char schema[512];
+    char exec[2048];   /* kind=command: comando a executar (opcional) */
+    char group[64];    /* nome do bundle de onde esta capacidade veio (vazio = legado) */
     int  enabled;
 } Ext;
+
+/* Manifesto unificado: uma entrada pode trazer VARIAS capacidades.
+   {"name":"kit","desc":"...","enabled":true,
+    "tools":[{...}], "commands":[{...}], "hooks":[{...}],
+    "prompt":"texto para o system prompt", "ui":{"status":"comando"}}
+   Cada capacidade vira um registro interno (kind=tool/command/hook/prompt/status)
+   com group=nome do bundle, entao todo o resto do codigo continua igual. */
+
+static int ext_push(Ext *arr, int *n, int max, const char *kind, const char *name,
+                    const char *arg, const char *desc, const char *schema,
+                    const char *exec, const char *group, int enabled)
+{
+    if (*n >= max) return 0;
+    Ext *e = &arr[(*n)++];
+    memset(e, 0, sizeof *e);
+    snprintf(e->kind, sizeof e->kind, "%s", kind ? kind : "");
+    snprintf(e->name, sizeof e->name, "%s", name ? name : "");
+    snprintf(e->arg, sizeof e->arg, "%s", arg ? arg : "");
+    snprintf(e->desc, sizeof e->desc, "%s", desc ? desc : "");
+    snprintf(e->schema, sizeof e->schema, "%s", schema ? schema : "");
+    snprintf(e->exec, sizeof e->exec, "%s", exec ? exec : "");
+    snprintf(e->group, sizeof e->group, "%s", group ? group : "");
+    e->enabled = enabled;
+    return 1;
+}
+
+/* expande tools/commands/hooks/prompt/ui de um item em registros */
+static int ext_expand(Ext *arr, int *n, int max, JValue *it, const char *nome, int enabled)
+{
+    int antes = *n;
+    JValue *tools = json_get(it, "tools");
+    for (size_t i = 0; tools && tools->kind == J_ARR && i < tools->count; i++) {
+        JValue *t = tools->items[i];
+        const char *tn = json_str(json_get(t, "name"));
+        if (!*tn) continue;
+        ext_push(arr, n, max, "tool", tn,
+                 json_str(json_get(t, "arg")), json_str(json_get(t, "desc")),
+                 json_str(json_get(t, "schema")), NULL, nome, enabled);
+    }
+    JValue *cmds = json_get(it, "commands");
+    for (size_t i = 0; cmds && cmds->kind == J_ARR && i < cmds->count; i++) {
+        JValue *c = cmds->items[i];
+        const char *cn = json_str(json_get(c, "name"));
+        if (!*cn) continue;
+        ext_push(arr, n, max, "command", cn,
+                 json_str(json_get(c, "arg")), json_str(json_get(c, "desc")),
+                 NULL, json_str(json_get(c, "exec")), nome, enabled);
+    }
+    JValue *hooks = json_get(it, "hooks");
+    for (size_t i = 0; hooks && hooks->kind == J_ARR && i < hooks->count; i++) {
+        JValue *h = hooks->items[i];
+        const char *ev = json_str(json_get(h, "event"));
+        const char *cmd = json_str(json_get(h, "arg"));
+        if (!*ev || !*cmd) continue;
+        ext_push(arr, n, max, "hook", ev, cmd,
+                 json_str(json_get(h, "desc")), NULL, NULL, nome, enabled);
+    }
+    const char *pr = json_str(json_get(it, "prompt"));
+    if (*pr) ext_push(arr, n, max, "prompt", nome, pr, "", NULL, NULL, nome, enabled);
+
+    JValue *ui = json_get(it, "ui");
+    if (ui && ui->kind == J_OBJ) {
+        const char *st = json_str(json_get(ui, "status"));
+        if (*st) ext_push(arr, n, max, "status", nome, st, "", NULL, NULL, nome, enabled);
+    } else if (ui && ui->kind == J_STR && *json_str(ui)) {
+        ext_push(arr, n, max, "status", nome, json_str(ui), "", NULL, NULL, nome, enabled);
+    }
+    return *n - antes;
+}
 
 static char *ext_path(void)
 {
@@ -70,39 +141,120 @@ static int ext_load(Ext *arr, int max)
     if (v && v->kind == J_ARR) {
         for (size_t i = 0; i < v->count && n < max; i++) {
             JValue *it = v->items[i];
-            memset(&arr[n], 0, sizeof arr[n]);
-            snprintf(arr[n].kind, sizeof arr[n].kind, "%s", json_str(json_get(it, "kind")));
-            snprintf(arr[n].name, sizeof arr[n].name, "%s", json_str(json_get(it, "name")));
-            snprintf(arr[n].arg, sizeof arr[n].arg, "%s", json_str(json_get(it, "arg")));
-            snprintf(arr[n].desc, sizeof arr[n].desc, "%s", json_str(json_get(it, "desc")));
-            snprintf(arr[n].schema, sizeof arr[n].schema, "%s", json_str(json_get(it, "schema")));
+            const char *kind = json_str(json_get(it, "kind"));
+            const char *nome = json_str(json_get(it, "name"));
+            if (!*nome) continue;
             JValue *e = json_get(it, "enabled");
-            arr[n].enabled = e ? json_bool(e, 1) : 1;
-            if (arr[n].name[0] && arr[n].kind[0]) n++;
+            int enabled = e ? json_bool(e, 1) : 1;
+
+            if (*kind) {   /* formato antigo: uma capacidade por entrada */
+                ext_push(arr, &n, max, kind, nome, json_str(json_get(it, "arg")),
+                         json_str(json_get(it, "desc")), json_str(json_get(it, "schema")),
+                         json_str(json_get(it, "exec")), NULL, enabled);
+                continue;
+            }
+            /* manifesto: uma entrada, varias capacidades */
+            ext_expand(arr, &n, max, it, nome, enabled);
         }
     }
     json_free(v);
     return n;
 }
 
+/* escreve uma entrada no formato antigo (uma capacidade) */
+static void emit_legado(Str *o, const Ext *e)
+{
+    str_adds(o, "{\"kind\":");
+    json_write_string(o, e->kind, strlen(e->kind));
+    str_adds(o, ",\"name\":");
+    json_write_string(o, e->name, strlen(e->name));
+    str_adds(o, ",\"arg\":");
+    json_write_string(o, e->arg, strlen(e->arg));
+    str_adds(o, ",\"desc\":");
+    json_write_string(o, e->desc, strlen(e->desc));
+    str_adds(o, ",\"schema\":");
+    json_write_string(o, e->schema, strlen(e->schema));
+    if (e->exec[0]) {
+        str_adds(o, ",\"exec\":");
+        json_write_string(o, e->exec, strlen(e->exec));
+    }
+    str_addf(o, ",\"enabled\":%s}", e->enabled ? "true" : "false");
+}
+
+/* escreve um bundle: todas as capacidades que vieram do mesmo group */
+static void emit_bundle(Str *o, const Ext *arr, int n, const char *group)
+{
+    str_adds(o, "{\"name\":");
+    json_write_string(o, group, strlen(group));
+    int enabled = 1;
+    for (int i = 0; i < n; i++)
+        if (arr[i].group[0] && str_eq(arr[i].group, group)) { enabled = arr[i].enabled; break; }
+    str_addf(o, ",\"enabled\":%s", enabled ? "true" : "false");
+
+    int aberto_t = 0, aberto_c = 0, aberto_h = 0;
+    for (int i = 0; i < n; i++) {
+        const Ext *e = &arr[i];
+        if (!e->group[0] || !str_eq(e->group, group)) continue;
+        if (str_eq(e->kind, "tool")) {
+            str_adds(o, aberto_t ? "," : ",\"tools\":[");
+            aberto_t = 1;
+            str_adds(o, "{\"name\":"); json_write_string(o, e->name, strlen(e->name));
+            str_adds(o, ",\"arg\":");  json_write_string(o, e->arg, strlen(e->arg));
+            str_adds(o, ",\"desc\":"); json_write_string(o, e->desc, strlen(e->desc));
+            str_adds(o, ",\"schema\":"); json_write_string(o, e->schema, strlen(e->schema));
+            str_addc(o, '}');
+        } else if (str_eq(e->kind, "command")) {
+            str_adds(o, aberto_c ? "," : ",\"commands\":[");
+            aberto_c = 1;
+            str_adds(o, "{\"name\":"); json_write_string(o, e->name, strlen(e->name));
+            str_adds(o, ",\"arg\":");  json_write_string(o, e->arg, strlen(e->arg));
+            if (e->exec[0]) { str_adds(o, ",\"exec\":"); json_write_string(o, e->exec, strlen(e->exec)); }
+            if (e->desc[0]) { str_adds(o, ",\"desc\":"); json_write_string(o, e->desc, strlen(e->desc)); }
+            str_addc(o, '}');
+        } else if (str_eq(e->kind, "hook")) {
+            str_adds(o, aberto_h ? "," : ",\"hooks\":[");
+            aberto_h = 1;
+            str_adds(o, "{\"event\":"); json_write_string(o, e->name, strlen(e->name));
+            str_adds(o, ",\"arg\":");   json_write_string(o, e->arg, strlen(e->arg));
+            if (e->desc[0]) { str_adds(o, ",\"desc\":"); json_write_string(o, e->desc, strlen(e->desc)); }
+            str_addc(o, '}');
+        } else if (str_eq(e->kind, "prompt")) {
+            str_adds(o, ",\"prompt\":"); json_write_string(o, e->arg, strlen(e->arg));
+        } else if (str_eq(e->kind, "status")) {
+            str_adds(o, ",\"ui\":{\"status\":"); json_write_string(o, e->arg, strlen(e->arg));
+            str_addc(o, '}');
+        }
+    }
+    if (aberto_t) str_addc(o, ']');
+    if (aberto_c) str_addc(o, ']');
+    if (aberto_h) str_addc(o, ']');
+    str_addc(o, '}');
+}
+
 static int ext_save(const Ext *arr, int n)
 {
     Str out; str_init(&out);
     str_addc(&out, '[');
+    int primeiro = 1;
+
+    /* bundles primeiro (agrupados), depois as entradas no formato antigo */
     for (int i = 0; i < n; i++) {
-        if (i) str_addc(&out, ',');
-        str_adds(&out, "{\"kind\":");
-        json_write_string(&out, arr[i].kind, strlen(arr[i].kind));
-        str_adds(&out, ",\"name\":");
-        json_write_string(&out, arr[i].name, strlen(arr[i].name));
-        str_adds(&out, ",\"arg\":");
-        json_write_string(&out, arr[i].arg, strlen(arr[i].arg));
-        str_adds(&out, ",\"desc\":");
-        json_write_string(&out, arr[i].desc, strlen(arr[i].desc));
-        str_adds(&out, ",\"schema\":");
-        json_write_string(&out, arr[i].schema, strlen(arr[i].schema));
-        str_addf(&out, ",\"enabled\":%s}", arr[i].enabled ? "true" : "false");
+        if (!arr[i].group[0]) continue;
+        int ja = 0;
+        for (int k = 0; k < i; k++)
+            if (arr[k].group[0] && str_eq(arr[k].group, arr[i].group)) { ja = 1; break; }
+        if (ja) continue;
+        if (!primeiro) str_addc(&out, ',');
+        primeiro = 0;
+        emit_bundle(&out, arr, n, arr[i].group);
     }
+    for (int i = 0; i < n; i++) {
+        if (arr[i].group[0]) continue;
+        if (!primeiro) str_addc(&out, ',');
+        primeiro = 0;
+        emit_legado(&out, &arr[i]);
+    }
+
     str_addc(&out, ']');
     char *p = ext_path();
     int ok = file_write_atomic(p, out.data, out.len);
@@ -141,6 +293,50 @@ int ext_get_arg(int i, char *out, size_t n)
     if (i < 0 || i >= k) return 0;
     snprintf(out, n, "%s", arr[i].arg);
     return 1;
+}
+
+/* texto que vai para o system prompt (bundle com "prompt") */
+int ext_prompt_append(Str *out)
+{
+    Ext arr[EXT_MAX];
+    int n = ext_load(arr, EXT_MAX);
+    int achou = 0;
+    for (int i = 0; i < n; i++) {
+        if (!arr[i].enabled || !str_eq(arr[i].kind, "prompt") || !arr[i].arg[0]) continue;
+        if (achou) str_addc(out, '\n');
+        str_adds(out, arr[i].arg);
+        achou = 1;
+    }
+    return achou;
+}
+
+/* comando que alimenta a linha extra do rodape (bundle com "ui": {"status": ...}) */
+int ext_status_cmd(char *out, size_t n)
+{
+    Ext arr[EXT_MAX];
+    int k = ext_load(arr, EXT_MAX);
+    for (int i = 0; i < k; i++) {
+        if (arr[i].enabled && str_eq(arr[i].kind, "status") && arr[i].arg[0]) {
+            snprintf(out, n, "%s", arr[i].arg);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* comando executavel de um /nome (kind=command com "exec") */
+int ext_command_exec(const char *name, char *out, size_t n)
+{
+    Ext arr[EXT_MAX];
+    int k = ext_load(arr, EXT_MAX);
+    for (int i = 0; i < k; i++) {
+        if (!arr[i].enabled || !str_eq(arr[i].kind, "command")) continue;
+        if (!str_eq(arr[i].name, name)) continue;
+        if (!arr[i].exec[0]) return 0;
+        snprintf(out, n, "%s", arr[i].exec);
+        return 1;
+    }
+    return 0;
 }
 
 int ext_set_enabled(const char *name, int on)

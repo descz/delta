@@ -1,0 +1,25 @@
+[
+  {
+    "name": "kit-teste",
+    "desc": "bundle unificado: prompt + hook + status + comando",
+    "enabled": true,
+    "prompt": "Sempre responda em pt-BR e cite o arquivo tocado.",
+    "hooks": [
+      {
+        "event": "tool_call",
+        "arg": "python tests/hook_block.py",
+        "desc": "bloqueia bash"
+      }
+    ],
+    "ui": {
+      "status": "echo branch-teste"
+    },
+    "commands": [
+      {
+        "name": "kit-eco",
+        "exec": "echo ola do bundle",
+        "desc": "comando executavel"
+      }
+    ]
+  }
+]

@@ -252,11 +252,12 @@ PERGUNTAS = [
          "Yes &mdash; JSON-RPC over HTTP or stdio. Servers live as one file each in <code>mcps/</code>, and "
          "their tools appear to the model like the built-in ones."),
         ("Can I add my own tools, commands, skills or hooks?",
-         "Yes. Extensions have five kinds: <code>tool</code> (external command with a JSON Schema), "
-         "<code>command</code> (a /name prompt), <code>skill</code> (SKILL.md), <code>mcp</code> (server) "
-         "and <code>hook</code> &mdash; which intercepts <code>tool_call</code>, <code>tool_result</code> "
-         "and <code>turn_end</code> to block, rewrite or log. The agent can create them itself with the "
-         "<code>extensions</code> tool."),
+         "Yes, and they live in one manifest: an extension can declare <code>tools</code>, "
+         "<code>commands</code> (a prompt, or an <code>exec</code> that runs and prints in the chat), "
+         "<code>hooks</code> (intercepting <code>tool_call</code>, <code>tool_result</code> and "
+         "<code>turn_end</code> to block, rewrite or log), a <code>prompt</code> appended to the system "
+         "prompt and <code>ui.status</code> for a third footer line. The agent can create them itself "
+         "with the <code>extensions</code> tool."),
         ("Can it write and run code for me?",
          "It reads and edits files by exact blocks, runs shell commands with timeouts and background jobs, "
          "handles git, and can generate code in any language. Two skills ship for that: "

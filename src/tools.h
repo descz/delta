@@ -54,6 +54,10 @@ void        ext_reload(void);          /* invalida a tabela dinamica */
 int         ext_count(void);
 int         ext_get(int i, char *name, size_t nn, char *kind, size_t nk, int *enabled);
 int         ext_get_arg(int i, char *out, size_t n);   /* comando/arg da extensao */
+/* manifesto unificado: uma entrada pode trazer tools/commands/hooks/prompt/ui */
+int         ext_prompt_append(Str *out);
+int         ext_status_cmd(char *out, size_t n);
+int         ext_command_exec(const char *name, char *out, size_t n);
 int         ext_set_enabled(const char *name, int on);
 int         ext_remove(const char *name);
 int         ext_add(const char *kind, const char *name, const char *arg, const char *desc, const char *schema);

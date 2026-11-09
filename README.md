@@ -62,6 +62,7 @@ the provider directly (WinHTTP on Windows, `curl` elsewhere) and keeps everythin
 | **Git** | status, diff, log, commit and *checkpoint* before changing anything |
 | **Web** | downloads pages, extracts data, reads documentation — and speaks **MCP** over HTTP or stdio |
 | **Skills** | saved workflows in `SKILL.md` — **ten ship built in**: `deltamotion` (video as C → BMP → MP4), `3jsskill` (Three.js with no build step), code design, spreadsheets/PDF, docs, automation, verification, systematic debugging, security audit, web design. Indexed in the system prompt and read on demand |
+| **Extensions** | one manifest can carry several capabilities at once: `tools`, `commands` (prompt or an `exec` that runs and prints in the chat), `hooks`, `prompt` (appended to the system prompt) and `ui.status` (a third footer line). The agent can create them itself with the `extensions` tool |
 | **Hooks** | change the harness, not your workflow: an extension of kind `hook` intercepts `tool_call` (block it, or rewrite the arguments), `tool_result` (rewrite the output the model sees) and `turn_end`. Payload arrives as JSON in a file (`argv[1]`), the reply is JSON on stdout; 5 s timeout and fail-open, so a broken hook never stops the agent |
 | **Memory** | durable facts across sessions, searchable by text |
 | **Project graph** | indexes symbols and imports once, then answers without re-reading every file |
@@ -95,7 +96,7 @@ Being explicit, because "compiles" is not "works":
 
 | platform | status |
 |---|---|
-| **Windows 10/11 x64** | **Tested** — the reference platform: 353 end-to-end checks (TUI, streaming, tools, installer, self-update), plus the installer and `delta update` exercised by hand. |
+| **Windows 10/11 x64** | **Tested** — the reference platform: 357 end-to-end checks (TUI, streaming, tools, installer, self-update), plus the installer and `delta update` exercised by hand. |
 | **Linux x86_64** | **Builds and runs** (gcc 13, WSL, 32 checks: build, core, replay, real streaming via curl, installer, self-update). **Not exercised on a desktop session**: `.desktop` entry, GNOME favorites and clipboard (`wl-copy`/`xclip`) are untested. |
 | **macOS 11+** | **Source only, and not tested** — I have no Mac. The release ships the source plus `INSTALAR-MAC.command`, which checks Xcode Command Line Tools and builds locally; the native layer (`osascript`, `.app`, Dock) was never executed. Treat it as a starting point, not as a supported binary. |
 
@@ -240,7 +241,7 @@ On macOS the Xcode Command Line Tools (`xcode-select --install`) are enough. At 
 Two suites, no framework:
 
 ```bash
-bash tests/run_all.sh     # Windows: 353 checks in 54 sections (TUI replay, provider mock, installer)
+bash tests/run_all.sh     # Windows: 357 checks in 55 sections (TUI replay, provider mock, installer)
 bash tests/run_posix.sh   # Linux/macOS: build, core, replay, real streaming, installer, docs
 ```
 

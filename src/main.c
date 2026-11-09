@@ -274,6 +274,40 @@ static int fill_commands(const char *filter)
 /* ================================================================== */
 static void ext_panel_draw(Screen *s, int ey, int cols);
 static int  fila_count(void);
+/* Linha extra do rodape, vinda de extensao (bundle com "ui": {"status":"cmd"}).
+   O comando e' externo: roda no maximo a cada 2 s, com teto de tempo e de
+   tamanho, e some se falhar — o rodape nunca depende de extensao saudavel. */
+static const char *ext_status_now(void)
+{
+    static char texto[160];
+    static uint64_t ultimo;
+    static int tem;
+    uint64_t agora = now_ms();
+    if (ultimo && agora - ultimo < 2000) return tem ? texto : NULL;
+    ultimo = agora;
+
+    char cmd[2048];
+    tem = 0;
+    texto[0] = 0;
+    if (!ext_status_cmd(cmd, sizeof cmd)) return NULL;
+
+    Str out; str_init(&out);
+    int code = 0;
+    if (tools_exec(NULL, cmd, 2, &out, &code) && out.len) {
+        size_t i = 0;
+        while (i < out.len && i < sizeof texto - 1) {
+            char c = out.data[i];
+            if (c == '\r' || c == '\n' || c == '\t') break;
+            texto[i] = c;
+            i++;
+        }
+        texto[i] = 0;
+        tem = texto[0] != 0;
+    }
+    str_free(&out);
+    return tem ? texto : NULL;
+}
+
 /* Janela de contexto do modelo atual, vinda do catalogo models.dev
    (limit.context). Era fixa em 200k, entao um modelo de 1M aparecia como 200k
    e o percentual mentia. O look-up e' cacheado por par provedor+modelo: o
@@ -1267,8 +1301,9 @@ static void render(void)
                                  : ((app.picker == 1 || app.picker == 2 || app.picker == 5 || app.picker == 6) ? 1 : 0);
     if (!app.menu_visible) { app.menu_y0 = 0; app.menu_rows = 0; }
 
-    /* altura do rodape */
-    const int footer_h = 2;      /* pwd + stats; sem linha de notificacao */
+    /* altura do rodape: 2 linhas, 3 quando uma extensao publica status */
+    const char *ext_line = ext_status_now();
+    const int footer_h = ext_line ? 3 : 2;
 
     /* altura do editor (o seletor usa a linha como filtro) */
     const char *edit_text = app.input.data ? app.input.data : "";
@@ -1420,7 +1455,7 @@ static void render(void)
                  app.cfg.thinking_level ? app.cfg.thinking_level : "off");
 
         ui_footer(&app.screen, rows - footer_h, cols, &app.theme, pwd, stats,
-                  right_prov, right_model, NULL);
+                  right_prov, right_model, ext_line);
     }
 
     term_present(&app.screen);
@@ -3229,7 +3264,32 @@ static void handle_command(const char *raw)
         char prompt[2048];
         char nome[96];
         snprintf(nome, sizeof nome, "%s", cmd + 1);
-        if (ext_command_prompt(nome, prompt, sizeof prompt)) {
+        /* comando de extensao: se ele traz "exec", roda o comando e mostra a
+           saida num bloco do chat; se traz prompt, entrega o prompt ao agente */
+        char exec[2048];
+        int tem_exec = ext_command_exec(nome, exec, sizeof exec);
+        if (tem_exec || ext_command_prompt(nome, prompt, sizeof prompt)) {
+            if (tem_exec) {
+                Block *b = block_add(B_TOOL);
+                b->tool_name = str_dup(cmd + 1);
+                b->tool_args = str_dup(exec);
+                b->tool_t0 = now_ms();
+                Str out; str_init(&out);
+                int code = 0;
+                int ok = tools_exec(app.cfg.project_dir && *app.cfg.project_dir
+                                        ? app.cfg.project_dir : app.agent.cwd,
+                                    exec, 300, &out, &code);
+                b->tool_secs = (double)(now_ms() - b->tool_t0) / 1000.0;
+                if (!ok) str_adds(&out, "Erro: falha ao iniciar o processo.");
+                str_add(&b->tool_output, out.data ? out.data : "", out.len);
+                b->tool_state = (ok && code == 0) ? 1 : 2;
+                str_free(&out);
+                app.tr_dirty = 1;
+                if (!ext_command_prompt(nome, prompt, sizeof prompt) || !prompt[0]) {
+                    render();
+                    return;
+                }
+            }
             str_clear(&app.input);
             str_adds(&app.input, prompt);
             app.cursor = app.input.len;
