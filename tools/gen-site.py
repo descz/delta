@@ -37,7 +37,7 @@ HEADER = """<!doctype html>
 <link rel="icon" href="../icon-96.png" type="image/png" sizes="96x96">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png" sizes="180x180">
 <link rel="preload" href="../fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../site.css?v=20261109m">
+<link rel="stylesheet" href="../site.css?v=20261109n">
 <script type="application/ld+json">
 {breadcrumb}
 </script>
@@ -88,7 +88,7 @@ FOOTER = """
   </div>
 </footer>
 
-<script src="../site.js?v=20261109m" defer></script>
+<script src="../site.js?v=20261109n" defer></script>
 </body>
 </html>
 """
