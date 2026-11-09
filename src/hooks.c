@@ -178,3 +178,58 @@ void hooks_turn_end(void)
     if (r) json_free(r);
     str_free(&p);
 }
+
+void hooks_session_start(const char *cwd)
+{
+    Str p; str_init(&p);
+    payload_begin(&p, "session_start", NULL);
+    if (cwd && *cwd) {
+        str_adds(&p, ",\"cwd\":");
+        json_write_string(&p, cwd, strlen(cwd));
+    }
+    str_adds(&p, "}");
+    JValue *r = NULL;
+    dispatch("session_start", p.data ? p.data : "", &r);
+    if (r) json_free(r);
+    str_free(&p);
+}
+
+int hooks_user_message(const char *text, const char *cwd, Str *reason)
+{
+    Str p; str_init(&p);
+    payload_begin(&p, "user_message", NULL);
+    str_adds(&p, ",\"text\":");
+    if (text) json_write_string(&p, text, strlen(text));
+    else      str_adds(&p, "\"\"");
+    if (cwd && *cwd) {
+        str_adds(&p, ",\"cwd\":");
+        json_write_string(&p, cwd, strlen(cwd));
+    }
+    str_adds(&p, "}");
+
+    JValue *r = NULL;
+    int rodou = dispatch("user_message", p.data ? p.data : "", &r);
+    str_free(&p);
+    if (!rodou || !r) { if (r) json_free(r); return 1; }
+
+    int seguir = 1;
+    JValue *blk = json_get(r, "block");
+    if (blk && json_bool(blk, 0)) {
+        seguir = 0;
+        const char *motivo = json_str(json_get(r, "reason"));
+        if (reason) str_adds(reason, (motivo && *motivo) ? motivo : "mensagem recusada pelo hook");
+    }
+    json_free(r);
+    return seguir;
+}
+
+void hooks_turn_start(int step)
+{
+    Str p; str_init(&p);
+    payload_begin(&p, "turn_start", NULL);
+    str_addf(&p, ",\"step\":%d}", step);
+    JValue *r = NULL;
+    dispatch("turn_start", p.data ? p.data : "", &r);
+    if (r) json_free(r);
+    str_free(&p);
+}

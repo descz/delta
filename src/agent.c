@@ -1036,7 +1036,24 @@ static int tool_result_sem_resposta(const MsgList *m)
 
 int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
 {
-    if (user_text && *user_text) agent_push_user(a, user_text);
+    /* eventos de contexto do harness (uma vez, no primeiro turno do processo) */
+    static int sessao_avisada;
+    if (!sessao_avisada) {
+        sessao_avisada = 1;
+        hooks_session_start(a->cwd);
+    }
+    if (user_text && *user_text) {
+        Str motivo; str_init(&motivo);
+        int pode = hooks_user_message(user_text, a->cwd, &motivo);
+        if (!pode) {
+            if (err) str_addf(err, "mensagem recusada por hook do harness: %s",
+                              motivo.len ? motivo.data : "sem motivo");
+            str_free(&motivo);
+            return 0;
+        }
+        str_free(&motivo);
+        agent_push_user(a, user_text);
+    }
 
     const int MAX_STEPS = agent_max_steps();
     for (int step = 0; step < MAX_STEPS; step++) {
@@ -1059,6 +1076,7 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
             if (err) str_adds(err, "interrompido");
             return 0;
         }
+        hooks_turn_start(step);
         if (cb && cb->on_turn_start) cb->on_turn_start(cb->ud);
 
         Provider p;

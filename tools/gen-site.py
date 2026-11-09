@@ -254,8 +254,9 @@ PERGUNTAS = [
         ("Can I add my own tools, commands, skills or hooks?",
          "Yes, and they live in one manifest: an extension can declare <code>tools</code>, "
          "<code>commands</code> (a prompt, or an <code>exec</code> that runs and prints in the chat), "
-         "<code>hooks</code> (intercepting <code>tool_call</code>, <code>tool_result</code> and "
-         "<code>turn_end</code> to block, rewrite or log), a <code>prompt</code> appended to the system "
+         "<code>hooks</code> (intercepting <code>tool_call</code>, <code>tool_result</code>, "
+         "<code>turn_end</code>, <code>session_start</code>, <code>user_message</code> and "
+         "<code>turn_start</code> to block, rewrite or log), a <code>prompt</code> appended to the system "
          "prompt and <code>ui.status</code> for a third footer line. The agent can create them itself "
          "with the <code>extensions</code> tool."),
         ("Can it write and run code for me?",

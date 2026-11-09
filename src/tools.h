@@ -58,6 +58,7 @@ int         ext_get_arg(int i, char *out, size_t n);   /* comando/arg da extensa
 int         ext_prompt_append(Str *out);
 int         ext_status_cmd(char *out, size_t n);
 int         ext_command_exec(const char *name, char *out, size_t n);
+int         ext_add_bundle(const char *manifest);   /* cria bundle (manifesto JSON) */
 int         ext_set_enabled(const char *name, int on);
 int         ext_remove(const char *name);
 int         ext_add(const char *kind, const char *name, const char *arg, const char *desc, const char *schema);

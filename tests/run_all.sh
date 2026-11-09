@@ -1627,6 +1627,53 @@ DELTA_CORE="$KIT" ./bin/delta.exe --replay build/kit-replay.txt 110 30 > build/k
 expect build/kit-exec.log "ola do bundle" "bundle: /comando com exec roda e mostra a saida"
 rm -rf "$KIT" build/hook-marca.txt build/kit-replay.txt
 
+echo
+echo "[25] eventos de contexto (user_message) e bundle criado pelo agente"
+# user_message: o hook recusa antes de qualquer request sair da maquina
+UM="$ROOT/build/ev-core"
+rm -rf "$UM" && mkdir -p "$UM"
+cat > "$UM/hook_msg.py" <<'PYEOF'
+import json, sys
+ev = json.load(open(sys.argv[1], encoding="utf-8"))
+if ev.get("event") == "user_message" and "segredo" in (ev.get("text") or ""):
+    print(json.dumps({"block": True, "reason": "nao mande segredo para o provedor"}))
+PYEOF
+python - "$UM" <<'PYEOF'
+import io, json, sys
+cat = [{"kind": "hook", "name": "user_message",
+        "arg": 'python "' + sys.argv[1] + '/hook_msg.py"', "enabled": True}]
+io.open(sys.argv[1] + "/extensions.json", "w", encoding="utf-8").write(json.dumps(cat, indent=2))
+PYEOF
+DELTA_CORE="$UM" ./bin/delta.exe -p "meu segredo e 123" --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 28))/v1" --api-key sk-teste > build/ev-user.log 2>&1
+expect build/ev-user.log "mensagem recusada por hook do harness" "user_message: hook recusa a mensagem"
+
+# op=bundle: o proprio agente cria um manifesto completo
+BK="$ROOT/build/bundle-core"
+rm -rf "$BK" && mkdir -p "$BK"
+MAN='{"name":"meu-kit","desc":"criado pelo agente","enabled":true,"prompt":"Responda em pt-BR.","hooks":[{"event":"tool_call","arg":"python tests/hook_block.py"}],"ui":{"status":"echo do-bundle"}}'
+DELTA_CORE="$BK" ./bin/delta.exe --tool extensions \
+    "{\"op\":\"bundle\",\"manifest\":$(python -c "import json,sys;print(json.dumps(sys.argv[1]))" "$MAN")}" \
+    > build/bundle-create.log 2>&1
+expect build/bundle-create.log "Bundle criado" "op=bundle: manifesto criado pela tool"
+rm -f build/hook-marca.txt
+python tests/mock_bash.py "$((PORT + 29))" "python -c \"open('build/hook-marca.txt','w').write('x')\"" > /dev/null 2>&1 &
+B_MOCK=$!
+sleep 2
+DELTA_CORE="$BK" ./bin/delta.exe -p "rode" --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 29))/v1" --api-key sk-teste > build/bundle-run.log 2>&1
+kill $B_MOCK 2>/dev/null
+wait $B_MOCK 2>/dev/null
+if grep -q "Responda em pt-BR." build/mock-last-request.json 2>/dev/null &&
+   [ ! -f build/hook-marca.txt ]; then
+    pass "op=bundle: bundle criado ja' vale (prompt e hook)"
+else
+    fail "op=bundle: bundle criado nao entrou em vigor"
+fi
+DELTA_CORE="$BK" ./bin/delta.exe --replay tests/replay-terminal.txt 110 30 > build/bundle-status.log 2>&1
+expect build/bundle-status.log "do-bundle" "op=bundle: ui.status do bundle no rodape"
+rm -rf "$UM" "$BK" build/hook-marca.txt
+
 restaurar_globais   # config, chaves e memoria do usuario de volta
 
 kill $MOCK 2>/dev/null

@@ -131,7 +131,7 @@
       "name": "Can I add my own tools, commands, skills or hooks?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes, and they live in one manifest: an extension can declare tools, commands (a prompt, or an exec that runs and prints in the chat), hooks (intercepting tool_call, tool_result and turn_end to block, rewrite or log), a prompt appended to the system prompt and ui.status for a third footer line. The agent can create them itself with the extensions tool."
+        "text": "Yes, and they live in one manifest: an extension can declare tools, commands (a prompt, or an exec that runs and prints in the chat), hooks (intercepting tool_call, tool_result, turn_end, session_start, user_message and turn_start to block, rewrite or log), a prompt appended to the system prompt and ui.status for a third footer line. The agent can create them itself with the extensions tool."
       }
     },
     {
@@ -239,7 +239,7 @@
       <h3 class="reveal" style="font-size:16px;margin:18px 0 4px">Does it support MCP?</h3>
       <p class="section-sub reveal" style="margin:0">Yes &mdash; JSON-RPC over HTTP or stdio. Servers live as one file each in <code>mcps/</code>, and their tools appear to the model like the built-in ones.</p>
       <h3 class="reveal" style="font-size:16px;margin:18px 0 4px">Can I add my own tools, commands, skills or hooks?</h3>
-      <p class="section-sub reveal" style="margin:0">Yes, and they live in one manifest: an extension can declare <code>tools</code>, <code>commands</code> (a prompt, or an <code>exec</code> that runs and prints in the chat), <code>hooks</code> (intercepting <code>tool_call</code>, <code>tool_result</code> and <code>turn_end</code> to block, rewrite or log), a <code>prompt</code> appended to the system prompt and <code>ui.status</code> for a third footer line. The agent can create them itself with the <code>extensions</code> tool.</p>
+      <p class="section-sub reveal" style="margin:0">Yes, and they live in one manifest: an extension can declare <code>tools</code>, <code>commands</code> (a prompt, or an <code>exec</code> that runs and prints in the chat), <code>hooks</code> (intercepting <code>tool_call</code>, <code>tool_result</code>, <code>turn_end</code>, <code>session_start</code>, <code>user_message</code> and <code>turn_start</code> to block, rewrite or log), a <code>prompt</code> appended to the system prompt and <code>ui.status</code> for a third footer line. The agent can create them itself with the <code>extensions</code> tool.</p>
       <h3 class="reveal" style="font-size:16px;margin:18px 0 4px">Can it write and run code for me?</h3>
       <p class="section-sub reveal" style="margin:0">It reads and edits files by exact blocks, runs shell commands with timeouts and background jobs, handles git, and can generate code in any language. Two skills ship for that: <code>deltamotion</code> (video as C code to MP4) and <code>3jsskill</code> (Three.js without a build step).</p>
       <h2 class="section-title reveal" style="font-size:22px;margin:38px 0 6px">Data, license and limits</h2>

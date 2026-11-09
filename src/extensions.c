@@ -339,6 +339,53 @@ int ext_command_exec(const char *name, char *out, size_t n)
     return 0;
 }
 
+/* cria um bundle a partir do manifesto JSON completo (objeto com "name").
+   Faz splice no arquivo — assim o bundle mantem a forma que o usuario escreveu. */
+int ext_add_bundle(const char *manifest)
+{
+    if (!manifest || !*manifest) return 0;
+    JValue *v = json_parse_cstr(manifest);
+    if (!v || v->kind != J_OBJ) { if (v) json_free(v); return 0; }
+    const char *nome = json_str(json_get(v, "name"));
+    if (!*nome) { json_free(v); return 0; }
+
+    Ext arr[EXT_MAX];
+    int n = ext_load(arr, EXT_MAX);
+    if (ext_index(arr, n, nome) >= 0) { json_free(v); return 0; }   /* ja' existe */
+    json_free(v);
+
+    char *caminho = ext_path();
+    size_t len = 0;
+    char *atual = file_read(caminho, &len);
+    Str out; str_init(&out);
+    size_t fim = len;
+    while (fim > 0 && (atual[fim - 1] == ' ' || atual[fim - 1] == '\n' ||
+                       atual[fim - 1] == '\r' || atual[fim - 1] == '\t')) fim--;
+    int vazio = 1;
+    size_t fecha = 0;
+    for (size_t i = fim; i > 0; i--) {
+        if (atual[i - 1] == ']') { fecha = i - 1; break; }
+    }
+    for (size_t i = 0; i < fecha; i++)
+        if (atual[i] != '[' && atual[i] != ' ' && atual[i] != '\n' &&
+            atual[i] != '\r') { vazio = 0; break; }
+
+    if (fim == 0 || !fecha) {
+        str_adds(&out, "[");
+    } else {
+        str_add(&out, atual, fecha);
+        str_adds(&out, vazio ? "" : ",");
+    }
+    str_adds(&out, manifest);
+    str_adds(&out, "]\n");
+    int ok = file_write_atomic(caminho, out.data, out.len);
+    str_free(&out);
+    free(atual);
+    free(caminho);
+    if (ok) ext_reload();
+    return ok;
+}
+
 int ext_set_enabled(const char *name, int on)
 {
     Ext arr[EXT_MAX];
@@ -556,6 +603,20 @@ static int extensions_op(JValue *a, const char *cwd, ToolResult *res)
         str_addf(&res->output, "Extensao criada: %s (%s)\n", nome, kind);
         return 1;
     }
+    if (str_eq(op, "bundle")) {
+        const char *manifest = ext_arg_s(a, "manifest");
+        if (!*manifest) {
+            ext_err(res, "Erro: 'manifest' e obrigatorio (objeto JSON com name, tools, commands, "
+                         "hooks, prompt ou ui).");
+            return 0;
+        }
+        if (!ext_add_bundle(manifest)) {
+            ext_err(res, "Erro: manifesto invalido, sem 'name' ou nome ja' existente.");
+            return 0;
+        }
+        str_adds(&res->output, "Bundle criado.\n");
+        return 1;
+    }
     if (str_eq(op, "remove")) {
         const char *nome = ext_arg_s(a, "name");
         if (!ext_remove(nome)) { ext_err(res, "Erro: extensao '%s' nao existe.", nome); return 0; }
@@ -587,12 +648,13 @@ static int tool_extensions(Tool *self, JValue *a, const char *cwd, ToolResult *r
 
 static const char EXTENSIONS_SCHEMA[] =
     "{\"type\":\"object\",\"properties\":{"
-    "\"op\":{\"type\":\"string\",\"enum\":[\"list\",\"enable\",\"disable\",\"add\",\"remove\",\"run\"]},"
+    "\"op\":{\"type\":\"string\",\"enum\":[\"list\",\"enable\",\"disable\",\"add\",\"bundle\",\"remove\",\"run\"]},"
     "\"kind\":{\"type\":\"string\",\"enum\":[\"tool\",\"skill\",\"command\",\"mcp\",\"hook\"]},"
     "\"name\":{\"type\":\"string\"},"
     "\"arg\":{\"type\":\"string\",\"description\":\"comando (tool/hook), markdown (skill), prompt (command) ou URL (mcp); em hook o name e o evento\"},"
     "\"desc\":{\"type\":\"string\"},"
     "\"schema\":{\"type\":\"string\",\"description\":\"JSON Schema da tool criada\"},"
+    "\"manifest\":{\"type\":\"string\",\"description\":\"JSON do bundle (op=bundle): {name, tools, commands, hooks, prompt, ui}\"},"
     "\"args\":{\"type\":\"object\",\"description\":\"argumentos para op=run\"}},"
     "\"required\":[\"op\"]}";
 

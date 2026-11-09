@@ -32,4 +32,11 @@ int  hooks_tool_result(const char *tool, const char *output, int is_error, Str *
 
 void hooks_turn_end(void);
 
+/* eventos de contexto: session_start (1x por processo), user_message (antes de
+   mandar o texto) e turn_start (antes de cada chamada ao provedor).
+   user_message aceita {"block":true,"reason":"..."} para recusar a mensagem. */
+void hooks_session_start(const char *cwd);
+int  hooks_user_message(const char *text, const char *cwd, Str *reason);
+void hooks_turn_start(int step);
+
 #endif /* DELTA_HOOKS_H */
