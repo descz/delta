@@ -6,6 +6,8 @@
  *   kind=skill    -> SKILL.md (arg = conteudo markdown)
  *   kind=command  -> comando /nome na TUI (arg = prompt enviado)
  *   kind=mcp      -> servidor MCP (arg = URL; headers opcionais em "desc")
+ *   kind=hook     -> evento do harness (name = tool_call|tool_result|turn_end,
+ *                    arg = comando; recebe o payload JSON como argv[1])
  *
  * Tudo fica em ~/.deltaCore/extensions.json, com "enabled" persistido entre sessoes.
  */
@@ -129,6 +131,15 @@ int ext_get(int i, char *name, size_t nn, char *kind, size_t nk, int *enabled)
     snprintf(name, nn, "%s", arr[i].name);
     snprintf(kind, nk, "%s", arr[i].kind);
     if (enabled) *enabled = arr[i].enabled;
+    return 1;
+}
+
+int ext_get_arg(int i, char *out, size_t n)
+{
+    Ext arr[EXT_MAX];
+    int k = ext_load(arr, EXT_MAX);
+    if (i < 0 || i >= k) return 0;
+    snprintf(out, n, "%s", arr[i].arg);
     return 1;
 }
 
@@ -297,6 +308,7 @@ static const char *ext_kind_nome(const char *k)
     if (str_eq(k, "skill")) return "skill";
     if (str_eq(k, "command")) return "comando";
     if (str_eq(k, "mcp")) return "mcp";
+    if (str_eq(k, "hook")) return "hook";
     return k;
 }
 
@@ -380,9 +392,9 @@ static int tool_extensions(Tool *self, JValue *a, const char *cwd, ToolResult *r
 static const char EXTENSIONS_SCHEMA[] =
     "{\"type\":\"object\",\"properties\":{"
     "\"op\":{\"type\":\"string\",\"enum\":[\"list\",\"enable\",\"disable\",\"add\",\"remove\",\"run\"]},"
-    "\"kind\":{\"type\":\"string\",\"enum\":[\"tool\",\"skill\",\"command\",\"mcp\"]},"
+    "\"kind\":{\"type\":\"string\",\"enum\":[\"tool\",\"skill\",\"command\",\"mcp\",\"hook\"]},"
     "\"name\":{\"type\":\"string\"},"
-    "\"arg\":{\"type\":\"string\",\"description\":\"comando (tool), markdown (skill), prompt (command) ou URL (mcp)\"},"
+    "\"arg\":{\"type\":\"string\",\"description\":\"comando (tool/hook), markdown (skill), prompt (command) ou URL (mcp); em hook o name e o evento\"},"
     "\"desc\":{\"type\":\"string\"},"
     "\"schema\":{\"type\":\"string\",\"description\":\"JSON Schema da tool criada\"},"
     "\"args\":{\"type\":\"object\",\"description\":\"argumentos para op=run\"}},"

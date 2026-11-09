@@ -1,5 +1,6 @@
 /* agent.c - config, sessao, prompt de sistema e loop do agente */
 #include "agent.h"
+#include "hooks.h"
 #include "tools.h"
 #include "json.h"
 #include "codegraph.h"
@@ -1146,6 +1147,7 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
 
         if (turn.calls.n_calls == 0) {
             turn_free(&turn);
+            hooks_turn_end();
             return 1;   /* resposta final (com texto): o turno acabou de verdade */
         }
 
@@ -1163,11 +1165,24 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
             ToolResult tr;
             tool_result_init(&tr);
             uint64_t t0 = now_ms();
-            if (!tool) {
+
+            /* evento tool_call: a extensao kind=hook pode bloquear a chamada ou
+               reescrever os argumentos sem que o usuario mude de fluxo */
+            Str hood_args; str_init(&hood_args);
+            Str hood_motivo; str_init(&hood_motivo);
+            int seguir = hooks_tool_call(tc->name, tc->args, a->cwd,
+                                         &hood_args, &hood_motivo);
+            const char *args_efetivos = hood_args.len ? hood_args.data : tc->args;
+
+            if (!seguir) {
+                str_addf(&tr.output, "bloqueado pelo hook do harness: %s",
+                         hood_motivo.len ? hood_motivo.data : "sem motivo");
+                tr.is_error = 1;
+            } else if (!tool) {
                 str_addf(&tr.output, "Erro: ferramenta desconhecida '%s'", tc->name);
                 tr.is_error = 1;
             } else {
-                JValue *args = json_parse_cstr(tc->args);
+                JValue *args = json_parse_cstr(args_efetivos);
                 if (!args) {
                     str_adds(&tr.output, "Erro: argumentos em JSON invalido");
                     tr.is_error = 1;
@@ -1177,6 +1192,19 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
                 }
             }
             double secs = (double)(now_ms() - t0) / 1000.0;
+
+            /* evento tool_result: pode reescrever/estender a saida que o modelo ve' */
+            {
+                Str saida_nova; str_init(&saida_nova);
+                if (hooks_tool_result(tc->name, tr.output.data, tr.is_error, &saida_nova) &&
+                    saida_nova.len) {
+                    str_clear(&tr.output);
+                    str_add(&tr.output, saida_nova.data, saida_nova.len);
+                }
+                str_free(&saida_nova);
+            }
+            str_free(&hood_args);
+            str_free(&hood_motivo);
 
             /* teto por saida: nenhuma ferramenta (nem extensao) consegue
                despejar centenas de MB no historico e no request */

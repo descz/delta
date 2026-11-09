@@ -1516,6 +1516,85 @@ else
     pass "readme: nenhum badge externo"
 fi
 
+echo
+echo "[23] hooks do harness (kind=hook: tool_call, tool_result, fail-open)"
+# "Change the harness, not your workflow": a extensao intercepta o que o
+# harness ja' faz — bloqueia uma chamada, reescreve a saida — sem mudar o fluxo.
+HC="$ROOT/build/hook-core"
+rm -rf "$HC" && mkdir -p "$HC"
+python - "$HC" <<'PYEOF'
+import io, json, sys
+hc = sys.argv[1]
+cat = [{"kind": "hook", "name": "tool_call", "arg": "python tests/hook_block.py",
+        "desc": "bloqueia bash no teste", "enabled": True}]
+io.open(hc + "/extensions.json", "w", encoding="utf-8").write(json.dumps(cat, indent=2))
+PYEOF
+rm -f build/hook-marca.txt
+python tests/mock_bash.py "$((PORT + 24))" "python -c \"open('build/hook-marca.txt','w').write('x')\"" > /dev/null 2>&1 &
+HOOK_MOCK=$!
+sleep 2
+DELTA_CORE="$HC" ./bin/delta.exe -p "rode a marca" --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 24))/v1" --api-key sk-teste > build/hook-block.log 2>&1
+kill $HOOK_MOCK 2>/dev/null
+wait $HOOK_MOCK 2>/dev/null
+if [ -f build/hook-marca.txt ]; then
+    fail "hook: bash rodou mesmo bloqueado"
+else
+    pass "hook tool_call: bash bloqueado nao executa"
+fi
+if grep -q "bloqueado pelo hook do harness" build/mock-last-request.json 2>/dev/null; then
+    pass "hook tool_call: motivo do bloqueio chega ao modelo"
+else
+    fail "hook tool_call: modelo nao recebeu o motivo"
+fi
+
+# tool_result: append na saida
+rm -rf "$HC" && mkdir -p "$HC"
+python - "$HC" <<'PYEOF'
+import io, json, sys
+hc = sys.argv[1]
+cat = [{"kind": "hook", "name": "tool_result", "arg": "python tests/hook_append.py",
+        "desc": "marca a saida", "enabled": True}]
+io.open(hc + "/extensions.json", "w", encoding="utf-8").write(json.dumps(cat, indent=2))
+PYEOF
+python tests/mock_bash.py "$((PORT + 25))" "echo linha" > /dev/null 2>&1 &
+HOOK_MOCK=$!
+sleep 2
+DELTA_CORE="$HC" ./bin/delta.exe -p "rode o eco" --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 25))/v1" --api-key sk-teste > build/hook-append.log 2>&1
+kill $HOOK_MOCK 2>/dev/null
+wait $HOOK_MOCK 2>/dev/null
+if grep -q "\[hook ok\]" build/mock-last-request.json 2>/dev/null; then
+    pass "hook tool_result: saida reescrita chega ao modelo"
+else
+    fail "hook tool_result: marcador nao apareceu"
+fi
+
+# fail-open: hook que quebra nao pode travar o agente
+rm -rf "$HC" && mkdir -p "$HC"
+printf 'import sys\nsys.exit(3)\n' > "$HC/quebrado.py"
+python - "$HC" <<'PYEOF'
+import io, json, sys
+hc = sys.argv[1]
+cat = [{"kind": "hook", "name": "tool_call", "arg": "python " + hc + "/quebrado.py",
+        "desc": "quebrado de proposito", "enabled": True}]
+io.open(hc + "/extensions.json", "w", encoding="utf-8").write(json.dumps(cat, indent=2))
+PYEOF
+rm -f build/hook-marca2.txt
+python tests/mock_bash.py "$((PORT + 26))" "python -c \"open('build/hook-marca2.txt','w').write('x')\"" > /dev/null 2>&1 &
+HOOK_MOCK=$!
+sleep 2
+DELTA_CORE="$HC" ./bin/delta.exe -p "rode mesmo assim" --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 26))/v1" --api-key sk-teste > build/hook-quebrado.log 2>&1
+kill $HOOK_MOCK 2>/dev/null
+wait $HOOK_MOCK 2>/dev/null
+if [ -f build/hook-marca2.txt ]; then
+    pass "hook quebrado: agente segue (fail-open)"
+else
+    fail "hook quebrado derrubou a execucao"
+fi
+rm -rf "$HC" build/hook-marca.txt build/hook-marca2.txt
+
 restaurar_globais   # config, chaves e memoria do usuario de volta
 
 kill $MOCK 2>/dev/null
