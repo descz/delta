@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gera as paginas /install/ e /faq/ do site e ajusta a home (links + sitemap).
+"""Gera as paginas /install/ do site e ajusta a home (links + sitemap).
 
 Rodar de qualquer lugar: python tools/gen-site.py
 Os arquivos gerados sao estaticos (sem build no deploy); este script existe para
@@ -37,7 +37,7 @@ HEADER = """<!doctype html>
 <link rel="icon" href="../icon-96.png" type="image/png" sizes="96x96">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png" sizes="180x180">
 <link rel="preload" href="../fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="../site.css?v=20261109a">
+<link rel="stylesheet" href="../site.css?v=20261109b">
 <script type="application/ld+json">
 {breadcrumb}
 </script>
@@ -55,7 +55,6 @@ HEADER = """<!doctype html>
       <a href="../#features">What it does</a>
       <a href="../install/"{cur_install}>Install</a>
       <a href="../docs/"{cur_docs}>Docs</a>
-      <a href="../faq/"{cur_faq}>FAQ</a>
     </nav>
     <div class="nav-right">
       <a href="https://github.com/descz/delta/releases/latest" class="btn btn-white btn-sm">Download</a>
@@ -70,7 +69,6 @@ HEADER = """<!doctype html>
     <a href="../#features">What it does</a>
     <a href="../install/">Install</a>
     <a href="../docs/">Docs</a>
-    <a href="../faq/">FAQ</a>
     <a href="https://github.com/descz/delta">GitHub</a>
   </div>
 </header>
@@ -88,14 +86,13 @@ FOOTER = """
       <a href="../">home</a> &middot;
       <a href="../install/">install</a> &middot;
       <a href="../docs/">docs</a> &middot;
-      <a href="../faq/">faq</a> &middot;
       <a href="https://github.com/descz/delta">github</a> &middot;
       <a href="https://github.com/descz/delta/releases/latest">releases</a>
     </div>
   </div>
 </footer>
 
-<script src="../site.js?v=20261109a" defer></script>
+<script src="../site.js?v=20261109b" defer></script>
 </body>
 </html>
 """
@@ -218,74 +215,6 @@ delta update --check     <span class="c"># only reports; `delta update` installs
   </section>
 """
 
-PERGUNTAS = [
-    ("Getting started", [
-        ("Do I need an API key?",
-         "Yes, from a provider you use (OpenAI, Anthropic, OpenRouter, DeepSeek, opencode and others). "
-         "<code>/login</code> asks for the key once, stores it per provider in <code>auth.json</code> "
-         "and picks a default model."),
-        ("Does it run offline?",
-         "The program runs, the model does not. Without network the CLI, sessions and the local tools "
-         "still work, but the agent cannot talk to the provider."),
-        ("Which platforms are supported?",
-         "Windows 10/11 x64 (the reference platform), Linux x86_64 (builds and runs; desktop integration "
-         "untested) and macOS from source. There is no prebuilt macOS binary."),
-        ("Is there a Windows installer?",
-         "The download is the installer: double click <code>Delta.exe</code>, choose the data folder, and "
-         "it copies the binary, sets <code>PATH</code> and creates the shortcut. No admin rights."),
-        ("How big is it?",
-         "809 KB single executable on Windows, about 1.7 MB of private memory, zero runtime dependencies."),
-    ]),
-    ("Models and providers", [
-        ("Which models can I use?",
-         "Any model in the models.dev catalog from the providers you connected &mdash; Anthropic, OpenAI, "
-         "OpenRouter, DeepSeek, opencode and others. <code>/models</code> lists what your keys allow."),
-        ("Can I use a local model?",
-         "If the server exposes the OpenAI-compatible chat API, point the OpenAI provider at its base URL "
-         "(config <code>baseUrl</code> or <code>--baseurl</code>)."),
-        ("How do I change the model or the thinking level?",
-         "<code>/models</code> switches the model, <code>/thinking</code> sets the reasoning effort and "
-         "<code>/verbosity</code> sets how much prose the reply carries. All saved in the config."),
-        ("What is the context window shown in the footer?",
-         "The real <code>limit.context</code> of the current model, read from the catalog (1M for a 1M "
-         "model), with 200k as fallback when the catalog does not know the model."),
-    ]),
-    ("Extending", [
-        ("Does it support MCP?",
-         "Yes &mdash; JSON-RPC over HTTP or stdio. Servers live as one file each in <code>mcps/</code>, and "
-         "their tools appear to the model like the built-in ones."),
-        ("Can I add my own tools, commands, skills or hooks?",
-         "Yes, and they live in one manifest: an extension can declare <code>tools</code>, "
-         "<code>commands</code> (a prompt, or an <code>exec</code> that runs and prints in the chat), "
-         "<code>hooks</code> (intercepting <code>tool_call</code>, <code>tool_result</code>, "
-         "<code>turn_end</code>, <code>session_start</code>, <code>user_message</code> and "
-         "<code>turn_start</code> to block, rewrite or log), a <code>prompt</code> appended to the system "
-         "prompt and <code>ui.status</code> for a third footer line. The agent can create them itself "
-         "with the <code>extensions</code> tool."),
-        ("Can it write and run code for me?",
-         "It reads and edits files by exact blocks, runs shell commands with timeouts and background jobs, "
-         "handles git, and can generate code in any language. Two skills ship for that: "
-         "<code>deltamotion</code> (video as C code to MP4) and <code>3jsskill</code> (Three.js without a "
-         "build step)."),
-    ]),
-    ("Data, license and limits", [
-        ("Where does my data go?",
-         "Only to the provider you configure. History, keys, memory and skills stay in your local data "
-         "folder; each file is written atomically so parallel windows never corrupt it."),
-        ("Is it open source?",
-         "Source-available and non-commercial. The code is public for study and personal or internal use, "
-         "but the license forbids selling, charging for access and cloning. Sharing the unmodified copy, "
-         "non-profit and with credit, is allowed. See the "
-         "<a href=\"https://github.com/descz/delta/blob/main/LICENSE\">LICENSE</a>."),
-        ("Windows said the app is unknown. Is it safe?",
-         "That is SmartScreen because the binary is not code-signed: <i>More info</i>, then "
-         "<i>Run anyway</i>. The source in the repository is exactly what builds that binary."),
-        ("Was Linux tested on a real desktop?",
-         "Partially. Build, CLI, TUI, real streaming and self-update were verified on Linux (WSL, gcc 13). "
-         "The desktop integration &mdash; <code>.desktop</code> entry, GNOME favorites, clipboard &mdash; "
-         "was not exercised on a desktop session."),
-    ]),
-]
 
 
 def breadcrumbs(nome, slug):
@@ -305,7 +234,6 @@ def build(dirname, title, desc, nome, corpo, extra_ld=""):
         breadcrumb=breadcrumbs(nome, dirname),
         extra_ld=extra_ld + ("\n" if extra_ld else ""),
         cur_install=' aria-current="page"' if dirname == "install" else "",
-        cur_faq=' aria-current="page"' if dirname == "faq" else "",
         cur_docs=' aria-current="page"' if dirname == "docs" else "",
     )
     destino = os.path.join(DOCS, dirname)
@@ -314,53 +242,12 @@ def build(dirname, title, desc, nome, corpo, extra_ld=""):
     print("gerado", os.path.join("docs", dirname, "index.html"))
 
 
-def faq_body():
-    out = ['  <section class="section" id="faq" style="padding-top:110px">',
-           '    <div class="container">',
-           '      <p class="kicker reveal">faq</p>',
-           '      <h1 class="hero-title reveal" style="text-align:left;margin:14px 0 10px;max-width:none">Short answers, <em>no marketing</em></h1>',
-           '      <p class="section-sub reveal">Everything below is what the code actually does. '
-           'If an answer says "untested", it is untested.</p>']
-    for grupo, itens in PERGUNTAS:
-        out.append('      <h2 class="section-title reveal" style="font-size:22px;margin:38px 0 6px">%s</h2>' % grupo)
-        for q, a in itens:
-            out.append('      <h3 class="reveal" style="font-size:16px;margin:18px 0 4px">%s</h3>' % q)
-            out.append('      <p class="section-sub reveal" style="margin:0">%s</p>' % a)
-    out.append('      <p class="section-sub reveal" style="margin-top:34px">Still stuck? Open an issue in the '
-               '<a href="https://github.com/descz/delta/issues">repository</a>.</p>')
-    out.append('    </div>')
-    out.append('  </section>')
-    return "\n".join(out)
-
-
-def faq_ld():
-    itens = []
-    for _, pares in PERGUNTAS:
-        for q, a in pares:
-            itens.append({
-                "@type": "Question",
-                "name": q,
-                "acceptedAnswer": {"@type": "Answer", "text": re.sub(r"<[^>]+>", "", a).strip()},
-            })
-    return ('<script type="application/ld+json">\n'
-            + json.dumps({"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": itens},
-                         ensure_ascii=False, indent=2)
-            + '\n</script>')
-
-
-
-
 def main():
     build("install",
           "Install Delta Agent — Windows, Linux, macOS",
           "Install Delta Agent on Windows 10/11, Linux x86_64 or macOS: one file per platform, no admin, "
           "no Node, no Python. Step by step, PATH, first run, update and data folder.",
           "Install", INSTALL)
-    build("faq",
-          "Delta Agent FAQ — API key, models, MCP, license",
-          "Answers about Delta Agent: API key and providers, local models, context window, MCP, "
-          "extensions and hooks, where data lives and what the license allows.",
-          "FAQ", faq_body(), faq_ld())
     print("ok")
 
 
