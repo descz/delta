@@ -49,6 +49,7 @@ int config_load(Config *c, char *note, size_t note_len)
 {
     memset(c, 0, sizeof(*c));
     c->max_tokens = 8192;
+    c->context_window = 200000;   /* ate' o catalogo dizer o contrario */
     c->temperature = 0;
     c->check_updates = 1;
     c->thinking_level = str_dup("off");
@@ -867,9 +868,8 @@ void agent_push_user_imgs(Agent *a, const char *text, char **imgs, int n_imgs)
 
 const char *agent_context_usage(const Agent *a, long *used, long *window)
 {
-    (void)a;
     if (used) *used = a->total_in;
-    if (window) *window = 200000;
+    if (window) *window = (a->cfg && a->cfg->context_window > 0) ? a->cfg->context_window : 200000;
     return "";
 }
 

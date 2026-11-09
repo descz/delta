@@ -933,3 +933,11 @@ void json_escape(Str *out, const char *s, size_t n)
         }
     }
 }
+
+void fmt_context_window(char *out, size_t n, long win)
+{
+    if (!out || n == 0) return;
+    if (win <= 0) { snprintf(out, n, "?"); return; }
+    if (win >= 1000000) snprintf(out, n, "%ldM", (win + 500000) / 1000000);
+    else snprintf(out, n, "%ldk", (win + 500) / 1000);
+}

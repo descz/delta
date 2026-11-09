@@ -41,6 +41,9 @@ int      utf8_decode(const char *s, size_t len, uint32_t *out);
 /* Escreve codepoint em buf (>=4 bytes). Retorna bytes escritos. */
 int      utf8_encode(uint32_t cp, char *buf);
 size_t   utf8_len(const char *s);
+
+/* Janela de contexto legivel: 200000 -> "200k", 1000000 -> "1M". */
+void     fmt_context_window(char *out, size_t n, long win);
 /* Largura de coluna de um codepoint (0 = combinante, 2 = wide). */
 int      cp_width(uint32_t cp);
 /* Largura visivel de uma string UTF-8, ignorando sequencias ANSI. */

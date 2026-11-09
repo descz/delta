@@ -11,6 +11,7 @@ typedef struct {
     char  *api_key;
     char  *base_url;
     int    max_tokens;
+    int    context_window; /* janela do modelo (catalogo); 0 = desconhecida */
     double temperature;
     char  *system_extra;
     char  *language;        /* pt-BR (padrao), pt, en, es, zh, ja */

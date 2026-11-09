@@ -274,6 +274,34 @@ static int fill_commands(const char *filter)
 /* ================================================================== */
 static void ext_panel_draw(Screen *s, int ey, int cols);
 static int  fila_count(void);
+/* Janela de contexto do modelo atual, vinda do catalogo models.dev
+   (limit.context). Era fixa em 200k, entao um modelo de 1M aparecia como 200k
+   e o percentual mentia. O look-up e' cacheado por par provedor+modelo: o
+   rodape redesenha a cada frame e varrer milhares de modelos por frame pesa. */
+static long context_window_now(void)
+{
+    static char *c_prov, *c_model;
+    static long c_win;
+    const char *prov = app.cfg.provider ? app.cfg.provider : "";
+    const char *model = app.cfg.model ? app.cfg.model : "";
+    if (c_win > 0 && c_prov && c_model && str_eq(c_prov, prov) && str_eq(c_model, model))
+        return c_win;
+
+    long win = 0;
+    if (app.catalog_loaded) {
+        const MdModel *m = catalog_model(&app.catalog, prov, model);
+        if (m && m->ctx > 0) win = m->ctx;
+    }
+    if (win <= 0) win = 200000;   /* catalogo sem o modelo: mantem o padrao antigo */
+
+    free(c_prov); free(c_model);
+    c_prov = str_dup(prov);
+    c_model = str_dup(model);
+    c_win = win;
+    app.cfg.context_window = (int)win;   /* agent_context_usage enxerga o mesmo valor */
+    return win;
+}
+
 static void render(void);
 static void sel_clear(void);
 static void render_selection(void);
@@ -1374,11 +1402,13 @@ static void render(void)
         free(home);
 
         long used = app.agent.total_in;
-        long win = 200000;
+        long win = context_window_now();
+        char win_txt[16];
+        fmt_context_window(win_txt, sizeof win_txt, win);
         char stats[256];
         double pct = win > 0 ? (100.0 * (double)used / (double)win) : 0;
-        snprintf(stats, sizeof stats, "up %ld  down %ld  %.1f%%/%ldk",
-                 app.agent.total_in, app.agent.total_out, pct, win / 1000);
+        snprintf(stats, sizeof stats, "up %ld  down %ld  %.1f%%/%s",
+                 app.agent.total_in, app.agent.total_out, pct, win_txt);
 
         char right[320];
         snprintf(right, sizeof right, "(%s) %s • thinking %s",

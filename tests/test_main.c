@@ -373,6 +373,25 @@ int main(void)
         dialeto_free(&e);
     }
 
+    /* ---------------- janela de contexto ---------------- */
+    printf("[10] janela de contexto (rodape)\n");
+    {
+        char b[16];
+        struct { long win; const char *esperado; } casos[] = {
+            { 200000, "200k" },      /* padrao quando o catalogo nao sabe */
+            { 204800, "205k" },      /* arredonda para o k mais perto */
+            { 1000000, "1M" },       /* opencode-go/deepseek-v4.1-flash */
+            { 1050000, "1M" },       /* gpt-5.6-luna no catalogo */
+            { 262144, "262k" },
+        };
+        for (size_t k = 0; k < sizeof casos / sizeof casos[0]; k++) {
+            fmt_context_window(b, sizeof b, casos[k].win);
+            ok(str_eq(b, casos[k].esperado), casos[k].esperado);
+        }
+        fmt_context_window(b, sizeof b, 0);
+        ok(str_eq(b, "?"), "janela desconhecida vira '?'");
+    }
+
     printf("\n%d verificacoes, %d falhas\n", checks, failures);
     return failures ? 1 : 0;
 }
