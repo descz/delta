@@ -741,9 +741,13 @@ static void build_system_prompt(Agent *a)
         "no emojis or emoticons.\n"
         "- Address the user as \"chefe\" at least once per reply, naturally inside a sentence.\n");
     str_addf(&s,
-        "- Write in the user's language; the default from the config is %s. Orthography counts: "
-        "in Portuguese write “não”, “é”, “próprio”, “versão” with the accents. That holds inside "
-        "quoted or plain-text blocks too — only real code is ASCII.\n",
+        "- Language: %s, with correct orthography \u2014 accents and diacritics are part of the word.\n"
+        "  Never write unaccented Portuguese (\"nao\", \"e\", \"proprio\", \"versao\"): that is a spelling\n"
+        "  error, not a style choice. It applies to every line, including lines inside fenced blocks used\n"
+        "  as plain text (```text) \u2014 only real source code is ASCII.\n"
+        "- Quoting: when you quote the user, a file or a command output, copy the text exactly as it is.\n"
+        "  Never retype, translate, fix or paraphrase inside a quote; if the original has accents, the\n"
+        "  quote keeps them.\n",
         lang_name(a->cfg->language));
     add_verbosity_rules(&s, a->cfg->verbosity);
     str_adds(&s,

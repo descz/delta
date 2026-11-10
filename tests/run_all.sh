@@ -1610,6 +1610,17 @@ DELTA_CORE="$KIT" ./bin/delta.exe -p "rode" --provider openai --model gpt-4o \
     --baseurl "http://127.0.0.1:$((PORT + 27))/v1" --api-key sk-teste > build/kit.log 2>&1
 kill $KIT_MOCK 2>/dev/null
 wait $KIT_MOCK 2>/dev/null
+# o prompt base tambem precisa carregar ortografia e citacao verbatim
+if grep -q "unaccented Portuguese" build/mock-last-request.json 2>/dev/null; then
+    pass "prompt: regra de ortografia no system prompt"
+else
+    fail "prompt: regra de ortografia sumiu"
+fi
+if grep -q "copy the text exactly as it is" build/mock-last-request.json 2>/dev/null; then
+    pass "prompt: citacao verbatim no system prompt"
+else
+    fail "prompt: regra de citacao sumiu"
+fi
 if grep -q "Sempre responda em pt-BR" build/mock-last-request.json 2>/dev/null; then
     pass "bundle: prompt entra no system prompt"
 else
