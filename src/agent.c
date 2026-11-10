@@ -911,6 +911,23 @@ const char *agent_context_usage(const Agent *a, long *used, long *window)
 static const AgentCB *g_bridge_cb = NULL;
 static void *g_bridge_ud = NULL;
 
+/* Diagnostico do fim de turno: ligado por DELTA_TURN_DEBUG=<arquivo>.
+   Existe para que "parou do nada" deixe rastro (stop_reason, chamadas, tamanho)
+   em vez de virar misterio na proxima vez. */
+static void turn_dbg(const char *fmt, ...)
+{
+    const char *p = getenv("DELTA_TURN_DEBUG");
+    if (!p || !*p) return;
+    FILE *f = fopen(p, "ab");
+    if (!f) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputc('\n', f);
+    fclose(f);
+}
+
 static void steer_dbg(const char *fmt, ...)
 {
     const char *p = getenv("DELTA_STEER_DEBUG");
@@ -1183,6 +1200,9 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
                Antes isso virava "resposta final" e o turno morria calado. */
             const char *fr = turn.stop_reason.data ? turn.stop_reason.data : "";
             int cortado = !*fr || str_eq(fr, "length");
+            turn_dbg("fim: stop=%s calls=%zu texto=%zu cortado=%d respirados=%d",
+                     *fr ? fr : "(vazio)", turn.calls.n_calls, turn.text.len,
+                     cortado, a->respirados);
             if (cortado && ++a->respirados <= DELTA_RESPIROS_VAZIOS) {
                 Msg *emp = msglist_add(&a->msgs, ROLE_USER);
                 str_adds(&emp->text,
@@ -1192,6 +1212,7 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
                 if (cb && cb->on_interval) cb->on_interval(cb->ud);
                 continue;
             }
+            if (cortado) turn_dbg("desisti: orcamento de continuacao esgotado");
             turn_free(&turn);
             hooks_turn_end();
             return 1;   /* resposta final (com texto): o turno acabou de verdade */
