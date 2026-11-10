@@ -1178,6 +1178,20 @@ int agent_run(Agent *a, const char *user_text, const AgentCB *cb, Str *err)
         session_append(a, "message", am);
 
         if (turn.calls.n_calls == 0) {
+            /* Resposta cortada: stream fechado sem finish_reason (proxy matou) ou
+               finish_reason "length" (max_tokens estourou no meio do texto).
+               Antes isso virava "resposta final" e o turno morria calado. */
+            const char *fr = turn.stop_reason.data ? turn.stop_reason.data : "";
+            int cortado = !*fr || str_eq(fr, "length");
+            if (cortado && ++a->respirados <= DELTA_RESPIROS_VAZIOS) {
+                Msg *emp = msglist_add(&a->msgs, ROLE_USER);
+                str_adds(&emp->text,
+                         "Sua resposta foi cortada no meio (limite de tokens ou stream fechado). "
+                         "Continue exatamente de onde parou, sem repetir o que ja' escreveu.");
+                turn_free(&turn);
+                if (cb && cb->on_interval) cb->on_interval(cb->ud);
+                continue;
+            }
             turn_free(&turn);
             hooks_turn_end();
             return 1;   /* resposta final (com texto): o turno acabou de verdade */

@@ -1721,6 +1721,23 @@ expect build/export.jsonl '"type":"message"' "export --json: NDJSON de mensagens
 rm -f build/exp-replay.txt
 rm -rf "$PC"
 
+echo
+echo "[27] resposta cortada (finish_reason length) retoma o turno"
+# Antes isso virava "resposta final" e o agente parava no meio do texto.
+python tests/mock_openai.py "$((PORT + 33))" > /dev/null 2>&1 &
+C_MOCK=$!
+sleep 2
+./bin/delta.exe -p "corte-length" --provider openai --model gpt-4o \
+    --baseurl "http://127.0.0.1:$((PORT + 33))/v1" --api-key sk-teste > build/corte.log 2>&1
+kill $C_MOCK 2>/dev/null
+wait $C_MOCK 2>/dev/null
+expect build/corte.log "parte um parte dois" "corte: o turno continua e junta as duas partes"
+if grep -q "Continue exatamente de onde parou" build/mock-last-request.json 2>/dev/null; then
+    pass "corte: mandou o empurrao de continuacao"
+else
+    fail "corte: nao pediu continuacao"
+fi
+
 restaurar_globais   # config, chaves e memoria do usuario de volta
 
 kill $MOCK 2>/dev/null

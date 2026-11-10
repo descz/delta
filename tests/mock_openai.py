@@ -98,6 +98,23 @@ class Handler(BaseHTTPRequestHandler):
 
         tem_resultado = any(m.get("role") == "tool" for m in body.get("messages", []))
 
+        if any(m.get("role") == "user" and "corte-length" in str(m.get("content", ""))
+               for m in body.get("messages", [])):
+            # 1o turno: finish_reason "length" (max_tokens estourou no meio)
+            # 2o turno: fecha normalmente, provando que o Delta retomou
+            assistentes = sum(1 for m in body.get("messages", []) if m.get("role") == "assistant")
+            if assistentes == 0:
+                self.responder_eventos([
+                    {"id": "l", "choices": [{"index": 0, "delta": {"content": "parte um "}}]},
+                    {"id": "l", "choices": [{"index": 0, "delta": {}, "finish_reason": "length"}]},
+                ])
+            else:
+                self.responder_eventos([
+                    {"id": "l", "choices": [{"index": 0, "delta": {"content": "parte dois"}}]},
+                    {"id": "l", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+                ])
+            return
+
         if "DIALETO" in ultimo:
             # o dialeto decide pelo papel: CRITICO devolve NOTA; ARTIFICE responde
             # plano. Na rodada com tabela larga o artifice responde tabela de 40
