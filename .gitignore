@@ -22,3 +22,6 @@ frames/
 video*.mp4
 *.mp4
 anim*.mp4
+
+# python bytecode (geradores)
+__pycache__/
