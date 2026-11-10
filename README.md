@@ -96,7 +96,7 @@ Being explicit, because "compiles" is not "works":
 
 | platform | status |
 |---|---|
-| **Windows 10/11 x64** | **Tested** — the reference platform: 370 end-to-end checks (TUI, streaming, tools, installer, self-update), plus the installer and `delta update` exercised by hand. |
+| **Windows 10/11 x64** | **Tested** — the reference platform: 372 end-to-end checks (TUI, streaming, tools, installer, self-update), plus the installer and `delta update` exercised by hand. |
 | **Linux x86_64** | **Builds and runs** (gcc 13, WSL, 32 checks: build, core, replay, real streaming via curl, installer, self-update). **Not exercised on a desktop session**: `.desktop` entry, GNOME favorites and clipboard (`wl-copy`/`xclip`) are untested. |
 | **macOS 11+** | **Source only, and not tested** — I have no Mac. The release ships the source plus `INSTALAR-MAC.command`, which checks Xcode Command Line Tools and builds locally; the native layer (`osascript`, `.app`, Dock) was never executed. Treat it as a starting point, not as a supported binary. |
 
@@ -241,7 +241,7 @@ On macOS the Xcode Command Line Tools (`xcode-select --install`) are enough. At 
 Two suites, no framework:
 
 ```bash
-bash tests/run_all.sh     # Windows: 370 checks in 57 sections (TUI replay, provider mock, installer)
+bash tests/run_all.sh     # Windows: 372 checks in 57 sections (TUI replay, provider mock, installer)
 
 # programmatic surface (CI): one JSON event per line
 delta -p "review src/" --json | jq -c 'select(.type=="tool_result")'
