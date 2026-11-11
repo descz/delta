@@ -83,6 +83,11 @@ void update_init(const char *argv0)
         Str velho; str_init(&velho);
         str_addf(&velho, "%s.old", exe);
         if (file_exists(velho.data)) DeleteFileA(velho.data);
+        for (int t = 2; t < 12; t++) {
+            str_free(&velho); str_init(&velho);
+            str_addf(&velho, "%s.old.%d", exe, t);
+            if (file_exists(velho.data)) DeleteFileA(velho.data);
+        }
         str_free(&velho);
         free(exe);
     }
@@ -294,11 +299,19 @@ static int trocar_exe(const char *exe, const char *novo, Str *msg)
     Str velho; str_init(&velho);
     str_addf(&velho, "%s.old", exe);
 
-    if (file_exists(velho.data)) DeleteFileA(velho.data);
+    /* .old de antes pode estar travado (outra sessao do Delta ainda mapeia o
+       arquivo): sobrescrever arquivo travado da erro 5. Escolhe um nome livre;
+       update_init varre e limpa os .old* no proximo inicio. */
+    for (int t = 2; file_exists(velho.data) && t < 12; t++) {
+        if (DeleteFileA(velho.data)) break;
+        str_free(&velho); str_init(&velho);
+        str_addf(&velho, "%s.old.%d", exe, t);
+    }
 
     /* 1. tira o exe em uso do caminho (renomear pode, apagar nao) */
-    if (!MoveFileExA(exe, velho.data, MOVEFILE_REPLACE_EXISTING)) {
-        str_addf(msg, "não consegui renomear o executável em uso (erro %lu)",
+    if (!MoveFileExA(exe, velho.data, 0)) {
+        str_addf(msg, "não consegui renomear o executável em uso (erro %lu) — "
+                     "feche as outras janelas do Delta e rode `delta update` de novo",
                  (unsigned long)GetLastError());
         str_free(&velho);
         return 0;
