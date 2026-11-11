@@ -159,7 +159,6 @@ static const char *const CMD_KEYS[] = {
 
 static const Cmd COMMANDS[] = {
     { "help",      "Mostra os comandos e atalhos",                    NULL,                 0 },
-    { "docs",      "Especificacao do agente (loop, tools, eventos, sessao)", NULL,       0 },
     { "login",     "Escolhe um provedor e salva a chave de API",     NULL,                 0 },
     { "logout",    "Remove a chave do provedor atual",                NULL,                 0 },
     { "models",    "Todos os modelos de todos os provedores",         "<filtro>",           1 },
@@ -2742,13 +2741,6 @@ static void handle_command(const char *raw)
         return;
     }
 
-    if (str_eq(cmd, "/docs")) {
-        if (app.headless) { fputs(DELTA_SPEC, stdout); fflush(stdout); return; }
-        Block *b = block_add(B_INFO);
-        str_adds(&b->text, DELTA_SPEC);
-        render();
-        return;
-    }
     if (str_eq(cmd, "/help")) {
         Block *b = block_add(B_INFO);
         str_adds(&b->text, "Comandos (digite / para ver a lista):\n\n");

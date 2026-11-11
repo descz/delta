@@ -1686,12 +1686,12 @@ expect build/bundle-status.log "do-bundle" "op=bundle: ui.status do bundle no ro
 rm -rf "$UM" "$BK" build/hook-marca.txt
 
 echo
-echo "[26] superficie programatica: /docs, -p --json e delta export"
+echo "[26] superficie programatica: delta docs, -p --json e delta export"
 ./bin/delta.exe docs > build/spec.log 2>&1
 expect build/spec.log "DELTA AGENT - especificacao" "docs: comando imprime a especificacao"
 expect build/spec.log "6. Eventos do harness" "docs: secao de eventos presente"
-MSYS_NO_PATHCONV=1 ./bin/delta.exe -p "/docs" > build/spec-p.log 2>&1
-expect build/spec-p.log "DELTA AGENT - especificacao" "/docs no modo -p imprime a spec"
+MSYS_NO_PATHCONV=1 ./bin/delta.exe docs > build/spec-p.log 2>&1
+expect build/spec-p.log "DELTA AGENT - especificacao" "delta docs imprime a spec"
 
 PC="$ROOT/build/ia-core"
 rm -rf "$PC" && mkdir -p "$PC"
